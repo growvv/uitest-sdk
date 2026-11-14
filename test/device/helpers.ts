@@ -17,6 +17,20 @@ export function skipIfNoCast(): boolean {
   return !hasCastSupport();
 }
 
+/**
+ * Kills every uitest process on the target. Only for test setup: it is exactly
+ * the blind kill the SDK must never do on its own.
+ */
+export async function killAllUitest(): Promise<void> {
+  const { HdcRunner } = await import("../../src/hdc.js");
+  const hdc = new HdcRunner({ deviceId: getTarget() });
+  const out = await hdc.shell("pidof uitest").catch(() => "");
+  const pids = out.split(/\s+/).filter((t) => /^\d+$/.test(t));
+  if (pids.length > 0) {
+    await hdc.shell(`kill -9 ${pids.join(" ")}`).catch(() => undefined);
+  }
+}
+
 export async function getDevice(): Promise<Device> {
   const dev = await Device.connect({ deviceId: getTarget() });
   // Screen capture is muted when the display sleeps (`Screen turned off! mute
