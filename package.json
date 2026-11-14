@@ -18,7 +18,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/cast/scrcpy.proto','dist/cast/scrcpy.proto')\"",
     "test": "vitest run --exclude '**/device/**'",
     "test:device": "vitest run test/device",
     "typecheck": "tsc --noEmit"

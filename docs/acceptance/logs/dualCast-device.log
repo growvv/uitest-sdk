@@ -1,0 +1,21 @@
+[2026-11-14T22:53:44.695Z] dual cast chunks 31 B / 31 B
+[2026-11-14T22:55:14.724Z] dual cast chunks 31 B / 31 B
+[2026-11-14T22:55:15.240Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.captureScreen (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:302:16)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:248:45)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:343:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:471:17)
+[2026-11-14T22:55:46.909Z] dual cast chunks 31 B / 31 B
+[2026-11-14T22:55:47.472Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.captureScreen (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:302:16)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:249:45)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:344:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:472:17)
+[2026-11-14T22:56:57.075Z] dual cast chunks 31 B / 31 B
+[2026-11-14T22:59:01.524Z] dual cast chunks 31 B / 31 B
+[2026-11-14T23:01:39.719Z] dual cast chunks 31 B / 31 B
+[2026-11-14T23:02:14.725Z] dual cast chunks 31 B / 31 B

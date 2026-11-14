@@ -1,0 +1,18 @@
+[2026-11-14T22:53:33.603Z] FAILED: Cannot read properties of undefined (reading 'width')
+TypeError: Cannot read properties of undefined (reading 'width')
+    at AgentClient.getDisplaySize (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:203:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:184:17)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:345:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:473:17)
+[2026-11-14T22:55:02.164Z] startCaptureUiAction / stopCaptureUiAction round-trip ok
+[2026-11-14T22:55:03.301Z] FAILED: agent connection closed
+AgentConnectionError: agent connection closed
+    at Socket.<anonymous> (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:151:17)
+    at Socket.emit (node:events:514:20)
+    at TCP.<anonymous> (node:net:362:12)
+[2026-11-14T22:55:40.124Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
+[2026-11-14T22:57:00.309Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
+[2026-11-14T22:59:04.840Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
+[2026-11-14T23:01:43.073Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
+[2026-11-14T23:02:18.121Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop

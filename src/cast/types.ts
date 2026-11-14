@@ -21,6 +21,11 @@ export interface CastOptions {
   bitRate?: number;
   iFrameInterval?: number;
   screenId?: number;
+  /**
+   * Record mode only: how long to keep recording before `dispose()` closes the
+   * muxer. The encoder is start/stop driven — it writes nothing until `onEnd`.
+   */
+  durationMs?: number;
 }
 
 export interface CastClient {

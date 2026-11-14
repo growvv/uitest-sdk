@@ -1,0 +1,23 @@
+[2026-11-14T22:53:46.578Z] 10 concurrent getDisplaySize all resolved in 27 ms
+[2026-11-14T22:55:17.158Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.getDisplaySize (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:199:27)
+    at <anonymous> (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:270:79)
+    at Array.from (<anonymous>)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:270:42)
+    at runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:343:34)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:471:17)
+[2026-11-14T22:55:49.696Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.getDisplaySize (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:199:27)
+    at <anonymous> (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:271:79)
+    at Array.from (<anonymous>)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:271:42)
+    at runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:344:34)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:472:17)
+[2026-11-14T22:56:59.164Z] 10 concurrent getDisplaySize all resolved in 59 ms
+[2026-11-14T22:59:03.732Z] 10 concurrent getDisplaySize all resolved in 37 ms
+[2026-11-14T23:01:41.883Z] 10 concurrent getDisplaySize all resolved in 52 ms
+[2026-11-14T23:02:16.957Z] 10 concurrent getDisplaySize all resolved in 44 ms

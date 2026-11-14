@@ -1,0 +1,28 @@
+[2026-11-14T22:53:39.374Z] recorded to docs\acceptance\logs\record-device.mp4
+[2026-11-14T22:55:07.701Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.getDisplaySize (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:199:27)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:216:33)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:343:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:471:17)
+[2026-11-14T22:55:44.653Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.getDisplaySize (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:199:27)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:217:33)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:344:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:472:17)
+[2026-11-14T22:56:24.492Z] FAILED: recorded file /data/local/tmp/mytest.mp4 never appeared
+DaemonStartError: recorded file /data/local/tmp/mytest.mp4 never appeared
+    at waitForFile (E:\CodeE\vibe51\uitest_agent\src\cast\client.ts:194:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async H264CastClient.dispose (E:\CodeE\vibe51\uitest_agent\src\cast\client.ts:176:7)
+    at async Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:214:7)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:344:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:472:17)
+[2026-11-14T22:58:04.552Z] recorded to docs\acceptance\logs\record-device.mp4
+[2026-11-14T23:01:36.110Z] recorded 325535 B to docs\acceptance\logs\record-device.mp4
+[2026-11-14T23:02:12.026Z] recorded 335615 B to docs\acceptance\logs\record-device.mp4

@@ -1,0 +1,21 @@
+[2026-11-14T22:53:46.753Z] getDisplaySize during stream took 7 ms
+[2026-11-14T22:55:17.158Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.streamScreen (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:359:16)
+    at streamScreen.next (<anonymous>)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:281:16)
+    at runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:343:34)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:471:17)
+[2026-11-14T22:55:49.696Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.streamScreen (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:359:16)
+    at streamScreen.next (<anonymous>)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:282:16)
+    at runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:344:34)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:472:17)
+[2026-11-14T22:56:59.410Z] getDisplaySize during stream took 6 ms
+[2026-11-14T22:59:03.982Z] getDisplaySize during stream took 7 ms
+[2026-11-14T23:01:42.187Z] getDisplaySize during stream took 7 ms
+[2026-11-14T23:02:17.273Z] getDisplaySize during stream took 5 ms

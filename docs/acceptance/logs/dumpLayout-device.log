@@ -1,0 +1,21 @@
+[2026-11-14T22:53:46.382Z] dumpLayout 216 nodes
+[2026-11-14T22:55:17.157Z] dumpLayout 287 nodes
+[2026-11-14T22:55:17.157Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.captureScreen (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:302:16)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:262:43)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:343:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:471:17)
+[2026-11-14T22:55:49.695Z] dumpLayout 269 nodes
+[2026-11-14T22:55:49.695Z] FAILED: agent is not connected
+AgentConnectionError: agent is not connected
+    at AgentClient.call (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:167:31)
+    at AgentClient.captureScreen (E:\CodeE\vibe51\uitest_agent\src\agent\client.ts:302:16)
+    at Object.run (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:263:43)
+    at async runTarget (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:344:24)
+    at async main (E:\CodeE\vibe51\uitest_agent\scripts\acceptance.ts:472:17)
+[2026-11-14T22:56:58.878Z] dumpLayout 236 nodes
+[2026-11-14T22:59:03.505Z] dumpLayout 178 nodes
+[2026-11-14T23:01:41.588Z] dumpLayout 178 nodes
+[2026-11-14T23:02:16.668Z] dumpLayout 178 nodes

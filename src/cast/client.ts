@@ -65,6 +65,10 @@ export class H264CastClient implements CastClient {
   readonly castKind = "h264" as const;
 
   private disposed = false;
+  /** True once `stream()` opened the gRPC call. */
+  private started = false;
+  /** Open `onStart` call in record mode, cancelled after `onEnd`. */
+  private recordCall: { cancel(): void } | null = null;
 
   private constructor(
     private readonly hdc: HdcRunner,
@@ -125,13 +129,29 @@ export class H264CastClient implements CastClient {
 
     const Service = loadScrcpyService();
     const stub = new Service(`127.0.0.1:${localPort}`, grpc.credentials.createInsecure());
-    return new H264CastClient(hdc, stub, socketName, ownPid, localPort, opts);
+    const client = new H264CastClient(hdc, stub, socketName, ownPid, localPort, opts);
+
+    // Record mode must be started here: `onEnd` only closes a muxer that
+    // `onStart` opened, and a client that never opened one records zero frames.
+    if (opts.mode === "record") client.beginRecording();
+    return client;
+  }
+
+  /** Opens the recording stream. Frames go to the muxer, not to us. */
+  private beginRecording(): void {
+    const call = (this.stub as unknown as {
+      onStart(req: object): { on(e: string, f: (err: Error) => void): void; cancel(): void };
+    }).onStart({});
+    call.on("error", () => undefined);
+    this.started = true;
+    this.recordCall = call;
   }
 
   async *stream(): AsyncIterable<H264Chunk> {
     if (this.disposed) {
       throw new UitestError("cast client has been disposed", "EDISPOSED");
     }
+    this.started = true;
     const call = (this.stub as unknown as {
       onStart(req: object): grpc.ClientReadableStream<ReplyMessage>;
     }).onStart({});
@@ -162,21 +182,43 @@ export class H264CastClient implements CastClient {
     if (this.disposed) return;
     this.disposed = true;
 
+    // In record mode the encoder is start/stop driven: `onStart` runs the muxer
+    // and `onEnd` closes it, writing the file. `start()` already opened the
+    // recording, so `onEnd` alone completes it.
     await new Promise<void>((resolve) => {
       (this.stub as unknown as {
         onEnd(req: object, cb: (e: Error | null) => void): void;
       }).onEnd({}, () => resolve());
     }).catch(() => undefined);
 
+    this.recordCall?.cancel();
+    this.recordCall = null;
     this.stub.close();
+
+    // Pull before killing: `onEnd` only closes the muxer, and the file is
+    // flushed by the daemon as it winds down. Killing first leaves nothing.
+    if (this.opts.mode === "record" && this.opts.outputPath) {
+      await waitForFile(this.hdc, DEVICE_RECORD_PATH);
+      await this.hdc.pull(DEVICE_RECORD_PATH, this.opts.outputPath);
+    }
 
     // Kill only our own daemon: agent.so lives in a sibling uitest process.
     await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
     await this.hdc.fportRemove(this.localPort).catch(() => undefined);
+  }
+}
 
-    if (this.opts.mode === "record" && this.opts.outputPath) {
-      await this.hdc.pull(DEVICE_RECORD_PATH, this.opts.outputPath);
+/** Waits for the recorder to finish flushing its MP4. */
+async function waitForFile(hdc: HdcRunner, path: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const out = await hdc.shell(`ls -l ${path}`).catch(() => "");
+    const m = /\s(\d+)\s+\d{4}-/.exec(out) ?? /\s(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+/.exec(out);
+    if (m && Number(m[1]) > 0) return;
+    if (Date.now() > deadline) {
+      throw new DaemonStartError(`recorded file ${path} never appeared`, "ENORECORD");
     }
+    await new Promise((r) => setTimeout(r, 200));
   }
 }
 
