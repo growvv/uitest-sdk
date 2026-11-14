@@ -7,7 +7,7 @@ import {
   AgentConnectionError,
   AgentProtocolError,
 } from "../errors.js";
-import type { Rect, UiNode } from "../model.js";
+import type { Rect, UiEvent, UiNode } from "../model.js";
 import { cropRect, parseBounds } from "../util/bounds.js";
 
 export type AgentMethod = "Captures" | "CtrlCmd" | "Gestures" | "callHypiumApi";
@@ -24,6 +24,18 @@ const BUSY_PATTERNS = ["Disallow concurrent use", "Capture already running"];
 
 export function isBusyException(msg: string): boolean {
   return BUSY_PATTERNS.some((p) => msg.includes(p));
+}
+
+const NOT_RUNNING_PATTERNS = [
+  "Capture is not running",
+  "capture is not running",
+  "Capture not started",
+];
+
+/** True for the "another process already stopped it" failures `stopStream` tolerates. */
+function isNotRunning(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return NOT_RUNNING_PATTERNS.some((p) => msg.includes(p));
 }
 
 interface AgentReply {
@@ -72,6 +84,12 @@ export class AgentClient {
   private readonly queue = new SerialQueue();
   private pending: Pending | null = null;
   private frameHandlers = new Set<(jpeg: Buffer) => void>();
+  /** Frames that arrived before a consumer asked for one (bounded, newest wins). */
+  private frameQueue: Buffer[] = [];
+  /** Consumers blocked in `nextFrame()`; `null` ends the stream. */
+  private frameWaiters: Array<(f: Buffer | null) => void> = [];
+  /** Consumers blocked in `nextJson()` for unsolicited UI events. */
+  private jsonWaiters: Array<(v: unknown) => void> = [];
   private closed = false;
   private readonly requestTimeoutMs: number;
   private readonly retryOnBusy: boolean;
@@ -89,6 +107,15 @@ export class AgentClient {
       onJson: (line) => this.onJson(line),
       onFrame: (jpeg) => {
         for (const h of this.frameHandlers) h(jpeg);
+        const w = this.frameWaiters.shift();
+        if (w) {
+          w(jpeg);
+          return;
+        }
+        // A frame can land before the consumer's next `next()` call; keep the
+        // newest few so a slow consumer drops stale frames instead of growing.
+        this.frameQueue.push(jpeg);
+        if (this.frameQueue.length > 4) this.frameQueue.shift();
       },
     });
 
@@ -290,6 +317,73 @@ export class AgentClient {
     return Buffer.from(jpeg.encode({ data: out, width: rect.width, height: rect.height }, 80).data);
   }
 
+  // -------------------------------------------------------------- streaming
+
+  /**
+   * Streams whole-screen JPEG frames until the consumer breaks out of the loop.
+   * Capture is dirty-region driven: a static screen yields one frame and then
+   * nothing, which is expected, not a hang.
+   */
+  async *streamScreen(opts: { scale?: number } = {}): AsyncIterable<Buffer> {
+    const scale = opts.scale ?? 0.5;
+    await this.call("Captures", { api: "startCaptureScreen", args: [{ displayId: 0, scale }] });
+    try {
+      for (;;) {
+        const frame = await this.nextFrame();
+        if (frame === null) return;
+        yield frame;
+      }
+    } finally {
+      await this.stopStream();
+    }
+  }
+
+  /** Streams device-reported UI actions (touch/key events) as JSON objects. */
+  async *streamUiActions(): AsyncIterable<UiEvent> {
+    await this.call("Captures", { api: "startCaptureUiAction", args: [] });
+    try {
+      for (;;) {
+        const ev = await this.nextJson();
+        if (ev === null) return;
+        yield ev as UiEvent;
+      }
+    } finally {
+      try {
+        await this.call("Captures", { api: "stopCaptureUiAction", args: [] });
+      } catch {
+        /* already stopped by another process */
+      }
+    }
+  }
+
+  /**
+   * Stops capture. Tolerates "not running" because another process sharing the
+   * device may have stopped it first; every other failure still propagates.
+   */
+  async stopStream(): Promise<void> {
+    try {
+      await this.call("Captures", { api: "stopCaptureScreen", args: [] });
+    } catch (e) {
+      if (!isNotRunning(e)) throw e;
+    }
+  }
+
+  private nextFrame(): Promise<Buffer | null> {
+    const queued = this.frameQueue.shift();
+    if (queued) return Promise.resolve(queued);
+    if (!this.connected) return Promise.resolve(null);
+    return new Promise<Buffer | null>((resolve) => {
+      this.frameWaiters.push((f) => resolve(f));
+    });
+  }
+
+  private nextJson(): Promise<unknown | null> {
+    if (!this.connected) return Promise.resolve(null);
+    return new Promise<unknown | null>((resolve) => {
+      this.jsonWaiters.push(resolve);
+    });
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -320,9 +414,15 @@ export class AgentClient {
       return;
     }
     const p = this.pending;
-    this.pending = null;
-    if (!p) return; // unsolicited reply (e.g. a stream ack after timeout) — drop
-    p.resolve(reply);
+    if (p) {
+      this.pending = null;
+      p.resolve(reply);
+      return;
+    }
+    // No request in flight: this is an unsolicited object, i.e. a UI action
+    // event from `startCaptureUiAction`. Hand it to the stream consumer.
+    const w = this.jsonWaiters.shift();
+    if (w) w(reply);
   }
 
   private fail(err: unknown): void {
@@ -331,5 +431,8 @@ export class AgentClient {
     const p = this.pending;
     this.pending = null;
     if (p) p.reject(err);
+    // Unblock stream consumers so their `finally` runs instead of hanging.
+    for (const w of this.frameWaiters.splice(0)) w(null);
+    for (const w of this.jsonWaiters.splice(0)) w(null);
   }
 }
