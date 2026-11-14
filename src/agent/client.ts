@@ -16,6 +16,12 @@ export interface AgentClientOptions {
   requestTimeoutMs?: number;
   retryOnBusy?: boolean;
   maxBusyRetries?: number;
+  /**
+   * Called once when the connection drops, to rebuild the transport. The failed
+   * request still rejects — replaying a write is unsafe — but later calls use
+   * the replacement socket.
+   */
+  reconnect?: () => Promise<net.Socket>;
 }
 
 export const MODULE_ID = "com.ohos.devicetest.hypiumApiHelper";
@@ -90,18 +96,24 @@ export class AgentClient {
   private frameWaiters: Array<(f: Buffer | null) => void> = [];
   /** Consumers blocked in `nextJson()` for unsolicited UI events. */
   private jsonWaiters: Array<(v: unknown) => void> = [];
+  /** The transport is unusable (dropped or closed). */
   private closed = false;
+  /** `close()` was called by the owner: no reconnect, ever. */
+  private disposed = false;
   private readonly requestTimeoutMs: number;
   private readonly retryOnBusy: boolean;
   private readonly maxBusyRetries: number;
+  private readonly reconnect?: () => Promise<net.Socket>;
+  private reconnecting: Promise<void> | null = null;
 
   constructor(
-    private readonly sock: net.Socket,
+    private sock: net.Socket,
     opts: AgentClientOptions = {},
   ) {
     this.requestTimeoutMs = opts.requestTimeoutMs ?? 30_000;
     this.retryOnBusy = opts.retryOnBusy ?? true;
     this.maxBusyRetries = opts.maxBusyRetries ?? 40;
+    this.reconnect = opts.reconnect;
 
     this.demux = new FrameDemux({
       onJson: (line) => this.onJson(line),
@@ -119,12 +131,25 @@ export class AgentClient {
       },
     });
 
+    this.attach(sock);
+  }
+
+  private attach(sock: net.Socket): void {
+    this.sock = sock;
+    // A superseded socket may still emit `close` after we moved on; ignore it.
+    const current = () => this.sock === sock;
     sock.on("data", (chunk: Buffer) => {
-      if (this.closed) return;
+      if (this.closed || !current()) return;
       this.demux.push(chunk);
     });
-    sock.on("error", (e) => this.fail(new AgentConnectionError(`agent socket error: ${e.message}`, "ECONN", e)));
-    sock.on("close", () => this.fail(new AgentConnectionError("agent connection closed", "ECONN")));
+    sock.on("error", (e) => {
+      if (!current()) return;
+      this.fail(new AgentConnectionError(`agent socket error: ${e.message}`, "ECONN", e));
+    });
+    sock.on("close", () => {
+      if (!current()) return;
+      this.fail(new AgentConnectionError("agent connection closed", "ECONN"));
+    });
   }
 
   get connected(): boolean {
@@ -138,7 +163,10 @@ export class AgentClient {
 
   call(method: AgentMethod, params: object): Promise<unknown> {
     if (!this.connected) {
-      return Promise.reject(new AgentConnectionError("agent is not connected", "ECONN"));
+      if (!this.reconnect || this.disposed) {
+        return Promise.reject(new AgentConnectionError("agent is not connected", "ECONN"));
+      }
+      return this.tryReconnect().then(() => this.call(method, params));
     }
     return this.queue.run(async () => {
       let delay = 0.5;
@@ -385,10 +413,31 @@ export class AgentClient {
   }
 
   close(): void {
-    if (this.closed) return;
+    if (this.disposed) return;
+    this.disposed = true;
     this.closed = true;
     this.fail(new AgentConnectionError("agent client closed", "ECONN"));
     this.sock.destroy();
+  }
+
+  /**
+   * Rebuilds the transport once. Concurrent callers share the same attempt;
+   * the request that observed the drop still fails, since replaying a write is
+   * not safe.
+   */
+  private tryReconnect(): Promise<void> {
+    if (!this.reconnecting) {
+      this.reconnecting = (async () => {
+        const sock = await this.reconnect!();
+        this.pending = null;
+        this.demux.reset();
+        this.closed = false;
+        this.attach(sock);
+      })().finally(() => {
+        this.reconnecting = null;
+      });
+    }
+    return this.reconnecting;
   }
 
   private sendOnce(method: AgentMethod, params: object): Promise<AgentReply> {

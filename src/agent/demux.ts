@@ -38,6 +38,12 @@ export class FrameDemux {
     this.drain();
   }
 
+  /** Drops partial state, for reuse after the underlying socket is replaced. */
+  reset(): void {
+    this.mode = "idle";
+    this.buf = Buffer.alloc(0);
+  }
+
   private drain(): void {
     for (;;) {
       if (this.mode === "idle") {
