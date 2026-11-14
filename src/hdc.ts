@@ -26,6 +26,8 @@ export class HdcRunner {
   private readonly hdcPath: string;
   private readonly deviceId?: string;
   private readonly timeoutMs: number;
+  /** Local port → remote rule, so `fportRemove` can issue the full rm command. */
+  private readonly forwards = new Map<number, string>();
 
   constructor(opts: HdcOptions = {}) {
     this.hdcPath = opts.hdcPath ?? this.resolveHdcPath();
@@ -115,6 +117,7 @@ export class HdcRunner {
           lastDetail = out.trim();
           continue;
         }
+        this.forwards.set(port, remote);
         return port;
       } catch (e) {
         lastDetail = (e as Error).message;
@@ -127,8 +130,18 @@ export class HdcRunner {
     );
   }
 
-  async fportRemove(localPort: number): Promise<void> {
-    await this.exec(["fport", "rm", `tcp:${localPort}`], `fport rm tcp:${localPort}`);
+  /**
+   * Removes a forward. `hdc fport rm` needs both the local and remote rules, so
+   * the remote is remembered from `fportAdd`; callers that passed a different
+   * remote can supply it explicitly.
+   */
+  async fportRemove(localPort: number, remote?: string): Promise<void> {
+    const target = remote ?? this.forwards.get(localPort);
+    const args = target
+      ? ["fport", "rm", `tcp:${localPort}`, target]
+      : ["fport", "rm", `tcp:${localPort}`];
+    await this.exec(args, `fport rm tcp:${localPort}`);
+    this.forwards.delete(localPort);
   }
 
   async listTargets(): Promise<string[]> {

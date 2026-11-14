@@ -47,13 +47,9 @@ function freePort(): Promise<number> {
   });
 }
 
+/** Parses `pidof` output. Multiple pids come back space-separated on one line. */
 function pids(output: string): Set<string> {
-  return new Set(
-    output
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => /^\d+$/.test(l)),
-  );
+  return new Set(output.split(/\s+/).filter((t) => /^\d+$/.test(t)));
 }
 
 /**

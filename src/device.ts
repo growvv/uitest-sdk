@@ -34,14 +34,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Splits `pidof` output into a set, ignoring blank and non-numeric tokens. */
+/** Parses `pidof` output. Multiple pids come back space-separated on one line. */
 function pids(output: string): Set<string> {
-  return new Set(
-    output
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => /^\d+$/.test(l)),
-  );
+  return new Set(output.split(/\s+/).filter((t) => /^\d+$/.test(t)));
 }
 
 function connectTcp(port: number): Promise<net.Socket> {
@@ -92,7 +87,7 @@ export class Device {
     const abi: "arm64" | "x86_64" =
       abiList.includes("x86_64") && !abiList.includes("arm64") ? "x86_64" : "arm64";
 
-    const extDir = opts.extensionDir ?? join(process.cwd(), "assets", abi);
+    const extDir = opts.extensionDir ?? join(process.cwd(), "assets");
     const agentLocal = join(extDir, abi, "agent.so");
     if (!existsSync(agentLocal)) {
       throw new ExtensionMissingError(
@@ -190,9 +185,21 @@ async function ensurePushed(hdc: HdcRunner, local: string, remote: string): Prom
   await hdc.shell(`chmod 755 ${remote}`);
 }
 
+/**
+ * True when something is LISTENing on 8012. A bare `grep 1F4C` is wrong: the
+ * hex port also appears as the *remote* address of TIME_WAIT sockets left by a
+ * daemon that already died, which makes a dead device look healthy.
+ */
 async function isAgentListening(hdc: HdcRunner): Promise<boolean> {
-  const out = await hdc.shell(`cat /proc/net/tcp | grep ${AGENT_PORT_HEX}`).catch(() => "");
-  return out.includes(AGENT_PORT_HEX);
+  const out = await hdc.shell("cat /proc/net/tcp").catch(() => "");
+  return out.split(/\r?\n/).some((line) => {
+    // sl local_address rem_address st ...
+    const f = line.trim().split(/\s+/);
+    if (f.length < 4) return false;
+    const local = f[1] ?? "";
+    const st = f[3] ?? "";
+    return local.endsWith(`:${AGENT_PORT_HEX}`) && st === "0A";
+  });
 }
 
 /**

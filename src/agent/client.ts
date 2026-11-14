@@ -210,16 +210,18 @@ export class AgentClient {
 
   // ------------------------------------------------------------------ touch
 
+  // The device rejects non-integer coordinates with
+  // `Illegal touch point coordination`, so every point is rounded at the edge.
   async touchDown(x: number, y: number): Promise<void> {
-    await this.call("Gestures", { api: "touchDown", args: { x, y } });
+    await this.call("Gestures", { api: "touchDown", args: { x: Math.round(x), y: Math.round(y) } });
   }
 
   async touchMove(x: number, y: number): Promise<void> {
-    await this.call("Gestures", { api: "touchMove", args: { x, y } });
+    await this.call("Gestures", { api: "touchMove", args: { x: Math.round(x), y: Math.round(y) } });
   }
 
   async touchUp(x: number, y: number): Promise<void> {
-    await this.call("Gestures", { api: "touchUp", args: { x, y } });
+    await this.call("Gestures", { api: "touchUp", args: { x: Math.round(x), y: Math.round(y) } });
   }
 
   async click(x: number, y: number): Promise<void> {
@@ -245,7 +247,7 @@ export class AgentClient {
     const stepDelay = Math.max(1, Math.round(durationMs / steps));
     await this.touchDown(x1, y1);
     for (let i = 1; i <= steps; i++) {
-      await this.touchMove(Math.round(x1 + ((x2 - x1) * i) / steps), Math.round(y1 + ((y2 - y1) * i) / steps));
+      await this.touchMove(x1 + ((x2 - x1) * i) / steps, y1 + ((y2 - y1) * i) / steps);
       await sleep(stepDelay);
     }
     await this.touchUp(x2, y2);
