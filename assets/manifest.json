@@ -1,0 +1,22 @@
+{
+  "arm64": {
+    "agent.so": {
+      "version": "1.1.10",
+      "size": 600246,
+      "source": "DevEco Testing/python/Lib/site-packages/devicetest/res/prototype/native/uitest_agent_v1.1.10.so"
+    },
+    "libscreen_casting.z.so": {
+      "version": "6.8-20260801",
+      "size": 247989,
+      "md5": "8c8df9a96af21aac71d5091ffa0b1477",
+      "source": "hscrcpy server/ (HOScrcpy 2.12.9 build; see .spike/hscrcpy-server/PROVENANCE.md)"
+    }
+  },
+  "x86_64": {
+    "agent.so": {
+      "version": "1.1.9",
+      "size": 1460181,
+      "source": "@deveco/deveco-cli/node_modules/@deveco/deveco-cli-common/src/resources/uitest/uitest_agent_v1.1.9.x86_64.so"
+    }
+  }
+}

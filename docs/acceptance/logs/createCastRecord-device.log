@@ -26,3 +26,4 @@ DaemonStartError: recorded file /data/local/tmp/mytest.mp4 never appeared
 [2026-11-14T22:58:04.552Z] recorded to docs\acceptance\logs\record-device.mp4
 [2026-11-14T23:01:36.110Z] recorded 325535 B to docs\acceptance\logs\record-device.mp4
 [2026-11-14T23:02:12.026Z] recorded 335615 B to docs\acceptance\logs\record-device.mp4
+[2026-11-14T23:02:39.898Z] recorded 334141 B to docs\acceptance\logs\record-device.mp4

@@ -1,4 +1,8 @@
 node_modules/
 dist/
+*.log
+test/device/.tmp/
 .superpowers/
 .work/
+
+# docs/acceptance/ is deliberately tracked: the report is a deliverable.
