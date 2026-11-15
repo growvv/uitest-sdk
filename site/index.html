@@ -20,8 +20,37 @@
   </nav>
 
   <main>
-    <section id="hero" class="section hero"></section>
-    <section id="terminal" class="section terminal"></section>
+    <section id="hero" class="section hero">
+      <div class="hero-copy">
+        <p class="hero-kicker">HarmonyOS uitest 扩展 · Node.js SDK</p>
+        <h1>用一条长连接，<br>控制鸿蒙设备</h1>
+        <p class="hero-tagline">UI automation, screenshots and H.264 casting for HarmonyOS — from Node.js.</p>
+        <p class="hero-sub">把设备侧的 <code>agent.so</code> 与 <code>libscreen_casting.z.so</code> 封装成类型化 API：点击、滑动、截图、H.264 投流与 MP4 录制，走的是扩展自己的长连接，不是 hdc 的慢路径。</p>
+        <div class="install">
+          <code>npm install uitest-sdk</code>
+          <button id="copy-install" type="button">复制</button>
+        </div>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#quickstart">开始使用</a>
+          <a class="btn" href="https://github.com/growvv/uitest-sdk">GitHub</a>
+        </div>
+      </div>
+      <figure class="hero-shot">
+        <img src="assets/screen-home.jpg" alt="真机截图：鸿蒙桌面" width="608" height="1344">
+      </figure>
+    </section>
+
+    <section id="terminal" class="section terminal">
+      <h2 id="quickstart">快速开始</h2>
+      <div class="term">
+        <div class="term-bar"><span></span><span></span><span></span></div>
+        <pre class="term-body"><span class="term-line" data-kind="cmd">$ npm install uitest-sdk</span>
+<span class="term-line" data-kind="cmd">$ node quickstart.mjs</span>
+<span class="term-line" data-kind="ok">✓ connected  BRA-AL00 · 1216×2688</span>
+<span class="term-line" data-kind="ok">✓ click(608, 1344)                 32 ms</span>
+<span class="term-line" data-kind="ok">✓ captureScreen() → 608×1344 JPEG  118 ms</span></pre>
+      </div>
+    </section>
     <section id="bench" class="section bench"></section>
     <section id="features" class="section features"></section>
     <section id="arch" class="section arch"></section>

@@ -56,4 +56,26 @@ for (const [re, what] of forbidden) {
   }
 }
 
+// ------------------------------------------------------------ section text
+function sectionHtml(id) {
+  const m = html.match(new RegExp(`<section[^>]*\\bid\\s*=\\s*"${id}"[^>]*>([\\s\\S]*?)</section>`));
+  return m ? m[1] : "";
+}
+
+// -------------------------------------------------------- task 5: hero + demo
+const hero = sectionHtml("hero");
+for (const needle of [
+  "用一条长连接",
+  "npm install uitest-sdk",
+  "assets/screen-home.jpg",
+  "https://github.com/growvv/uitest-sdk",
+  'id="copy-install"',
+]) {
+  if (!hero.includes(needle)) fail(`#hero 缺少「${needle}」`);
+}
+
+const terminal = sectionHtml("terminal");
+const termLines = (terminal.match(/class="term-line"/g) ?? []).length;
+if (termLines < 5) fail(`#terminal 只有 ${termLines} 行 .term-line，至少需要 5 行`);
+
 console.log("site ok");
