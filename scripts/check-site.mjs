@@ -88,4 +88,33 @@ const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
 if (cards !== 8) fail(`#features 有 ${cards} 张 .card，必须恰好 8 张`);
 
+// ------------------------------------------------------------ task 8: video
+for (const name of ["demo.mp4", "demo-poster.jpg"]) {
+  if (!existsSync(join(SITE, "assets", name))) fail(`missing site/assets/${name}`);
+}
+const mp4 = readFileSync(join(SITE, "assets", "demo.mp4"));
+if (mp4.length < 500 * 1024) {
+  fail(`demo.mp4 is only ${Math.round(mp4.length / 1024)} KB, expected over 500 KB`);
+}
+
+/** Reads the duration in seconds out of the first parsable mvhd box. */
+function mp4Duration(buf) {
+  for (let i = buf.indexOf("mvhd"); i >= 0; i = buf.indexOf("mvhd", i + 1)) {
+    const version = buf[i + 4];
+    if (version !== 0 && version !== 1) continue;
+    const timescale = buf.readUInt32BE(i + (version === 0 ? 16 : 24));
+    const duration =
+      version === 0 ? buf.readUInt32BE(i + 20) : Number(buf.readBigUInt64BE(i + 28));
+    if (!timescale || !duration) continue;
+    const seconds = duration / timescale;
+    if (seconds > 0 && seconds < 3600) return seconds;
+  }
+  return null;
+}
+
+const seconds = mp4Duration(mp4);
+if (seconds === null) fail("demo.mp4 has no parsable mvhd box");
+if (seconds < 29 || seconds > 31) fail(`demo.mp4 is ${seconds.toFixed(1)}s, expected 29–31s`);
+console.log(`video ${seconds.toFixed(1)}s`);
+
 console.log("site ok");

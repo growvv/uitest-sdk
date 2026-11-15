@@ -1,4 +1,6 @@
 node_modules/
+video/node_modules/
+video/out/
 dist/
 *.log
 test/device/.tmp/
