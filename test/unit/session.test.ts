@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
-import { Session } from "../../src/session.js";
+import { Session, tagOf } from "../../src/session.js";
 import { On } from "../../src/agent/selector.js";
 import type { UiNode } from "../../src/model.js";
 
@@ -175,6 +175,77 @@ describe("Session: device state", () => {
       expect(tapped.status).toBe("device_locked");
       expect(fake.actions).toHaveLength(0);
       await s.release();
+    });
+  });
+});
+
+describe("Session: standing approvals", () => {
+  const deletePage = () => page("删除");
+
+  it("remembers an approval for the task, and only for that task", async () => {
+    await withDir(async (dir) => {
+      const fake = fakeDevice([deletePage(), deletePage(), deletePage()]);
+      const s = await open(fake, dir, { task: "cleanup" });
+      const observed = await s.observe();
+      const ref = observed.screen!.elements.find((e) => e.label === "删除")!.ref;
+      const asked = await s.tap(ref);
+      expect(asked.status).toBe("approval_pending");
+      const approved = await s.tap(ref, {
+        approvalId: (asked as { approvalId: string }).approvalId,
+        approvalScope: "task",
+      });
+      expect(approved.status).toBe("settled");
+      await s.release();
+
+      // One command per process is the CLI's normal shape: a new Session
+      // with the same task must skip the question.
+      const same = await open(fake, dir, { task: "cleanup" });
+      expect((await same.tap(ref)).status).toBe("settled");
+      await same.release();
+
+      const other = await open(fake, dir, { task: "other" });
+      expect((await other.tap(ref)).status).toBe("approval_pending");
+      await other.release();
+    });
+  });
+
+  it("remembers an always approval across tasks in the same state dir", async () => {
+    await withDir(async (dir) => {
+      const fake = fakeDevice([deletePage(), deletePage()]);
+      const s = await open(fake, dir, { task: "cleanup" });
+      const observed = await s.observe();
+      const ref = observed.screen!.elements.find((e) => e.label === "删除")!.ref;
+      const asked = await s.tap(ref);
+      const approved = await s.tap(ref, {
+        approvalId: (asked as { approvalId: string }).approvalId,
+        approvalScope: "always",
+      });
+      expect(approved.status).toBe("settled");
+      await s.release();
+
+      const other = await open(fake, dir, { task: "another task" });
+      expect((await other.tap(ref)).status).toBe("settled");
+      await other.release();
+    });
+  });
+
+  it("forgets task grants when the person hands the phone back", async () => {
+    await withDir(async (dir) => {
+      const { Grants } = await import("../../src/approvals.js");
+      const { resumeDevice } = await import("../../src/hold.js");
+      const tag = tagOf("SERIAL");
+      const path = join(dir, `grants-${tag}.json`);
+      const grants = await Grants.open(path);
+      grants.add({ rule: "deletes", bundle: "com.demo", task: "cleanup", scope: "task" });
+      grants.add({ rule: "deletes", bundle: "com.demo", task: null, scope: "always" });
+
+      const { holdDevice } = await import("../../src/hold.js");
+      await holdDevice({ stateDir: dir, tag });
+      expect(await resumeDevice({ stateDir: dir, tag })).toBe(true);
+
+      const after = await Grants.open(path);
+      expect(after.list().filter((g) => g.scope === "task")).toHaveLength(0);
+      expect(after.list().filter((g) => g.scope === "always")).toHaveLength(1);
     });
   });
 });

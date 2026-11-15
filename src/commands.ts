@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import type { ApprovalScope } from "./approvals.js";
 import { doctor, renderDoctor } from "./doctor.js";
 import { EXIT_CODE, actionText, statusOf } from "./agent/result.js";
 import type { ActionResult, ActionStatus } from "./agent/result.js";
@@ -46,6 +47,7 @@ export const COMMANDS: CommandSpec[] = [
       y: { type: "number", description: "Raw y coordinate (use with x)." },
       long: { type: "boolean", description: "Hold instead of tapping." },
       approvalId: { type: "string", description: "Approval id a person handed back for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -55,6 +57,7 @@ export const COMMANDS: CommandSpec[] = [
       text: { type: "string", description: "Text to type.", required: true },
       ref: { type: "number", description: "Input element ref; defaults to the focused field." },
       approvalId: { type: "string", description: "Approval id for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -66,6 +69,8 @@ export const COMMANDS: CommandSpec[] = [
       direction: { type: "string", description: "up, down, left or right (instead of from/to)." },
       ref: { type: "number", description: "Swipe inside this element." },
       durationMs: { type: "number", description: "Gesture duration in ms." },
+      approvalId: { type: "string", description: "Approval id for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -76,6 +81,7 @@ export const COMMANDS: CommandSpec[] = [
       text: { type: "string", description: "Visible label (substring match)." },
       selector: { type: "string", description: "Selector: text=, text~=, type=, id=, chained with &." },
       approvalId: { type: "string", description: "Approval id for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -86,6 +92,8 @@ export const COMMANDS: CommandSpec[] = [
       to: { type: "string", description: "End point as x,y.", required: true },
       holdMs: { type: "number", description: "How long to hold before moving (default 300)." },
       durationMs: { type: "number", description: "Movement duration in ms." },
+      approvalId: { type: "string", description: "Approval id for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -95,6 +103,8 @@ export const COMMANDS: CommandSpec[] = [
       from: { type: "string", description: "Start point as x,y." },
       to: { type: "string", description: "End point as x,y." },
       direction: { type: "string", description: "up, down, left or right (instead of from/to)." },
+      approvalId: { type: "string", description: "Approval id for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -107,6 +117,7 @@ export const COMMANDS: CommandSpec[] = [
       to: { type: "number", description: "Half-distance at the end." },
       scale: { type: "number", description: "End distance as a multiple of the start: 2 zooms in, 0.5 zooms out." },
       approvalId: { type: "string", description: "Approval id for this exact step." },
+      approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
   },
   {
@@ -262,6 +273,16 @@ function asString(value: unknown): string | undefined {
   return s.length ? s : undefined;
 }
 
+function asScope(value: unknown): ApprovalScope | undefined {
+  const scope = asString(value);
+  if (scope === undefined) return undefined;
+  if (scope === "once" || scope === "task" || scope === "always") return scope;
+  throw new UitestError(
+    `invalid_argument: approval-scope must be once, task or always — got "${scope}"`,
+    "EINVALIDARGUMENT",
+  );
+}
+
 function asPoint(value: unknown): { x: number; y: number } | undefined {
   const raw = asString(value);
   if (!raw) return undefined;
@@ -333,6 +354,7 @@ export class CommandRunner {
       case "type": {
         const r = await this.session.type(String(raw.text), {
           approvalId: asString(raw.approvalId),
+          approvalScope: asScope(raw.approvalScope),
           ref: asNumber(raw.ref),
         });
         return this.result(r, `typed ${String(raw.text).length} characters`);
@@ -341,7 +363,12 @@ export class CommandRunner {
         return this.swipe(raw);
       case "double-click": {
         const target = this.targetFrom(raw);
-        return this.result(await this.session.doubleClick(target, { approvalId: asString(raw.approvalId) }));
+        return this.result(
+          await this.session.doubleClick(target, {
+            approvalId: asString(raw.approvalId),
+            approvalScope: asScope(raw.approvalScope),
+          }),
+        );
       }
       case "drag": {
         const from = asPoint(raw.from);
@@ -353,14 +380,20 @@ export class CommandRunner {
           await this.session.drag(from, to, {
             holdMs: asNumber(raw.holdMs),
             durationMs: asNumber(raw.durationMs),
+            approvalId: asString(raw.approvalId),
+            approvalScope: asScope(raw.approvalScope),
           }),
         );
       }
       case "fling": {
         const from = asPoint(raw.from);
         const to = asPoint(raw.to);
-        if (from && to) return this.result(await this.session.fling(from, to));
-        return this.result(await this.session.flingDirection(String(raw.direction ?? "")));
+        const opts = {
+          approvalId: asString(raw.approvalId),
+          approvalScope: asScope(raw.approvalScope),
+        };
+        if (from && to) return this.result(await this.session.fling(from, to, opts));
+        return this.result(await this.session.flingDirection(String(raw.direction ?? ""), opts));
       }
       case "pinch": {
         const center = asPoint(raw.center);
@@ -374,6 +407,8 @@ export class CommandRunner {
           from: asNumber(raw.from),
           to: asNumber(raw.to),
           scale: asNumber(raw.scale),
+          approvalId: asString(raw.approvalId),
+          approvalScope: asScope(raw.approvalScope),
         });
         return this.result(r);
       }
@@ -505,6 +540,7 @@ export class CommandRunner {
 
   private async tap(raw: Record<string, unknown>): Promise<RunResult> {
     const approvalId = asString(raw.approvalId);
+    const approvalScope = asScope(raw.approvalScope);
     const long = raw.long === true || raw.long === "true";
     const ref = asNumber(raw.ref);
     const text = asString(raw.text);
@@ -513,13 +549,22 @@ export class CommandRunner {
     const y = asNumber(raw.y);
 
     if (selector) {
-      return this.result(await this.session.tapSelector(parseOn(selector), { approvalId, long }));
+      return this.result(
+        await this.session.tapSelector(parseOn(selector), { approvalId, approvalScope, long }),
+      );
     }
-    if (text) return this.result(await this.session.tap({ text }, { approvalId, long }));
-    if (ref !== undefined) return this.result(await this.session.tap(ref, { approvalId, long }));
+    if (text) return this.result(await this.session.tap({ text }, { approvalId, approvalScope, long }));
+    if (ref !== undefined) return this.result(await this.session.tap(ref, { approvalId, approvalScope, long }));
     if (x !== undefined && y !== undefined) {
       const before = await this.session.screen();
-      await this.session.swipe({ from: { x, y }, to: { x, y }, steps: 1, durationMs: 1 });
+      await this.session.swipe({
+        from: { x, y },
+        to: { x, y },
+        steps: 1,
+        durationMs: 1,
+        approvalId,
+        approvalScope,
+      });
       return this.result(await this.session.settle(before.hash));
     }
     throw new UitestError("invalid_argument: tap needs ref, text or selector", "EINVALIDARGUMENT");
@@ -529,8 +574,10 @@ export class CommandRunner {
     const from = asPoint(raw.from);
     const to = asPoint(raw.to);
     const durationMs = asNumber(raw.durationMs);
+    const approvalId = asString(raw.approvalId);
+    const approvalScope = asScope(raw.approvalScope);
     if (from && to) {
-      return this.result(await this.session.swipe({ from, to, durationMs }));
+      return this.result(await this.session.swipe({ from, to, durationMs, approvalId, approvalScope }));
     }
     const direction = asString(raw.direction)?.toLowerCase();
     if (!direction) {
@@ -560,7 +607,9 @@ export class CommandRunner {
     if (!pair) {
       throw new UitestError("invalid_argument: direction must be up, down, left or right", "EINVALIDARGUMENT");
     }
-    return this.result(await this.session.swipe({ from: pair[0], to: pair[1], durationMs }));
+    return this.result(
+      await this.session.swipe({ from: pair[0], to: pair[1], durationMs, approvalId, approvalScope }),
+    );
   }
 
   private async launch(raw: Record<string, unknown>): Promise<RunResult> {
@@ -693,6 +742,10 @@ export class CommandRunner {
 
   private status(): RunResult {
     const policy = this.session.policy.describe();
+    const grants = this.session.grantList();
+    const grantText = grants.length
+      ? grants.map((g) => `${g.rule}@${g.bundle || "unknown"} (${g.scope})`).join(", ")
+      : "none";
     const lines = [
       `settled · connected`,
       `task: ${this.session.task}`,
@@ -700,12 +753,15 @@ export class CommandRunner {
       `read-only: ${policy.readOnly}`,
       `confirm: ${policy.confirm.join(",") || "none"}`,
       `apps: ${policy.apps.join(",") || "all"}`,
+      // Standing approvals are part of what the agent may do without asking;
+      // hiding them would make the policy line a half-truth.
+      `grants: ${grantText}`,
     ];
     return {
       status: "settled",
       code: 0,
       text: lines.join("\n"),
-      data: { task: this.session.task, device: this.session.tag, ...policy },
+      data: { task: this.session.task, device: this.session.tag, ...policy, grants },
     };
   }
 

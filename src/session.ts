@@ -2,7 +2,8 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { AppManager } from "./apps.js";
-import { Approvals } from "./approvals.js";
+import { Approvals, Grants } from "./approvals.js";
+import type { ApprovalScope, Grant } from "./approvals.js";
 import { Components, ComponentHandle } from "./agent/components.js";
 import { Gestures } from "./agent/gestures.js";
 import { On, selectorText, parseKeyName } from "./agent/selector.js";
@@ -67,12 +68,15 @@ export type Target = number | { ref: number } | { text: string } | On;
 export interface TapOptions {
   /** Approval id a person handed back for this exact step. */
   approvalId?: string;
+  /** `task` or `always` remembers the answer for this rule and app. */
+  approvalScope?: ApprovalScope;
   long?: boolean;
   holdMs?: number;
 }
 
 export interface TypeOptions {
   approvalId?: string;
+  approvalScope?: ApprovalScope;
   /** Input to type into; defaults to the focused field. */
   ref?: number;
 }
@@ -83,6 +87,8 @@ export interface SwipeInput {
   steps?: number;
   durationMs?: number;
   holdMs?: number;
+  approvalId?: string;
+  approvalScope?: ApprovalScope;
 }
 
 export interface WaitForOptions {
@@ -122,6 +128,8 @@ export interface WindowOptions {
 }
 
 export interface PinchInput {
+  approvalId?: string;
+  approvalScope?: ApprovalScope;
   /** Center of the gesture; required unless `ref` is given. */
   center?: Point;
   /** Element to pinch inside; its middle becomes the center. */
@@ -169,6 +177,7 @@ export class Session {
   readonly tag: string;
 
   private readonly approvals: Approvals;
+  private readonly grants: Grants;
   private lease: Lease | null;
   private readonly settleMs: number;
   private readonly traceShots: boolean;
@@ -200,6 +209,7 @@ export class Session {
     // Approvals outlive the process for the same reason: the command that asks
     // for one and the command that replays it are separate invocations.
     this.approvals = new Approvals({ path: join(stateDir, `approvals-${this.tag}.json`) });
+    this.grants = new Grants({ path: join(stateDir, `grants-${this.tag}.json`) });
     this.components = new Components(device.agent);
     this.gestures = new Gestures(device.agent);
     this.apps = device.hdc ? new AppManager(device.hdc) : null;
@@ -261,6 +271,11 @@ export class Session {
     return this.reader.read();
   }
 
+  /** Standing approvals, for `status` and the report. */
+  grantList(): Grant[] {
+    return this.grants.list();
+  }
+
   // ---------------------------------------------------------------- acting
 
   /**
@@ -287,6 +302,7 @@ export class Session {
       resolved.screen,
       null,
       opts.approvalId,
+      opts.approvalScope,
     );
     if (gate) return this.finish("tap", { target }, gate.status, gate.text, { screen: resolved.screen, ...gate.extra });
 
@@ -312,6 +328,7 @@ export class Session {
       undefined,
       null,
       opts.approvalId,
+      opts.approvalScope,
     );
     if (gate) {
       return this.finish("tap", { selector: selectorText(selector) }, gate.status, gate.text, gate.extra);
@@ -352,6 +369,7 @@ export class Session {
       before,
       field.node,
       opts.approvalId,
+      opts.approvalScope,
     );
     if (gate) {
       return this.finish("type", { text: "[redacted]", ref: opts.ref }, gate.status, gate.text, {
@@ -378,7 +396,16 @@ export class Session {
     }
     const before = await this.reader.read();
     this.lastScreen = before;
-    const gate = await this.gate("swipe", input, labelsUnder(before, input.from, input.to), "", before);
+    const gate = await this.gate(
+      "swipe",
+      input,
+      labelsUnder(before, input.from, input.to),
+      "",
+      before,
+      null,
+      input.approvalId,
+      input.approvalScope,
+    );
     if (gate) return this.finish("swipe", { input }, gate.status, gate.text, { screen: before, ...gate.extra });
     await this.gestures.swipe(input.from, input.to, {
       steps: input.steps,
@@ -408,6 +435,7 @@ export class Session {
       resolved.screen,
       null,
       opts.approvalId,
+      opts.approvalScope,
     );
     if (gate) {
       return this.finish("double-click", { target }, gate.status, gate.text, { screen: resolved.screen, ...gate.extra });
@@ -452,7 +480,16 @@ export class Session {
     const from = opts.from ?? span;
     const to = opts.to ?? Math.round(from * (opts.scale ?? 2));
     const args = { center, from, to };
-    const gate = await this.gate("pinch", args, labelsUnder(screen, center, center), "", screen);
+    const gate = await this.gate(
+      "pinch",
+      args,
+      labelsUnder(screen, center, center),
+      "",
+      screen,
+      null,
+      opts.approvalId,
+      opts.approvalScope,
+    );
     if (gate) return this.finish("pinch", args, gate.status, gate.text, { screen, ...gate.extra });
     await this.gestures.pinch({ center, from, to });
     return this.after("pinch", args, screen);
@@ -462,26 +499,52 @@ export class Session {
    * Presses, holds, then moves to `to`. The hold is what makes the device treat
    * this as dragging a held item instead of scrolling the list under it.
    */
-  async drag(from: Point, to: Point, opts: { holdMs?: number; durationMs?: number } = {}): Promise<ActionResult> {
+  async drag(
+    from: Point,
+    to: Point,
+    opts: { holdMs?: number; durationMs?: number; approvalId?: string; approvalScope?: ApprovalScope } = {},
+  ): Promise<ActionResult> {
     if (!from || !to) {
       throw new UitestError("a drag needs both `from` and `to`", "EINVALIDARGUMENT");
     }
     const before = await this.reader.read();
     this.lastScreen = before;
-    const gate = await this.gate("drag", { from, to, holdMs: opts.holdMs }, labelsUnder(before, from, to), "", before);
+    const gate = await this.gate(
+      "drag",
+      { from, to, holdMs: opts.holdMs },
+      labelsUnder(before, from, to),
+      "",
+      before,
+      null,
+      opts.approvalId,
+      opts.approvalScope,
+    );
     if (gate) return this.finish("drag", { from, to }, gate.status, gate.text, { screen: before, ...gate.extra });
     await this.gestures.drag(from, to, { holdMs: opts.holdMs, durationMs: opts.durationMs });
     return this.after("drag", { from, to }, before);
   }
 
   /** A fast swipe between two points: the release velocity keeps the list moving. */
-  async fling(from: Point, to: Point): Promise<ActionResult> {
+  async fling(
+    from: Point,
+    to: Point,
+    opts: { approvalId?: string; approvalScope?: ApprovalScope } = {},
+  ): Promise<ActionResult> {
     if (!from || !to) {
       throw new UitestError("a fling needs both `from` and `to`", "EINVALIDARGUMENT");
     }
     const before = await this.reader.read();
     this.lastScreen = before;
-    const gate = await this.gate("fling", { from, to }, labelsUnder(before, from, to), "", before);
+    const gate = await this.gate(
+      "fling",
+      { from, to },
+      labelsUnder(before, from, to),
+      "",
+      before,
+      null,
+      opts.approvalId,
+      opts.approvalScope,
+    );
     if (gate) return this.finish("fling", { from, to }, gate.status, gate.text, { screen: before, ...gate.extra });
     await this.gestures.fling(from, to);
     return this.after("fling", { from, to }, before);
@@ -491,7 +554,10 @@ export class Session {
    * A fling in a direction, inside a box inset from the screen edge so the
    * gesture does not start on the system's own edge-swipe region.
    */
-  async flingDirection(direction: string): Promise<ActionResult> {
+  async flingDirection(
+    direction: string,
+    opts: { approvalId?: string; approvalScope?: ApprovalScope } = {},
+  ): Promise<ActionResult> {
     const screen = await this.screen();
     const area = {
       x: Math.round(screen.display.width * 0.12),
@@ -513,7 +579,7 @@ export class Session {
     if (!pair) {
       throw new UitestError("invalid_argument: direction must be up, down, left or right", "EINVALIDARGUMENT");
     }
-    return this.fling(pair[0], pair[1]);
+    return this.fling(pair[0], pair[1], opts);
   }
 
   /**
@@ -795,6 +861,7 @@ ${renderFull(screen)}`, {
     screen?: Screen,
     node?: UiNode | null,
     approvalId?: string,
+    approvalScope?: ApprovalScope,
   ): Promise<GateOutcome | null> {
     if (screen?.locked) {
       // Acting on a locked phone reaches nothing but the lock screen, and the
@@ -820,8 +887,20 @@ ${renderFull(screen)}`, {
     // A supplied approval is checked even when the step no longer needs one:
     // an id borrowed from another step must fail loudly, not be ignored.
     if (approvalId) {
-      const result = this.approvals.consume(approvalId, step);
-      if (result.kind === "approved") return null;
+      const result = this.approvals.consume(approvalId, step, { scope: approvalScope });
+      if (result.kind === "approved") {
+        // A remembered answer: the id itself stays single-use, but the rule it
+        // carried now covers this app (and task, for `task`).
+        if ((approvalScope === "task" || approvalScope === "always") && result.rule) {
+          this.grants.add({
+            rule: result.rule,
+            bundle: screen?.bundle ?? "",
+            task: approvalScope === "task" ? this.task : null,
+            scope: approvalScope,
+          });
+        }
+        return null;
+      }
       if (result.kind === "stale") {
         return { status: "stale", text: `stale · ${result.reason}`, extra: { reason: result.reason } };
       }
@@ -832,7 +911,14 @@ ${renderFull(screen)}`, {
       };
     }
     if (decision.kind === "allow") return null;
-    const pending = this.approvals.request(step);
+    // A grant the person already gave covers this step without asking again.
+    const standing = this.grants.permits({
+      rule: decision.rule,
+      bundle: screen?.bundle ?? "",
+      task: this.task,
+    });
+    if (standing) return null;
+    const pending = this.approvals.request(step, decision.rule);
     return {
       status: "approval_pending",
       text:

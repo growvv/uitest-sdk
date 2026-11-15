@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { Grants } from "./approvals.js";
 import { Lease, readLease } from "./lease.js";
 import { tagOf } from "./session.js";
 import { HdcRunner } from "./hdc.js";
@@ -111,6 +112,12 @@ export async function resumeDevice(opts: HoldOptions): Promise<boolean> {
   if (!current || current.task !== HOLD_TASK) return false;
   const lease = await Lease.acquire({ path, task: HOLD_TASK, staleMs: opts.staleMs, hold: true });
   await lease.release();
+  // "For this task" ends when a person takes the phone: the context they
+  // approved a rule in is gone, and an agent that continues afterwards asks
+  // again. `always` grants are the person's longer-lived decision and stay.
+  await Grants.open(join(opts.stateDir, `grants-${opts.tag}.json`)).then((g) =>
+    g.clearTask(),
+  );
   return true;
 }
 

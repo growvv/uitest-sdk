@@ -511,6 +511,15 @@ signature. It is single-use and expires after 10 minutes. A step whose target
 moved between approval and execution returns `stale`; a step that changed in any
 other way returns `approval_denied`.
 
+`--approval-scope` decides how long the answer lasts. `once` (default) replays
+the one step. `task` remembers the rule for the same app until `resume` or a
+new task. `always` remembers it for every task that uses this state dir. A
+grant is keyed by rule and app, and it only skips the approval prompt: a
+credential is still always blocked, read-only still refuses anything that
+changes data, and `--apps` still blocks an app outside the allow-list. `resume`
+drops `task` grants — the context they were given in is gone — and keeps
+`always` grants.
+
 ## State directory
 
 ```
@@ -518,6 +527,7 @@ other way returns `approval_denied`.
   leases/<device-hash>.lock        one task per device
   refs-<device-hash>.json          ref table, so refs outlive a command
   approvals-<device-hash>.json     ids a person has been asked for
+  grants-<device-hash>.json        rules a person asked not to be asked again
   traces/<timestamp>-<task>.jsonl  one file per command
   traces/<timestamp>-<title>.html
   shots/                           per-step screenshots, with --trace-shots

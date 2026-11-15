@@ -318,6 +318,7 @@ for (const needle of [
   "device_locked",
   "device_needs_setup",
   "device_offline",
+  "--approval-scope",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -353,6 +354,8 @@ for (const needle of [
   "~/.copilot/mcp-config.json",
   "设备状态也有名字",
   "hdc list targets -v",
+  "同一条审批可以记住",
+  "--approval-scope task",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

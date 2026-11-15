@@ -17,6 +17,10 @@ describe("ActionResult", () => {
     expect(statusOf({ ...settled, status: "approval_denied", reason: "expired" })).toBe(4);
     expect(statusOf({ ...settled, status: "stale", reason: "screen changed" })).toBe(4);
     expect(statusOf({ ...settled, status: "lease_held", task: "other" })).toBe(2);
+    expect(statusOf({ ...settled, status: "handoff", task: "held by a person", reason: "sign in" })).toBe(2);
+    expect(statusOf({ ...settled, status: "device_locked" })).toBe(2);
+    expect(statusOf({ ...settled, status: "device_needs_setup" })).toBe(2);
+    expect(statusOf({ ...settled, status: "device_offline" })).toBe(2);
   });
 
   it("knows which statuses are terminal successes", () => {
@@ -29,8 +33,16 @@ describe("ActionResult", () => {
     expect(actionText({ ...settled, status: "blocked", rule: "credentials", reason: "password field" })).toContain(
       "blocked_by_policy · rule: credentials",
     );
-    expect(actionText({ ...settled, status: "approval_pending", approvalId: "ap_9", rule: "payments" })).toContain(
-      "approval_id: ap_9",
-    );
+    const pending = actionText({
+      ...settled,
+      status: "approval_pending",
+      approvalId: "ap_9",
+      rule: "payments",
+      reason: "the label says pay",
+    });
+    expect(pending).toContain("approval_id: ap_9");
+    // A person can answer once, for the task, or for this app from now on.
+    expect(pending).toContain("--approval-scope task");
+    expect(pending).toContain("--approval-scope always");
   });
 });

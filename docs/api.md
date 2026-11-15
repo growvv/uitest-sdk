@@ -431,6 +431,7 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 | `--confirm <rules>` | `payments,finance,deletes,sends,commits`、`all` 或 `none` |
 | `--apps <bundles>` | 逗号分隔的应用白名单，其它应用被拦截 |
 | `--approval-id <id>` | 兑现一次人工审批 |
+| `--approval-scope <s>` | 带 `--approval-id` 时：`once`（默认）、`task` 或 `always` |
 | `--settle-ms <n>` | 动作后等 UI 安静的最长时间 |
 | `--trace-shots` | 每步存一张截图（约 +180 ms） |
 | `--json` | 输出 `{ status, code, text, data }` |
@@ -493,6 +494,8 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 
 - ref 表在 `<state-dir>/refs-<hash>.json`：`observe` 打印的 ref 在下一条命令里仍指向同一个元素。
 - 审批 id 在 `<state-dir>/approvals-<hash>.json`：一次性、10 分钟 TTL、绑定命令与目标签名。
+- 记住的审批在 `<state-dir>/grants-<hash>.json`：按 rule + bundle 记；`task` 范围只限当前 task，
+  `always` 跨 task；`resume` 清掉 `task` 的、保留 `always`。
 - 租约在 `<state-dir>/leases/<tag>.lock`；设备序列号只以 8 位哈希出现。
 - 每条命令各写一个 trace 文件；`report` 按 task 从磁盘读回并跨文件重新编号。
 
@@ -602,6 +605,11 @@ try {
 `approval_pending` 返回一次性 `approvalId`、命中的 rule 与原因。人同意后，用**完全相同的命令**加
 `--approval-id` 重跑。id 绑定命令与目标签名、10 分钟过期、只能用一次；页面变了返回 `stale`。
 审批由 CLI 自己校验，不靠提示词约束 Agent。
+
+人回答时可以选这个答案记多久：`once` 只兑现这一步（默认）；`--approval-scope task` 在本任务内
+不再问同一条 rule；`--approval-scope always` 在这个 state dir 的所有任务里都不再问。记住的授权
+只按 rule + bundle 匹配，且只跳过审批这一步检查——凭据仍然永远拦截，`--read-only` 仍然拒绝改数据，
+`--apps` 白名单之外仍然被拦。`resume` 会清掉 `task` 范围的授权（人接管后上下文已变），保留 `always`。
 
 ---
 

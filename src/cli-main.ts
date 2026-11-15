@@ -20,6 +20,7 @@ export interface ParsedArgv {
     confirm?: string;
     apps?: string;
     approvalId?: string;
+    approvalScope?: string;
     settleMs?: number;
     traceShots?: boolean;
   };
@@ -34,6 +35,7 @@ const GLOBAL_FLAGS = new Set([
   "apps",
   "settle-ms",
   "approval-id",
+  "approval-scope",
   "trace-shots",
   "json",
   "help",
@@ -101,6 +103,7 @@ export function parseArgv(argv: string[]): ParsedArgv {
       confirm: str(global["confirm"]),
       apps: str(global["apps"]),
       approvalId: str(global["approvalId"]),
+      approvalScope: str(global["approvalScope"]),
       settleMs: settle === undefined ? undefined : Number(settle),
       traceShots: global["traceShots"] === true,
     },
@@ -141,6 +144,7 @@ export function formatHelp(): string {
     "  --confirm <rules>    payments,finance,deletes,sends,commits | all | none",
     "  --apps <bundles>     comma-separated allow-list; other apps are blocked",
     "  --approval-id <id>   run one step a person approved",
+    "  --approval-scope <s> with the id: once (default), task, or always",
     "  --settle-ms <n>      how long to wait for the UI to go quiet",
     "  --trace-shots        save a screenshot with every step (+~180 ms each)",
     "  --json               print one JSON document",
@@ -220,6 +224,7 @@ export async function runCommand(
     return await runner.run(parsed.command, {
       ...parsed.args,
       approvalId: parsed.args["approvalId"] ?? parsed.options.approvalId,
+      approvalScope: parsed.args["approvalScope"] ?? parsed.options.approvalScope,
     });
   } finally {
     await session.release();

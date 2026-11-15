@@ -95,7 +95,12 @@ export function actionText(result: ActionResult): string {
     case "blocked":
       return `blocked_by_policy · rule: ${result.rule}\n${result.reason}`;
     case "approval_pending":
-      return `approval_pending · approval_id: ${result.approvalId} · rule: ${result.rule}\n${result.reason}`;
+      return (
+        `approval_pending · approval_id: ${result.approvalId} · rule: ${result.rule}\n${result.reason}\n` +
+        `Answer by repeating the same command with --approval-id ${result.approvalId}` +
+        ` (once), plus --approval-scope task (this task) or --approval-scope always ` +
+        `(every task in this state dir), both scoped to this app.`
+      );
     case "approval_denied":
       return `approval_denied · ${result.reason}`;
     case "stale":

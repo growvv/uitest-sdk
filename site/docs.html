@@ -213,7 +213,7 @@ uitest-phone observe --task "check WLAN"
 uitest-phone tap --ref 12 --task "check WLAN"
 uitest-phone read-list --ref 20
 uitest-phone report --title "WLAN check"</code></pre>
-      <p>全局 flag 对所有命令生效：<code>--task</code>、<code>--state-dir</code>、<code>--device</code>、<code>--read-only</code>、<code>--apps</code>、<code>--confirm</code>、<code>--settle-ms</code>、<code>--trace-shots</code>、<code>--approval-id</code>、<code>--json</code>。完整命令与参数见 <code>--help</code> 与随包 Skill 的 <code>REFERENCE.md</code>。</p>
+      <p>全局 flag 对所有命令生效：<code>--task</code>、<code>--state-dir</code>、<code>--device</code>、<code>--read-only</code>、<code>--apps</code>、<code>--confirm</code>、<code>--settle-ms</code>、<code>--trace-shots</code>、<code>--approval-id</code>、<code>--approval-scope</code>、<code>--json</code>。完整命令与参数见 <code>--help</code> 与随包 Skill 的 <code>REFERENCE.md</code>。</p>
       <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code>/<code>handoff</code>/<code>device_locked</code>/<code>device_needs_setup</code>/<code>device_offline</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
       <p>设备本身不可用时也有名字：锁屏是 <code>device_locked</code>（不把锁屏当成页面去点），连上但没授权调试是 <code>device_needs_setup</code>，没插/关机/Offline 是 <code>device_offline</code>。三者都以退出码 2 停下，Agent 应请人解锁、点「允许」或插线，而不是重试。</p>
 
@@ -349,7 +349,7 @@ if (bounds) {
             <tr><td><code>Session</code></td><td>一个任务看一台设备：租约、策略、ref 表、trace</td></tr>
             <tr><td><code>ScreenReader</code> / <code>ScreenBuilder</code></td><td>读屏与渲染；<code>renderDiff</code> / <code>renderFull</code> 生成 CLI 打印的那份文本</td></tr>
             <tr><td><code>Components</code> / <code>Gestures</code> / <code>AppManager</code></td><td>设备侧控件操作、手势、应用与窗口管理</td></tr>
-            <tr><td><code>Policy</code> / <code>Approvals</code> / <code>Lease</code></td><td>标签策略、一次性审批、每设备租约</td></tr>
+            <tr><td><code>Policy</code> / <code>Approvals</code> / <code>Lease</code></td><td>标签策略、一次性或记住的审批、每设备租约</td></tr>
             <tr><td><code>TraceRecorder</code></td><td>逐步 JSONL trace 与 HTML 报告</td></tr>
             <tr><td><code>CommandRunner</code> / <code>COMMANDS</code></td><td>命令层；CLI 与 MCP 共用同一张表</td></tr>
             <tr><td><code>McpServer</code> / <code>toolDefinitions</code></td><td>stdio JSON-RPC 服务与工具定义</td></tr>

@@ -124,6 +124,9 @@ npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两�
   下一条 `tap` 里仍指向同一个元素；不在当前屏幕上的 ref 直接 `not_found`，绝不悄悄指向别的控件。
 - **审批跨进程可用**：`approval_pending` 给出的 id 存在 `<state-dir>/approvals-<device-hash>.json`，
   下一条命令带 `--approval-id` 就能兑现；id 一次性、有 TTL，页面变了返回 `stale`。
+- **审批可以记住**：带 `--approval-scope task` 时，这条 rule 在本任务内同一个应用里不再问；
+  `always` 则在这个 state dir 的所有任务里都不再问。记住的授权只跳过一次审批检查，凭据、`--read-only`
+  和 `--apps` 白名单不受影响；`resume` 清掉 `task` 的、保留 `always`。
 - **报告跨进程聚合**：每条命令各写一个 trace 文件，`report` 按 task 把它们从磁盘读回来、跨文件重新编号，
   覆盖整轮任务（含之前那些进程写的步骤），而不是只有写报告这一步。加 `--trace-shots` 每步存一张截图，
   报告里的链接相对报告自身，截图和 HTML 可以整体搬走。

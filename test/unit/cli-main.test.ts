@@ -48,6 +48,12 @@ describe("parseArgv", () => {
     expect(parseArgv(["tap", "--ref", "3", "--read-only"]).options.readOnly).toBe(true);
     expect(parseArgv(["tap", "--read-only", "--ref", "3"]).args).toEqual({ ref: "3" });
   });
+
+  it("reads --approval-scope as a session option", () => {
+    const parsed = parseArgv(["tap", "--ref", "3", "--approval-scope", "task"]);
+    expect(parsed.options.approvalScope).toBe("task");
+    expect(parsed.args).toEqual({ ref: "3" });
+  });
 });
 
 describe("formatHelp", () => {

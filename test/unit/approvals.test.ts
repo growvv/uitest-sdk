@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Approvals } from "../../src/approvals.js";
+import { Approvals, Grants } from "../../src/approvals.js";
 
 const step = { command: "tap", args: { ref: 3 }, signature: "button|删除|1,2,3,4" };
 
@@ -78,6 +78,77 @@ describe("Approvals", () => {
     const r = a.consume(id, step);
     expect(r.kind).toBe("denied");
     expect(r.kind === "denied" && r.reason).toMatch(/expired/);
+  });
+});
+
+describe("Grants", () => {
+  const grant = { rule: "deletes", bundle: "com.demo" } as const;
+
+  it("permits nothing by default", () => {
+    expect(new Grants().permits({ rule: "deletes", bundle: "com.demo", task: "a" })).toBeNull();
+  });
+
+  it("applies a task grant only to the same task, rule and app", () => {
+    const g = new Grants();
+    g.add({ ...grant, task: "cleanup", scope: "task" });
+    expect(g.permits({ rule: "deletes", bundle: "com.demo", task: "cleanup" })).not.toBeNull();
+    expect(g.permits({ rule: "deletes", bundle: "com.demo", task: "other" })).toBeNull();
+    expect(g.permits({ rule: "sends", bundle: "com.demo", task: "cleanup" })).toBeNull();
+    expect(g.permits({ rule: "deletes", bundle: "com.other", task: "cleanup" })).toBeNull();
+  });
+
+  it("applies an always grant to every task but only its own app and rule", () => {
+    const g = new Grants();
+    g.add({ ...grant, task: null, scope: "always" });
+    expect(g.permits({ rule: "deletes", bundle: "com.demo", task: "one" })).not.toBeNull();
+    expect(g.permits({ rule: "deletes", bundle: "com.demo", task: "two" })).not.toBeNull();
+    expect(g.permits({ rule: "deletes", bundle: "com.other", task: "one" })).toBeNull();
+    expect(g.permits({ rule: "sends", bundle: "com.demo", task: "one" })).toBeNull();
+  });
+
+  it("does not keep the same grant twice", () => {
+    const g = new Grants();
+    g.add({ ...grant, task: null, scope: "always" });
+    g.add({ ...grant, task: null, scope: "always" });
+    expect(g.list()).toHaveLength(1);
+  });
+
+  it("survives a new process", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "uitest-grants-"));
+    try {
+      const path = join(dir, "grants.json");
+      await Grants.open(path).then((g) => g.add({ ...grant, task: "cleanup", scope: "task" }));
+      const next = await Grants.open(path);
+      expect(next.permits({ rule: "deletes", bundle: "com.demo", task: "cleanup" })).not.toBeNull();
+      expect(next.permits({ rule: "deletes", bundle: "com.demo", task: "other" })).toBeNull();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drops task grants on resume and keeps always grants", () => {
+    const g = new Grants();
+    g.add({ ...grant, task: "cleanup", scope: "task" });
+    g.add({ ...grant, task: null, scope: "always" });
+    expect(g.clearTask()).toBe(1);
+    expect(g.permits({ rule: "deletes", bundle: "com.demo", task: "cleanup" })).not.toBeNull();
+    expect(g.list()).toHaveLength(1);
+  });
+});
+
+describe("Approvals with a scope", () => {
+  it("returns the rule the approval was issued for", () => {
+    const a = new Approvals();
+    const { id } = a.request(step, "deletes");
+    expect(a.consume(id, step)).toEqual({ kind: "approved", rule: "deletes" });
+  });
+
+  it("refuses to remember an approval that carries no rule, without burning it", () => {
+    const a = new Approvals();
+    const { id } = a.request(step);
+    expect(a.consume(id, step, { scope: "always" })).toMatchObject({ kind: "denied" });
+    // Not consumed: the person can still answer "once".
+    expect(a.consume(id, step)).toEqual({ kind: "approved" });
   });
 });
 

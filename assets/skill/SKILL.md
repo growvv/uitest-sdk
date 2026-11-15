@@ -219,6 +219,13 @@ When you get `approval_pending`:
 4. If the person says no, stop. `approval_denied` or `blocked` means do not
    route around it.
 
+When the person answers yes, let them choose how long it lasts: once (just
+this step), `--approval-scope task` (this rule in this task), or
+`--approval-scope always` (this rule in this app, every task in this state
+dir). A remembered approval covers only that rule and app; it never covers a
+credential, read-only mode, or an app outside `--apps`. When they do not say,
+answer once.
+
 Credential fields (password, OTP, PIN, verification code) are always blocked.
 Do not ask the person for a password or OTP, and do not type one even into a
 field the policy did not label as a credential field; call `uitest_handoff` and
