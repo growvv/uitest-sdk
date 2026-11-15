@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Lease, readLease } from "../../src/lease.js";
 import { LeaseHeldError } from "../../src/errors.js";
@@ -116,6 +116,58 @@ describe("Lease", () => {
       await lease.release();
       const info = await readLease(path);
       expect(info?.token).toBe(next.info.token);
+    });
+  });
+
+
+  it("keeps a lease whose owner is a person, not a process", async () => {
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      // `uitest-phone hold` writes the lease and exits, so the pid is gone the
+      // moment the command returns. Judging that by pid would let the next
+      // agent command steal the device back, which is the opposite of a hold.
+      await writeFile(
+        path,
+        `${JSON.stringify({
+          task: "held by a person", token: "deadbeef", pid: 999999, host: hostname(),
+          since: 1000, heartbeatAt: 1000, hold: true,
+        })}
+`,
+      );
+      const err = await Lease.acquire({ path, task: "agent", now: () => 2000 }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(LeaseHeldError);
+      expect((err as Error).message).toContain("held by a person");
+    });
+  });
+
+  it("lets a forced hold preempt a live task", async () => {
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      await Lease.acquire({ path, task: "agent", isAlive: () => true });
+      const held = await Lease.acquire({ path, task: "held by a person", hold: true, force: true });
+      expect(held.info.task).toBe("held by a person");
+      expect((await readLease(path))?.hold).toBe(true);
+    });
+  });
+
+  it("tells a session its lease was taken, and lets it take the device again after a hand-back", async () => {
+    // The MCP server holds one lease for the life of the process. Without this
+    // re-check a `hold` would be invisible to it and it would keep driving the
+    // phone: takeover only worked between one-shot CLI commands.
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      const lease = await Lease.acquire({ path, task: "agent" });
+      await Lease.acquire({ path, task: "held by a person", hold: true, force: true });
+
+      const err = await lease.reacquire().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(LeaseHeldError);
+      expect((err as Error).message).toContain("held by a person");
+
+      // The person runs `resume`: the lock is gone, and the same session may
+      // take the device again without being restarted.
+      await (await import("node:fs/promises")).unlink(path);
+      await lease.reacquire();
+      expect((await readLease(path))?.task).toBe("agent");
     });
   });
 

@@ -23,6 +23,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#unreleased">未发布 · 默认值与接管</a>
       <a href="#v0-2-0">0.2.0 · 命令行与 Agent</a>
       <a href="#v0-1-0">0.1.0 · 首个公开版本</a>
       <a href="#v0-0-0-stage">0.0.0-stage · npm 占位</a>
@@ -32,6 +33,46 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="unreleased">
+        <div class="release-head">
+          <h2>未发布</h2>
+          <span class="release-tag">master · 尚未发包</span>
+        </div>
+        <p>0.2.0 之后的三处功能修改，都来自「默认值不该替人放行」这一条。</p>
+
+        <h3>删除与发送默认要审批</h3>
+        <ul>
+          <li>默认审批集从「支付、金融」扩到「支付、金融、删除、发送」——这四类是 Agent 做了、人收不回来的事。</li>
+          <li><code>commits</code>（确认 / 保存）仍不默认：手机上半数普通表单按钮都叫这个，每次都问会把人训练成不看就点同意。</li>
+          <li>与之前的 <code>--read-only</code> 失效同类：默认值放行了人不会希望 Agent 自主执行的动作。</li>
+        </ul>
+
+        <h3>人可以随时接管</h3>
+        <ul>
+          <li><code>uitest-phone hold</code> 把设备租约写成 <code>"held by a person"</code> 后退出；Agent 命令随后以 <code>lease_held</code>（退出码 2）停下。</li>
+          <li>可以抢走正在运行的任务，包括整个进程只持一次租约的 <code>mcp</code> 会话：任务在下一条命令前发现租约没了，不会在动作中途被打断。</li>
+          <li><code>resume</code> 交还；只释放 hold，别的任务的租约不碰；同一个 Agent 会话下一条命令自动重新取得设备，不用重启。</li>
+          <li>hold 不按进程存活判断，所以不会自己过期，也没有命令能把它抢回去。</li>
+          <li>实测：<code>hold</code> 之后一条 Agent 命令 2.3 s 退出 2，提示「A person is using the phone. Stop and wait; they will run <code>uitest-phone resume</code>.」；MCP 会话在 hold 期间的工具调用返回 <code>lease_held</code>，<code>resume</code> 后下一条恢复 <code>settled</code>。</li>
+          <li>设备侧的 UI 事件流不可用于判断「人在动手机」：会关掉会话、能把 daemon 卡死，且合成点击也被当成手指。所以接管是人的明确声明。</li>
+        </ul>
+
+        <h3>一步接好 Agent</h3>
+        <ul>
+          <li><code>uitest-phone connect</code> 把 MCP 注册直接写进 Agent 自己的设置文件，只改自己那一项；注释、键顺序、其它 server 的排版原样保留，已经正确时零写入。</li>
+          <li>支持 <code>claude</code>（<code>~/.claude.json</code>）与 <code>codex</code>（<code>~/.codex/config.toml</code>）。文件解析失败就拒绝并报出偏移，不替人重写。</li>
+          <li>入口写成本包绝对路径 + 当前 <code>node</code>：从 Dock / 开始菜单启动的 Agent 看不到终端 <code>PATH</code>。</li>
+          <li><code>install-skill</code> 同时写 <code>~/.claude/skills</code> 与 <code>~/.agents/skills</code>（agentskills.io 跨 runtime 别名），一次覆盖 Claude Code、Codex、Copilot CLI、Gemini CLI。</li>
+        </ul>
+
+        <h3>修复</h3>
+        <ul>
+          <li><code>lease_held</code> 的退出码一直是 1：<code>Session.open</code> 在命令执行前抛错，而错误分支统一返回 1。现在按错误类型映射为 2。</li>
+          <li>被 hold 的设备上，命令要挂 60 s 才被杀死：<code>Session.open</code> 失败时设备连接没关，进程不退出。现在立即释放并退出 2。</li>
+          <li>hold 不生效：租约按 pid 判断存活，而写租约的命令早已退出，下一条 Agent 命令立刻把设备抢回去。新增 <code>hold</code> 标记跳过存活判断。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-2-0">
         <div class="release-head">

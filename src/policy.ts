@@ -13,7 +13,7 @@ export interface PolicyOptions {
   readOnly?: boolean;
   /**
    * Rules that need a person's approval first. `"none"`, `"all"`, a comma list,
-   * or an array. Defaults to payments and finance.
+   * or an array. Defaults to payments, finance, deletes and sends.
    */
   confirm?: string | ConfirmRule[];
   /** Bundle allow-list. System chrome is always allowed. */
@@ -33,7 +33,17 @@ export interface PolicyCheck {
   node?: UiNode | null;
 }
 
-export const DEFAULT_CONFIRM: ConfirmRule[] = ["payments", "finance"];
+/**
+ * Rules that ask a person before the step runs.
+ *
+ * Payments and finance are obvious. Deleting and sending are here because
+ * they are the two ways an agent can do something a person cannot take back:
+ * a deleted file is gone, and a sent message has left the phone. `commits`
+ * (确认 / 保存) stays opt-in — it is the label of half the ordinary form
+ * buttons on a phone, and asking on every one of them would train a person to
+ * approve without reading.
+ */
+export const DEFAULT_CONFIRM: ConfirmRule[] = ["payments", "finance", "deletes", "sends"];
 
 const RULE_ORDER: Rule[] = ["credentials", "payments", "finance", "deletes", "sends", "commits"];
 

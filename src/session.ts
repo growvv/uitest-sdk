@@ -143,7 +143,7 @@ export type WindowResult = ActionResult & {
 const DEFAULT_STATE = ".uitest-phone";
 
 /** A device serial never reaches a file or a line of output; only this does. */
-function tagOf(deviceId: string | undefined): string {
+export function tagOf(deviceId: string | undefined): string {
   if (!deviceId) return "nodevice";
   return createHash("sha1").update(String(deviceId)).digest("hex").slice(0, 8);
 }
@@ -168,7 +168,7 @@ export class Session {
   readonly tag: string;
 
   private readonly approvals: Approvals;
-  private readonly lease: Lease | null;
+  private lease: Lease | null;
   private readonly settleMs: number;
   private readonly traceShots: boolean;
   private readonly shotsDir: string;
@@ -683,6 +683,19 @@ ${renderFull(screen)}`, {
       });
     }
     return this.finish("settle", {}, "settled", text, { screen: result.screen });
+  }
+
+  /**
+   * Checks that this session still owns the device, before a command runs.
+   *
+   * A one-command process is covered by `open` alone, but `mcp` keeps one
+   * session for the life of the process: without this, a person's `hold` would
+   * replace the lock file and the session would keep driving the phone.
+   * Throws `LeaseHeldError` when the device moved; takes the device again when
+   * the person handed it back with `resume`.
+   */
+  async assertLease(): Promise<void> {
+    await this.lease?.reacquire();
   }
 
   // ---------------------------------------------------------------- finish

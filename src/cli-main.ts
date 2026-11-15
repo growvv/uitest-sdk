@@ -2,7 +2,8 @@ import { COMMANDS, CommandRunner } from "./commands.js";
 import type { RunResult } from "./commands.js";
 import { Device } from "./device.js";
 import { Session } from "./session.js";
-import { UitestError } from "./errors.js";
+import { LeaseHeldError, UitestError } from "./errors.js";
+import { EXIT_CODE } from "./agent/result.js";
 import type { DeviceOptions } from "./device.js";
 
 export interface ParsedArgv {
@@ -110,6 +111,18 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * The exit code for a failure that never produced a status.
+ *
+ * `Session.open` takes the lease before any command runs, so a held device
+ * throws instead of returning `lease_held`. Mapping that throw here is what
+ * makes the documented exit code 2 reachable at all; every other failure stays
+ * 1, the code for "something went wrong, read the message".
+ */
+export function exitCodeForError(e: unknown): number {
+  return e instanceof LeaseHeldError ? EXIT_CODE.lease_held : 1;
+}
+
 export function formatHelp(): string {
   const lines = [
     "uitest-phone — drive a HarmonyOS device from a shell or an agent",
@@ -140,6 +153,15 @@ export function formatHelp(): string {
       lines.push(`      ${flag} ${arg.type}${required}  ${arg.description}`);
     }
   }
+  lines.push(
+    "",
+    "not commands (they do not open the device the same way):",
+    "  connect              register the MCP server in an agent's settings and install the skill",
+    "  hold                 take the device for yourself; agent commands then stop with lease_held",
+    "  resume               hand a held device back to agents",
+    "  mcp                  serve every command as an MCP tool over stdio",
+    "  install-skill        write the bundled skill into the directories agents read",
+  );
   return lines.join("\n");
 }
 
@@ -151,24 +173,44 @@ export function formatResult(result: RunResult, opts: { json?: boolean } = {}): 
   return `${result.status}\n${result.text}`;
 }
 
-/** Opens a session from the global flags, runs one command, and releases. */
-export async function runCommand(parsed: ParsedArgv, deviceOptions: DeviceOptions = {}): Promise<RunResult> {
+/**
+ * Opens a session from the global flags, runs one command, and releases.
+ *
+ * `connect` is a seam for tests; it defaults to the real `Device.connect`.
+ */
+export async function runCommand(
+  parsed: ParsedArgv,
+  deviceOptions: DeviceOptions = {},
+  connect: (opts: DeviceOptions) => Promise<Device> = (opts) => Device.connect(opts),
+): Promise<RunResult> {
   if (!parsed.command) {
     throw new UitestError("no command; run `uitest-phone --help`", "ENOCOMMAND");
   }
-  const device = await Device.connect({ ...deviceOptions, deviceId: parsed.options.device ?? deviceOptions.deviceId });
-  const stateDir = parsed.options.stateDir ?? ".uitest-phone";
-  const session = await Session.open(device, {
-    task: parsed.options.task ?? parsed.command,
-    stateDir,
-    policy: {
-      readOnly: parsed.options.readOnly,
-      confirm: parsed.options.confirm,
-      apps: parsed.options.apps?.split(",").map((s) => s.trim()).filter(Boolean),
-    },
-    settleMs: parsed.options.settleMs,
-    traceShots: parsed.options.traceShots,
+  const device = await connect({
+    ...deviceOptions,
+    deviceId: parsed.options.device ?? deviceOptions.deviceId,
   });
+  const stateDir = parsed.options.stateDir ?? ".uitest-phone";
+  let session: Session;
+  try {
+    session = await Session.open(device, {
+      task: parsed.options.task ?? parsed.command,
+      stateDir,
+      policy: {
+        readOnly: parsed.options.readOnly,
+        confirm: parsed.options.confirm,
+        apps: parsed.options.apps?.split(",").map((s) => s.trim()).filter(Boolean),
+      },
+      settleMs: parsed.options.settleMs,
+      traceShots: parsed.options.traceShots,
+    });
+  } catch (e) {
+    // The device is already open at this point. A held lease throws here, and
+    // leaving the connection open keeps the process alive until something
+    // kills it — a `lease_held` command must exit immediately, not hang.
+    await device.dispose?.().catch(() => undefined);
+    throw e;
+  }
   try {
     const runner = new CommandRunner(session, { stateDir, device });
     return await runner.run(parsed.command, {
@@ -193,11 +235,13 @@ export async function main(argv: string[]): Promise<number> {
     return result.code;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    const code = exitCodeForError(e);
+    const status = e instanceof LeaseHeldError ? "lease_held" : "error";
     if (parsed.json) {
-      process.stdout.write(`${JSON.stringify({ status: "error", code: 1, text: message })}\n`);
+      process.stdout.write(`${JSON.stringify({ status, code, text: message })}\n`);
     } else {
       process.stderr.write(`error: ${message}\n`);
     }
-    return 1;
+    return code;
   }
 }

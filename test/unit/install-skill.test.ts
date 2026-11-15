@@ -55,6 +55,19 @@ describe("installSkill", () => {
     });
   });
 
+  it("refuses before writing any copy when one already exists", async () => {
+    // Half an install is worse than none: the agent that reads the other
+    // directory would get a skill whose commands the package does not have.
+    await withDir(async (dir) => {
+      const claude = join(dir, ".claude", "skills", "uitest-phone");
+      await mkdir(claude, { recursive: true });
+      await writeFile(join(claude, "SKILL.md"), "mine\n");
+      await expect(installSkill({ home: dir })).rejects.toThrow(/already exists/);
+      await expect(stat(join(dir, ".agents", "skills", "uitest-phone"))).rejects.toThrow();
+      expect(await readFile(join(claude, "SKILL.md"), "utf8")).toBe("mine\n");
+    });
+  });
+
   it("overwrites with force", async () => {
     await withDir(async (dir) => {
       const target = join(dir, "skill");
@@ -65,11 +78,32 @@ describe("installSkill", () => {
     });
   });
 
-  it("defaults to the agent skills directory", async () => {
+  it("writes both the Claude Code and the cross-runtime skills directory", async () => {
+    // `~/.claude/skills` is Claude Code's; `~/.agents/skills` is the alias
+    // Codex, Copilot CLI and Gemini CLI read (agentskills.io). Writing only the
+    // first left those runtimes without the skill the package ships.
     await withDir(async (dir) => {
       const result = await installSkill({ home: dir });
       expect(result.dir).toBe(join(dir, ".claude", "skills", "uitest-phone"));
-      expect((await stat(join(result.dir, "SKILL.md"))).isFile()).toBe(true);
+      expect(result.dirs).toEqual([
+        join(dir, ".claude", "skills", "uitest-phone"),
+        join(dir, ".agents", "skills", "uitest-phone"),
+      ]);
+      for (const target of result.dirs) {
+        expect((await stat(join(target, "SKILL.md"))).isFile()).toBe(true);
+        expect(await readFile(join(target, "SKILL.md"), "utf8")).toContain("name: uitest-phone");
+      }
+    });
+  });
+
+  it("writes only the directory the caller named", async () => {
+    // An explicit --dir is a deliberate target; adding a second copy there
+    // would put files somewhere the caller did not ask for.
+    await withDir(async (dir) => {
+      const target = join(dir, "one");
+      const result = await installSkill({ dir: target });
+      expect(result.dirs).toEqual([target]);
+      await expect(stat(join(dir, ".agents"))).rejects.toThrow();
     });
   });
 });

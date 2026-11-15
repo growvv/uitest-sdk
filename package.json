@@ -47,7 +47,8 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.7",
     "@grpc/proto-loader": "^0.7.0",
-    "jpeg-js": "^0.4.4"
+    "jpeg-js": "^0.4.4",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

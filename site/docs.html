@@ -218,8 +218,30 @@ uitest-phone report --title "WLAN check"</code></pre>
 
       <h3>MCP 与 Skill</h3>
       <pre><code>uitest-phone mcp               # stdio 上以 JSON-RPC 2.0 暴露 uitest_&lt;command&gt;
-uitest-phone install-skill     # 写进 ~/.claude/skills/uitest-phone</code></pre>
-      <p>MCP 进程只开一次设备，工具调用不再付每步的设备启动开销。返回非 <code>settled</code> 的工具调用是 <code>isError: true</code> 的工具错误，文本里带状态与原因，而不是传输失败。<code>install-skill</code> 默认保留已有的 <code>SKILL.md</code>，除非给 <code>--force</code>。</p>
+uitest-phone install-skill     # 写进 ~/.claude/skills 与 ~/.agents/skills</code></pre>
+      <p>MCP 进程只开一次设备，工具调用不再付每步的设备启动开销。返回非 <code>settled</code> 的工具调用是 <code>isError: true</code> 的工具错误，文本里带状态与原因，而不是传输失败。<code>install-skill</code> 同时写两个目录：<code>~/.claude/skills</code> 给 Claude Code，<code>~/.agents/skills</code> 是 agentskills.io 的跨 runtime 别名，Codex、Copilot CLI、Gemini CLI 都读它。两个目标先全部检查再写，拒绝时不会留下半套；已有的 <code>SKILL.md</code> 默认保留，除非给 <code>--force</code>。</p>
+
+      <h3>一步接好 Agent<span class="doc-tag">master · 未发包</span></h3>
+      <pre><code>uitest-phone connect                     # 默认 claude
+uitest-phone connect --agent codex</code></pre>
+      <p>把「改配置文件 + 装 Skill」合成一步：只改自己那一项，注释、顺序与其它 server 的格式原样保留；已经正确时什么都不写；文件解析失败就拒绝并报出文件名与偏移，不替人重写。</p>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>Agent</th><th>设置文件</th><th>Skill 目录</th></tr></thead>
+          <tbody>
+            <tr><td><code>claude</code>（默认）</td><td><code>~/.claude.json</code>（<code>$CLAUDE_CONFIG_DIR</code>）</td><td><code>~/.claude/skills</code>、<code>~/.agents/skills</code></td></tr>
+            <tr><td><code>codex</code></td><td><code>~/.codex/config.toml</code>（<code>$CODEX_HOME</code>）</td><td><code>~/.agents/skills</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>写入的入口是当前 <code>node</code> 加本包的绝对路径：从 Dock 或开始菜单启动的 Agent 看不到终端的 <code>PATH</code>，裸命令可能解析不到、或被别的程序顶替。只有当本包只存在于 npx 缓存（npm 会清掉它）时，才改写成 <code>npx -y uitest-sdk@&lt;version&gt; mcp</code>。MCP server 在会话开始时读取，接好之后要开新会话。</p>
+
+      <h3>接管：人要用手机</h3>
+      <pre><code>uitest-phone hold       # 设备归人；Agent 命令 2 秒内以 lease_held（退出码 2）停下
+uitest-phone resume     # 交还给 Agent</code></pre>
+      <p><code>hold</code> 把租约写成 <code>"held by a person"</code> 后立即退出。它不按进程存活判断，所以不会自己过期，也没有 Agent 命令能把它抢回去；<code>resume</code> 只释放 hold，别的任务自己的租约不碰——只有取走设备的那个任务能干净地结束。</p>
+      <p>它可以抢走正在运行的任务，包括整个进程只持一次租约的 <code>uitest-phone mcp</code> 会话。任务不会在动作中途被打断，而是在下一条命令前发现租约没了，返回 <code>lease_held</code>；<code>hold</code> 会打印它从哪个任务手里接过了设备。<code>resume</code> 之后同一个 Agent 会话在下一条命令自动重新取得设备，不需要重启。</p>
+      <p>设备侧没有「人在用手机」的可靠信号：UI 事件流会关掉会话、能把 agent daemon 卡死，而且合成点击也会被当成手指，分不出真假。所以接管是人的明确声明，这也正好是 Agent 唯一能遵守的形式。</p>
 
       <h2 id="cast">7. 投流与录制</h2>
       <pre><code>const cast = await dev.createCast({

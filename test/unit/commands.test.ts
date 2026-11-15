@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
 import { CommandRunner, COMMANDS } from "../../src/commands.js";
-import { Session } from "../../src/session.js";
+import { Session, tagOf } from "../../src/session.js";
+import { holdDevice, resumeDevice } from "../../src/hold.js";
 import type { UiNode } from "../../src/model.js";
 
 const page = (text: string): UiNode => ({
@@ -97,7 +98,9 @@ async function withRunner<T>(fn: (runner: CommandRunner, dir: string) => Promise
   const dir = await mkdtemp(join(tmpdir(), "uitest-cmd-"));
   const fake = fakeDevice();
   const session = await Session.open(fake.device, {
-    task: "t", stateDir: dir, lease: { dir }, settleMs: 300,
+    // The same `<state-dir>/leases` the hold commands write, so the test can
+    // take the device away from a live session the way a person does.
+    task: "t", stateDir: dir, lease: { dir: join(dir, "leases") }, settleMs: 300,
   });
   const runner = new CommandRunner(session, { stateDir: dir, device: fake.device });
   try {
@@ -137,6 +140,27 @@ describe("CommandRunner", () => {
       expect(r.status).toBe("settled");
       expect(r.text).toContain("com.demo");
       expect(r.data?.elements).toBeGreaterThan(0);
+    });
+  });
+
+  it("stops a live session when a person takes the device, and continues after resume", async () => {
+    // This is the MCP shape: one session, many commands. A hold must reach it
+    // mid-session, or "take over at any time" only holds between one-shot CLI
+    // commands — not in the mode agents actually use.
+    await withRunner(async (runner, dir) => {
+      expect((await runner.run("status", {})).status).toBe("settled");
+
+      const tag = tagOf("SERIAL");
+      await holdDevice({ stateDir: dir, tag });
+      const stopped = await runner.run("status", {});
+      expect(stopped.status).toBe("lease_held");
+      expect(stopped.code).toBe(2);
+      expect(stopped.text).toContain("A person is using the phone");
+
+      // `resume` hands it back; the same session takes the device again on
+      // its next command instead of needing a restart.
+      expect(await resumeDevice({ stateDir: dir, tag })).toBe(true);
+      expect((await runner.run("status", {})).status).toBe("settled");
     });
   });
 

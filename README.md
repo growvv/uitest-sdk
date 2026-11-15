@@ -106,10 +106,18 @@ npx uitest-sdk report --title "WLAN check"
 包只有一个可执行文件，安装后命令名是 `uitest-phone`：
 
 ```bash
-npm install -g uitest-sdk   # 之后可直接用 uitest-phone
-npx uitest-sdk mcp          # 以 MCP（stdio）暴露全部命令，供 Agent 调用
-npx uitest-sdk install-skill   # 把 Skill 写进 ~/.claude/skills/uitest-phone
+npm install -g uitest-sdk      # 之后可直接用 uitest-phone
+npx uitest-sdk connect         # 把 MCP 注册写进 Agent 自己的配置，并装好 Skill
+npx uitest-sdk mcp             # 以 MCP（stdio）暴露全部命令，供 Agent 调用
+npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两处
 ```
+
+- **只改自己那一项**：`connect` 直接编辑 Agent 的设置文件（`claude` → `~/.claude.json`，
+  `codex` → `~/.codex/config.toml`），只插入本包的条目；注释、键顺序、其它 server 的排版原样保留，
+  已经正确时一个字节都不写。文件解析失败就拒绝并报出偏移，不替人重写。入口是当前 `node` 加本包绝对路径，
+  因为从 Dock / 开始菜单启动的 Agent 看不到终端的 `PATH`。
+- **两处 Skill 目录**：`~/.claude/skills` 给 Claude Code，`~/.agents/skills` 是 agentskills.io 的跨 runtime
+  别名，Codex、Copilot CLI、Gemini CLI 都读它。两个目标先全部检查再写，拒绝时不会留下半套。
 
 - **ref 跨进程稳定**：ref 表存在 `<state-dir>/refs-<device-hash>.json`，`observe` 打印的 ref 在
   下一条 `tap` 里仍指向同一个元素；不在当前屏幕上的 ref 直接 `not_found`，绝不悄悄指向别的控件。
@@ -123,6 +131,12 @@ npx uitest-sdk install-skill   # 把 Skill 写进 ~/.claude/skills/uitest-phone
 - **状态即结果**：`settled` / `uncertain` / `not_found` / `blocked` / `approval_pending` /
   `approval_denied` / `stale` / `lease_held`，退出码 0/1/1/4/3/4/4/2，非 `settled` 时把
   `approvalId`、`rule`、`reason` 放进 `--json` 的 `data`。
+- **默认审批集**：支付、金融、删除、发送——四类人收不回来的动作。`commits`（确认 / 保存）不默认，
+  因为手机上半数普通表单按钮都叫这个，每次都问会把人训练成不看就点同意。
+- **人可以随时接管**：`uitest-phone hold` 把设备交给此刻拿着手机的人，连正在运行的 MCP 会话也一并让出——
+  Agent 命令随即以 `lease_held`（退出码 2）停下，不重试、不抢回；`uitest-phone resume` 交还后，
+  同一个会话下一条命令自动继续。hold 不按进程存活判断，所以不会自己过期。设备侧的 UI 事件流不能用来
+  判断「人在动手机」：它会关掉会话、能把 daemon 卡死，而且合成点击也被当成手指。
 - 设备序列号不进任何文件或输出，只用 8 位哈希；`<state-dir>` 里是用户屏幕内容，已被 gitignore。
 
 Skill 正文见 [`assets/skill/SKILL.md`](assets/skill/SKILL.md)，完整命令参考见

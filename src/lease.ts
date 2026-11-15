@@ -10,6 +10,14 @@ export interface LeaseInfo {
   host: string;
   since: number;
   heartbeatAt: number;
+  /**
+   * Set when a person holds the device (`uitest-phone hold`).
+   *
+   * A hold has no owning process: the command writes the lease and exits, and
+   * the person keeps the phone until they run `resume`. Judging it by pid
+   * would make every agent command steal the device back immediately.
+   */
+  hold?: true;
 }
 
 export interface LeaseOptions {
@@ -25,6 +33,17 @@ export interface LeaseOptions {
   isAlive?: (pid: number) => boolean;
   pid?: number;
   host?: string;
+  /** Mark this lease as a person's hold, so pid liveness does not apply. */
+  hold?: boolean;
+  /**
+   * Take the device even from a live task.
+   *
+   * Only `uitest-phone hold` sets this. A person saying "I have the phone now"
+   * is the one case where a running task must lose the device; the task finds
+   * out on its next command (`Session.assertLease`) and stops with
+   * `lease_held`, which is the same outcome as if it had run afterwards.
+   */
+  force?: boolean;
 }
 
 /** Reads a lock file; null when absent or unreadable. */
@@ -33,7 +52,7 @@ export async function readLease(path: string): Promise<LeaseInfo | null> {
     const raw = await readFile(path, "utf8");
     const parsed = JSON.parse(raw) as Partial<LeaseInfo>;
     if (!parsed || typeof parsed.token !== "string" || typeof parsed.task !== "string") return null;
-    return {
+    const info: LeaseInfo = {
       task: parsed.task,
       token: parsed.token,
       pid: Number(parsed.pid ?? 0),
@@ -41,6 +60,8 @@ export async function readLease(path: string): Promise<LeaseInfo | null> {
       since: Number(parsed.since ?? 0),
       heartbeatAt: Number(parsed.heartbeatAt ?? 0),
     };
+    if (parsed.hold === true) info.hold = true;
+    return info;
   } catch {
     return null;
   }
@@ -72,12 +93,14 @@ export class Lease {
   readonly info: LeaseInfo;
   private readonly path: string;
   private readonly now: () => number;
+  private readonly staleMs: number;
   private released = false;
 
-  private constructor(info: LeaseInfo, path: string, now: () => number) {
+  private constructor(info: LeaseInfo, path: string, now: () => number, staleMs: number) {
     this.info = info;
     this.path = path;
     this.now = now;
+    this.staleMs = staleMs;
   }
 
   static async acquire(opts: LeaseOptions): Promise<Lease> {
@@ -98,6 +121,7 @@ export class Lease {
         since: at,
         heartbeatAt: at,
       };
+      if (opts.hold) info.hold = true;
       try {
         // `wx` is the atomic part: exactly one process creates the file.
         const handle = await open(opts.path, "wx");
@@ -106,7 +130,7 @@ export class Lease {
         } finally {
           await handle.close();
         }
-        return new Lease(info, opts.path, now);
+        return new Lease(info, opts.path, now, staleMs);
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
       }
@@ -119,28 +143,56 @@ export class Lease {
       }
       if (current.task === info.task) {
         // Re-entering the same task is a no-op that keeps the original owner.
-        return new Lease(current, opts.path, now);
+        return new Lease(current, opts.path, now, staleMs);
       }
       const sameHost = current.host === host;
-      const processGone = sameHost && !alive(current.pid);
+      // A hold belongs to a person, not to a process: it has no pid to check
+      // and lasts until `resume`, so it is never stale on this host.
+      const processGone = sameHost && !current.hold && !alive(current.pid);
       // A live process on this host keeps its lease even if its heartbeat is
       // late: it may be inside one long device call. A remote host can only be
       // judged by the clock.
-      const abandonedHere = !sameHost && at - current.heartbeatAt > staleMs;
-      if (!processGone && !abandonedHere) {
+      const abandonedHere = !sameHost && !current.hold && at - current.heartbeatAt > staleMs;
+      if (!opts.force && !processGone && !abandonedHere) {
         throw new LeaseHeldError(
           `lease_held · this device already runs task "${current.task}"` +
-            `\nIf that task is gone, remove ${opts.path} or wait for its heartbeat to expire.`,
+            (current.hold
+              ? `\nA person is using the phone. Stop and wait; they will run \`uitest-phone resume\`.`
+              : `\nIf that task is gone, remove ${opts.path} or wait for its heartbeat to expire.`),
           "ELEASE",
         );
       }
-      // Stale: replace the contents. A concurrent stealer may win; the retry
-      // loop reads the file again and either yields or sees the new owner.
+      // Stale, or a person's forced takeover: replace the contents. A
+      // concurrent stealer may win; the retry loop reads the file again and
+      // either yields or sees the new owner.
       await writeFile(opts.path, `${JSON.stringify(info)}\n`);
       const confirmed = await readLease(opts.path);
-      if (confirmed?.token === token) return new Lease(info, opts.path, now);
+      if (confirmed?.token === token) return new Lease(info, opts.path, now, staleMs);
     }
     throw new LeaseHeldError("lease_held · another task took the device while acquiring", "ELEASE");
+  }
+
+  /**
+   * Re-checks that this lease still owns the device, and takes it again when
+   * nobody else does.
+   *
+   * A long-lived session (`mcp`) holds one lease for its whole life, so a
+   * person's `hold` would otherwise be invisible to it: the person's command
+   * replaces the lock file, and the session would keep driving the phone.
+   * Called before every command. Throws `LeaseHeldError` with the holder's
+   * reason when the device moved; after `resume` removed the hold, the same
+   * session takes the device again under its own task and continues.
+   */
+  async reacquire(): Promise<void> {
+    const fresh = await Lease.acquire({
+      path: this.path,
+      task: this.info.task,
+      staleMs: this.staleMs,
+      now: this.now,
+      hold: this.info.hold,
+    });
+    Object.assign(this.info, fresh.info);
+    this.released = false;
   }
 
   /** Refreshes the heartbeat. Nothing changes if another task has taken over. */

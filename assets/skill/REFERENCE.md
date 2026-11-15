@@ -42,10 +42,42 @@ Install the skill for an agent:
 npx uitest-sdk install-skill [--dir <path>] [--force]
 ```
 
-The default target is `<home>/.claude/skills/uitest-phone`. An existing
-`SKILL.md` is kept unless `--force` is given, so a hand-edited copy is never
-overwritten by accident. The skill ships inside the package, so its commands
-and the binary are always the same version.
+It writes both directories agents read: `<home>/.claude/skills/uitest-phone`
+for Claude Code and `<home>/.agents/skills/uitest-phone`, the cross-runtime
+alias ([agentskills.io](https://agentskills.io)) that Codex, Copilot CLI and
+Gemini CLI read. Every target is checked before anything is written, so a
+refusal leaves no half install. An existing `SKILL.md` is kept unless
+`--force` is given, so a hand-edited copy is never overwritten by accident.
+`--dir` writes one directory instead. The skill ships inside the package, so
+its commands and the binary are always the same version.
+
+## Connect an agent
+
+```
+npx uitest-sdk connect [--agent claude|codex] [--force]
+```
+
+Does the whole setup in one step: registers the MCP server in the agent's own
+settings file and installs the skill where that agent reads skills.
+
+| Agent | Settings file | Skill directories |
+| --- | --- | --- |
+| `claude` (default) | `~/.claude.json` (`$CLAUDE_CONFIG_DIR`) | `~/.claude/skills`, `~/.agents/skills` |
+| `codex` | `~/.codex/config.toml` (`$CODEX_HOME`) | `~/.agents/skills` |
+
+Only this package's entry is touched. Comments, key order and the other
+servers' formatting stay as they were, and a run that finds the entry already
+right changes nothing. A settings file that does not parse is refused and left
+alone, naming the file and the offset — fix it by hand and run again. A skill
+that is already installed is kept and reported; the server registration still
+happens. Start a new agent session afterwards: MCP servers are read at session
+start.
+
+The entry starts the installed package by absolute path with the same `node`
+that ran `connect`, because an agent launched from the Dock or the Start menu
+does not see the terminal's `PATH`. When the only copy is in npx's cache, the
+entry names the package instead (`npx -y uitest-sdk@<version> mcp`), since
+npm sweeps that cache.
 
 ## MCP server
 
@@ -59,8 +91,10 @@ not pay device startup per step. A tool that returns a non-`settled` status is
 reported as a tool error (`isError: true`) with the status and its reason in
 the text, not as a transport failure.
 
+`connect` writes the entry for you. By hand it is:
+
 ```json
-{"mcpServers": {"phone": {"command": "npx", "args": ["uitest-sdk", "mcp"]}}}
+{"mcpServers": {"uitest-phone": {"command": "npx", "args": ["-y", "uitest-sdk", "mcp"]}}}
 ```
 
 ## Screen model
@@ -384,6 +418,33 @@ type=Button&text=Save
 text="A & B = C"     quote a value that contains & or =
 ```
 
+## Takeover: the person takes the phone
+
+```
+uitest-phone hold [--device <id>] [--state-dir <dir>]
+uitest-phone resume [--device <id>] [--state-dir <dir>]
+```
+
+`hold` writes the device's lease as `"held by a person"` and exits; every
+agent command on that device then stops with `lease_held` (exit 2) in a couple
+of seconds. It preempts a task that is already running — including an open
+`uitest-phone mcp` session, which holds one lease for its whole life. The task
+is not stopped mid-gesture; it finds out on its next command, and `hold` prints
+which task it took the device from. `resume` releases it, and the same agent
+session takes the device again on its next command instead of needing a
+restart. Only a hold is released: a lease that belongs to another task is left
+alone, because only the task that took the device can end cleanly.
+
+A hold is not judged by process liveness — the command that wrote it has
+already exited — so it never expires on its own and no agent command steals it
+back. The person's phone stays theirs until they say otherwise.
+
+There is no device-side signal for "a person is using the phone": the
+UI-action stream closes the session and can wedge the agent daemon, and
+injected taps are reported as fingers, so a synthetic action and a real one
+cannot be told apart. A hold is therefore an explicit statement by the person,
+which is also the only version an agent can obey.
+
 ## Statuses and exit codes
 
 | Status | Exit | Meaning |
@@ -391,7 +452,7 @@ text="A & B = C"     quote a value that contains & or =
 | `settled` | 0 | The step ran and the UI settled. |
 | `uncertain` | 1 | The UI never stopped changing within `--settle-ms`. |
 | `not_found` | 1 | The ref, label or list is not on screen. |
-| `lease_held` | 2 | Another task holds this device. |
+| `lease_held` | 2 | Another task, or a person, holds this device. |
 | `approval_pending` | 3 | A person must approve this exact step. |
 | `blocked` | 4 | Policy refused before the device was touched. |
 | `approval_denied` | 4 | The approval id was wrong, used or expired. |
@@ -406,9 +467,15 @@ The policy classifies the labels of every element under the target:
 | `credentials` | 密码, password, OTP, PIN | always blocked |
 | `payments` | 支付, 付款, pay, checkout, transfer | approval |
 | `finance` | 银行, 钱包, bank, wallet, alipay | approval |
-| `deletes` | 删除, 卸载, delete, reset | allowed |
-| `sends` | 发送, 发布, send, publish | allowed |
+| `deletes` | 删除, 卸载, delete, reset | approval |
+| `sends` | 发送, 发布, send, publish | approval |
 | `commits` | 确认, 保存, confirm, save | allowed |
+
+The default set is payments, finance, deletes and sends — the four ways an
+agent can do something a person cannot take back. `commits` stays opt-in
+because it labels half the ordinary form buttons on a phone; a person asked on
+every one of them learns to approve without reading. Narrow the set with
+`--confirm payments,finance`.
 
 Latin words match on word boundaries, so `pay` does not fire inside
 `paypal`; Chinese matches as a substring. `--confirm` moves rules into the
@@ -447,7 +514,7 @@ paste it into a document.
 | --- | --- | --- |
 | `no hdc target attached` | Device not visible to `hdc` | `hdc list targets`; enable USB debugging. |
 | `agent daemon never listened on 8012` | `uitest` could not start | Check `pidof uitest`; reboot the device if the daemon is wedged. |
-| `lease_held` | Another task holds the device | Wait for its heartbeat to expire, or remove the lock file if that task is gone. |
+| `lease_held` | Another task, or a person, holds the device | If it names `"held by a person"`, stop and wait: they will run `uitest-phone resume`. Otherwise wait for the heartbeat to expire, or remove the lock file if that task is gone. |
 | `Disallow concurrent use` | Two processes drive one device, or a killed one still holds it | Use one task per device. A client killed mid-command leaves a `CLOSE_WAIT` socket on the daemon that holds the lock indefinitely; `connect` restarts the agent daemon when no live client is connected, and tells you the exact command when it cannot. |
 | `Capture already running` | A recording is active | Stop it; capture is one channel per device. |
 | `not_found` right after a tap | The ref belongs to the previous screen | `observe` and use the new refs. |

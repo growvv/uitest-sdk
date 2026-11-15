@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { parseArgv, formatHelp, formatResult } from "../../src/cli-main.js";
+import { parseArgv, formatHelp, formatResult, exitCodeForError } from "../../src/cli-main.js";
 import { COMMANDS } from "../../src/commands.js";
+import { LeaseHeldError, UitestError } from "../../src/errors.js";
+import { runCommand } from "../../src/cli-main.js";
+import { Lease } from "../../src/lease.js";
+import { tagOf } from "../../src/session.js";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("parseArgv", () => {
   it("parses a command with --key value flags", () => {
@@ -64,5 +71,52 @@ describe("formatResult", () => {
       { json: true },
     );
     expect(JSON.parse(text)).toMatchObject({ status: "not_found", text: "nope", data: { query: "x" } });
+  });
+});
+
+describe("exitCodeForError", () => {
+  it("uses exit code 2 for a held lease", () => {
+    // The status table documents lease_held as 2. `Session.open` throws before
+    // any command runs, so this mapping is the only thing that can produce it;
+    // a blanket `return 1` made the documented code unreachable.
+    expect(exitCodeForError(new LeaseHeldError("lease_held · busy", "ELEASE"))).toBe(2);
+  });
+
+  it("keeps 1 for everything else", () => {
+    expect(exitCodeForError(new UitestError("boom", "EPROTO"))).toBe(1);
+    expect(exitCodeForError(new Error("boom"))).toBe(1);
+  });
+});
+
+describe("runCommand", () => {
+  it("disposes the device when the session cannot open", async () => {
+    // A held lease throws out of Session.open, which is *after* Device.connect.
+    // Without this the open socket keeps the process alive: a `lease_held`
+    // command hung until it was killed instead of exiting with code 2.
+    const dir = await mkdtemp(join(tmpdir(), "uitest-rc-"));
+    try {
+      // Another task owns this device, so Session.open throws on the lease.
+      // The lock is filed under the tag Session derives from the device id.
+      await mkdir(join(dir, "leases"), { recursive: true });
+      await Lease.acquire({ path: join(dir, "leases", `${tagOf("abc")}.lock`), task: "someone else" });
+
+      let disposed = false;
+      const parsed = parseArgv(["status"]);
+      const err = await runCommand(
+        { ...parsed, options: { ...parsed.options, stateDir: dir, task: "mine" } },
+        {},
+        async () =>
+          ({
+            deviceId: "abc",
+            dispose: async () => {
+              disposed = true;
+            },
+          }) as never,
+      ).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(LeaseHeldError);
+      expect(disposed).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -78,9 +78,15 @@ export { parseArgv, formatHelp, formatResult, runCommand, main } from "./cli-mai
 export type { ParsedArgv } from "./cli-main.js";
 export { McpServer, toolDefinitions, toolName } from "./mcp.js";
 export type { ToolDefinition, ToolRunner } from "./mcp.js";
-export { installSkill, skillFiles } from "./install-skill.js";
+export { installSkill, skillFiles, defaultSkillDirs } from "./install-skill.js";
 export { VERSION } from "./version.js";
 export type { SkillFile, InstallSkillOptions, InstallSkillResult } from "./install-skill.js";
+export { agentTarget, connectAgent, agentConnected, mcpEntry } from "./connect.js";
+export type { AgentId, AgentTarget, ConnectAgentOptions, ConnectAgentResult, McpEntryOptions } from "./connect.js";
+export { registerJsonMcp, registerTomlMcp, isMcpRegistered } from "./mcp-register.js";
+export type { McpEntry, RegisterMcpOptions, RegisterMcpResult } from "./mcp-register.js";
+export { holdDevice, resumeDevice, readHold, resolveTag, HOLD_TASK } from "./hold.js";
+export type { HoldOptions, HoldResult } from "./hold.js";
 export { DevicePool } from "./pool.js";
 
 export { HdcRunner } from "./hdc.js";

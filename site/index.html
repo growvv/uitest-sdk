@@ -80,7 +80,7 @@
           <ul class="cli-points">
             <li><strong>不常驻。</strong>没有后台 daemon，也没有「先连上再记住」的会话；崩掉的命令不会留下半开的状态。</li>
             <li><strong>能看见结果。</strong>每条命令都把动作后的屏幕或 diff 打出来，下一步照着最新的 ref 走。</li>
-            <li><strong>能被审。</strong>策略在碰设备前判定，审批 id 绑命令与目标签名，一台设备一个任务。</li>
+            <li><strong>能被审。</strong>策略在碰设备前判定：凭据永久拦截，支付、金融、删除、发送默认要人点头。审批 id 绑命令与目标签名，一台设备一个任务。</li>
             <li><strong>能复现。</strong>每步一条 trace，报告从磁盘读回整轮任务，包括不走屏幕的那些命令。</li>
           </ul>
           <p class="cli-note">需要省掉每步的设备启动开销时，用 <code>uitest-sdk mcp</code>：一个进程、一次连接、逐步调用。</p>
@@ -160,9 +160,39 @@
       <p class="table-note">每条命令都是一次独立进程：设备打开、执行一步、等 UI 稳定、释放。数字是 2026-11-16 真机上 2–3 次采样的范围，含 Node 启动；设备侧动作本身仍是 SDK 的毫秒级。</p>
 
       <h3 class="cli-sub">同一套命令，接给 Agent</h3>
-      <pre class="cli-code"><code>npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
-npx uitest-sdk install-skill      # 把随包 Skill 写进 ~/.claude/skills/uitest-phone</code></pre>
+      <pre class="cli-code"><code>npx uitest-sdk connect            # 把 MCP 注册写进 Agent 自己的配置，并装好 Skill
+npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
+npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
       <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
+      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>resume</code> 在 master 上，尚未发包；npm 上的 0.2.0 只有 <code>mcp</code> 与 <code>install-skill</code>。</p>
+
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>只改自己那一项</h3>
+          <ul>
+            <li><code>connect</code> 直接编辑 Agent 的设置文件，不再给人一段 JSON 让他手贴。</li>
+            <li>注释、键顺序、其它 server 的排版原样保留；已经正确时一个字节都不写。</li>
+            <li>文件解析失败就拒绝并报出偏移，不替人重写。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>两处 Skill 目录</h3>
+          <ul>
+            <li><code>~/.claude/skills</code> 给 Claude Code；<code>~/.agents/skills</code> 是跨 runtime 别名。</li>
+            <li>Codex、Copilot CLI、Gemini CLI 都读后者，一次安装覆盖四个 runtime。</li>
+            <li>两个目标先全部检查再写，拒绝时不会留下半套。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>随时可以接管</h3>
+          <ul>
+            <li><code>uitest-phone hold</code> 把设备交给此时拿着手机的人，连正在运行的 MCP 会话也一并让出。</li>
+            <li>Agent 命令 2 秒内以 <code>lease_held</code>（退出码 2）停下，不重试、不抢回。</li>
+            <li><code>resume</code> 交还后，同一个会话下一条命令自动继续，不用重启。</li>
+            <li>hold 不按进程存活判断，所以不会自己过期。</li>
+          </ul>
+        </article>
+      </div>
 
       <h3 class="cli-sub">状态即结果</h3>
       <div class="table-wrap">
@@ -174,7 +204,7 @@ npx uitest-sdk install-skill      # 把随包 Skill 写进 ~/.claude/skills/uite
             <tr><td><code>settled</code></td><td>0</td><td>执行完且 UI 已稳定</td></tr>
             <tr><td><code>uncertain</code></td><td>1</td><td>等不到 UI 停止变化</td></tr>
             <tr><td><code>not_found</code></td><td>1</td><td>ref、标签或列表不在屏幕上</td></tr>
-            <tr><td><code>lease_held</code></td><td>2</td><td>另一个任务占着这台设备</td></tr>
+            <tr><td><code>lease_held</code></td><td>2</td><td>另一个任务——或人——占着这台设备</td></tr>
             <tr><td><code>approval_pending</code></td><td>3</td><td>需要人确认这一步</td></tr>
             <tr><td><code>blocked</code></td><td>4</td><td>策略在碰设备前就拒绝了</td></tr>
             <tr><td><code>approval_denied</code></td><td>4</td><td>审批 id 错误、用过或过期</td></tr>
@@ -267,7 +297,7 @@ npx uitest-sdk install-skill      # 把随包 Skill 写进 ~/.claude/skills/uite
             <tr><td>连续 H.264 投流</td><td>不支持</td><td>不支持</td><td>内置投屏，未公开 API</td><td>15–89 fps</td></tr>
             <tr><td>MP4 录制</td><td>不支持</td><td>不支持</td><td>7.0 上失效</td><td>6.8 casting</td></tr>
             <tr><td>多实例并发</td><td>命令无状态，受设备锁限制</td><td>命令无状态，受设备锁限制</td><td>单设备会话为主</td><td>复用 daemon + 退避</td></tr>
-            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，81 个导出</td></tr>
+            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，94 个导出</td></tr>
             <tr><td>命令行 / Agent</td><td>手敲命令</td><td>手敲命令</td><td>图形化界面</td><td>19 条命令 + MCP + Skill</td></tr>
             <tr><td>结构化错误</td><td>文本输出</td><td>文本输出</td><td>文本 / 异常为主</td><td><code>UitestError</code> + code</td></tr>
           </tbody>
@@ -318,7 +348,11 @@ npx uitest-sdk install-skill      # 把随包 Skill 写进 ~/.claude/skills/uite
         </article>
         <article class="card">
           <h3>Agent 接入</h3>
-          <p>同一套命令以 MCP 暴露成 <code>uitest_&lt;command&gt;</code>，并随包发布 Skill；策略与审批由 CLI 自己校验，不靠提示词。</p>
+          <p>同一套命令以 MCP 暴露成 <code>uitest_&lt;command&gt;</code>，并随包发布 Skill；<code>connect</code> 把注册写进 Agent 自己的配置，只改自己那一项。策略与审批由 CLI 自己校验，不靠提示词。</p>
+        </article>
+        <article class="card">
+          <h3>人随时接管</h3>
+          <p><code>hold</code> 之后所有 Agent 命令以 <code>lease_held</code> 停下，不会重试也不会抢回；<code>resume</code> 交还。</p>
         </article>
       </div>
     </section>

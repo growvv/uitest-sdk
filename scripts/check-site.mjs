@@ -120,6 +120,13 @@ for (const needle of [
   "uitest-sdk mcp",
   "uitest-sdk install-skill",
   "refs-&lt;hash&gt;.json",
+  // The two agent setups and the takeover, which 0.2.0 did not have.
+  "uitest-sdk connect",
+  "~/.agents/skills",
+  "uitest-phone hold",
+  "resume",
+  "正在运行的 MCP 会话",
+  "lease_held</code></td><td>2",
 ]) {
   if (!cli.includes(needle)) fail(`#cli 缺少「${needle}」`);
 }
@@ -173,7 +180,12 @@ for (const needle of [
 
 const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
-if (cards !== 10) fail(`#features 有 ${cards} 张 .card，必须恰好 10 张`);
+if (cards !== 11) fail(`#features 有 ${cards} 张 .card，必须恰好 11 张`);
+// The last two cards are the agent setup and the takeover; the page must not
+// claim an agent can be wired up without saying how a person takes the phone.
+for (const needle of ["人随时接管", "lease_held", "resume"]) {
+  if (!features.includes(needle)) fail(`#features 缺少「${needle}」`);
+}
 
 // ------------------------------------------------------------ task 8: video
 for (const name of ["demo.mp4", "demo-poster.jpg"]) {
@@ -287,6 +299,14 @@ for (const needle of [
   "TraceRecorder",
   "uitest-phone",
   "mcp",
+  // Both agent setups and the takeover must be described, not just the flags.
+  "install-skill",
+  "~/.agents/skills",
+  "connect --agent codex",
+  "hold",
+  "resume",
+  "held by a person",
+  "抢走正在运行的任务",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -306,6 +326,14 @@ for (const needle of [
   "mcp",
   "--read-only",
   "同一毫秒",
+  // Unreleased: the default approval set, the takeover, and one-step connect.
+  "未发布",
+  "删除与发送默认要审批",
+  "held by a person",
+  "uitest-phone connect",
+  "~/.agents/skills",
+  "A person is using the phone",
+  "抢走正在运行的任务",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

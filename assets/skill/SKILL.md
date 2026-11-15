@@ -41,6 +41,18 @@ Do not write ad-hoc scripts against the SDK or raw `hdc` for UI. The CLI
 resolves bundles and abilities, waits for the UI to settle, records every step,
 and enforces approvals.
 
+## Setup
+
+```
+npx uitest-sdk connect [--agent claude|codex]
+```
+
+One command makes an agent ready: it registers the MCP server in that agent's
+own settings file — only this package's entry; comments and order stay — and
+installs this skill into the directories the agent reads (`~/.claude/skills`
+for Claude Code, `~/.agents/skills` for the cross-runtime alias). Start a new
+session afterwards. Details in [REFERENCE.md](REFERENCE.md#connect-an-agent).
+
 ## The loop
 
 1. `observe` and read the screen.
@@ -149,16 +161,27 @@ declared entry ability.
 | `approval_denied` | The id was unknown, expired, already used, or did not match. | Do not retry another way; report it. |
 | `blocked` | Credentials, read-only, or the app allow-list refused. | Report the rule; do not work around it. |
 | `stale` | The screen changed while an approval waited. | Observe and, if still needed, ask again. |
-| `lease_held` | Another task holds the phone. | Release that task first. |
+| `lease_held` | Another task — or the person — holds the phone. | Stop. Do not retry in a loop. |
 
 CLI exit codes: `0` settled, `1` uncertain/not_found, `2` lease held,
 `3` approval pending, `4` blocked/denied/stale.
 
+When `lease_held` names `"held by a person"`, a person is using the phone.
+Stop and tell them; they will run `uitest-phone resume` when they are done.
+Do not delete the lock file, do not retry in a loop, and do not look for
+another way to drive the device. This can arrive between two calls of one MCP
+session: a person may take the phone at any time.
+
 ## Approvals and safety
 
-By default, **payments and finance** targets stop at `approval_pending`. The
-policy matches the labels of every element under the target, plus the app
-argument for `launch`.
+By default, **payments, finance, deleting and sending** stop at
+`approval_pending`. Those are the four things a person cannot take back: money
+leaves, a file is gone, a message has been read. The policy matches the labels
+of every element under the target, plus the app argument for `launch`.
+
+`commits` (确认 / 保存) is deliberately *not* on the default list: it is the
+label of half the ordinary form buttons on a phone, and asking on every one
+would train the person to approve without reading.
 
 When you get `approval_pending`:
 

@@ -23,11 +23,19 @@ describe("Policy: risk rules", () => {
     const p = policy();
     expect(p.check({ action: "tap", labels: ["确认支付"] })).toMatchObject({ kind: "approval", rule: "payments" });
     expect(p.check({ action: "tap", labels: ["银行"] })).toMatchObject({ kind: "approval", rule: "finance" });
-    // Deletion is not on the default list; a caller that wants it opts in.
-    expect(p.check({ action: "tap", labels: ["删除"] })).toEqual({ kind: "allow" });
+    // Deleting and sending are irreversible or outward-facing, so they ask by
+    // default — an agent must not delete a photo or send a message on its own.
+    expect(p.check({ action: "tap", labels: ["删除"] })).toMatchObject({ kind: "approval", rule: "deletes" });
+    expect(p.check({ action: "tap", labels: ["发送"] })).toMatchObject({ kind: "approval", rule: "sends" });
     // "确认" alone is not on the default list: an ordinary form button must not block.
     expect(p.check({ action: "tap", labels: ["确认"] })).toEqual({ kind: "allow" });
-    expect([...DEFAULT_CONFIRM]).toEqual(["payments", "finance"]);
+    expect([...DEFAULT_CONFIRM]).toEqual(["payments", "finance", "deletes", "sends"]);
+  });
+
+  it("lets a caller narrow the default set back to payments and finance", () => {
+    const p = policy({ confirm: ["payments", "finance"] });
+    expect(p.check({ action: "tap", labels: ["删除"] })).toEqual({ kind: "allow" });
+    expect(p.check({ action: "tap", labels: ["发送"] })).toEqual({ kind: "allow" });
   });
 
   it("widens to every rule with confirm: all", () => {

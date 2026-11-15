@@ -1,11 +1,11 @@
 import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { doctor, renderDoctor } from "./doctor.js";
-import { actionText, statusOf } from "./agent/result.js";
+import { EXIT_CODE, actionText, statusOf } from "./agent/result.js";
 import type { ActionResult, ActionStatus } from "./agent/result.js";
 import { parseOn } from "./agent/selector.js";
 import { parseKeyName } from "./agent/selector.js";
-import { UitestError } from "./errors.js";
+import { LeaseHeldError, UitestError } from "./errors.js";
 import type { Session, SessionDevice, Target } from "./session.js";
 import type { TraceRecorder } from "./trace.js";
 
@@ -275,6 +275,18 @@ export class CommandRunner {
       if (arg.required && asString(raw[key]) === undefined && asNumber(raw[key]) === undefined) {
         throw new UitestError(`invalid_argument: ${name} needs ${key}`, "EINVALIDARGUMENT");
       }
+    }
+
+    // A long-lived MCP session must notice that a person took the phone. The
+    // check is one file read; on a session that still owns the device it is a
+    // no-op, and after `resume` it takes the device again.
+    try {
+      await this.session.assertLease();
+    } catch (e) {
+      if (!(e instanceof LeaseHeldError)) throw e;
+      const text = e.message;
+      this.session.record(name, raw, "lease_held", text);
+      return { status: "lease_held", code: EXIT_CODE.lease_held, text };
     }
 
     // Some commands answer from hdc instead of the session's action path
