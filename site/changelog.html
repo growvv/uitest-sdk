@@ -12,6 +12,7 @@
     <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
     <div class="nav-links">
       <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
       <a href="index.html#compare">对比</a>
       <a href="index.html#bench">实测</a>
       <a href="docs.html">文档</a>
@@ -35,14 +36,15 @@
       <section class="release" id="v0-2-0">
         <div class="release-head">
           <h2>0.2.0</h2>
-          <span class="release-date">2026-11-15</span>
+          <span class="release-date">2026-11-16</span>
           <span class="release-tag">命令行与 Agent</span>
         </div>
         <p>SDK 之上多了一层给人和 Agent 用的命令行：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。同一套命令既走 CLI，也走 MCP。SDK 的公开接口只增不改，0.1.0 的代码不用改。</p>
 
         <h3>命令行</h3>
         <ul>
-          <li>18 条命令：<code>observe</code>、<code>tap</code>、<code>type</code>、<code>swipe</code>、<code>double-click</code>、<code>drag</code>、<code>fling</code>、<code>pinch</code>、<code>key</code>、<code>wait-for</code>、<code>read-list</code>、<code>scroll-until</code>、<code>launch</code>、<code>apps</code>、<code>window</code>、<code>doctor</code>、<code>screenshot</code>、<code>report</code>、<code>status</code>。</li>
+          <li>19 条命令：<code>observe</code>、<code>tap</code>、<code>type</code>、<code>swipe</code>、<code>double-click</code>、<code>drag</code>、<code>fling</code>、<code>pinch</code>、<code>key</code>、<code>wait-for</code>、<code>read-list</code>、<code>scroll-until</code>、<code>launch</code>、<code>apps</code>、<code>window</code>、<code>doctor</code>、<code>screenshot</code>、<code>report</code>、<code>status</code>。</li>
+          <li>实测端到端：<code>status</code> 1.2 s、<code>apps --current</code> 1.5 s、<code>observe</code> 1.7 s、<code>doctor</code> 1.9 s、<code>tap --ref</code> 2.3 s（含 Node 启动与设备打开）。</li>
           <li>屏幕模型：每行一个元素，带 ref、角色、标签、中心点与状态；动作后打印 diff。</li>
           <li>设备侧稳定：动作后先 <code>Driver.waitForIdle</code>，再由 host 轮询两次相同哈希，超时记为 <code>uncertain</code> 而不是抛错。</li>
           <li>退出码即结果：<code>0</code> settled、<code>1</code> uncertain/not_found、<code>2</code> lease held、<code>3</code> 待审批、<code>4</code> 被拒。</li>
@@ -88,7 +90,7 @@
 
         <h3>工程</h3>
         <ul>
-          <li>npm 包 919.1 kB / 84 个文件，新增 <code>dist/bin.js</code> 与随包 Skill。</li>
+          <li>npm 包 919.4 kB / 84 个文件，新增 <code>dist/bin.js</code> 与随包 Skill；SDK 运行时导出 81 个。</li>
           <li>335 个单元测试；<code>--version</code> 与 MCP 握手都从 <code>package.json</code> 读版本，不再有第二处字面量。</li>
         </ul>
       </section>

@@ -39,7 +39,7 @@ const pages = [
 ];
 
 // ------------------------------------------------------------------- anchors
-const sections = ["hero", "terminal", "bench", "compare", "features", "arch", "video", "limits"];
+const sections = ["hero", "terminal", "cli", "bench", "compare", "features", "arch", "video", "limits"];
 for (const id of sections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(html)) fail(`index.html is missing id="${id}"`);
 }
@@ -97,6 +97,47 @@ const terminal = sectionHtml("terminal");
 const termLines = (terminal.match(/class="term-line"/g) ?? []).length;
 if (termLines < 5) fail(`#terminal 只有 ${termLines} 行 .term-line，至少需要 5 行`);
 
+// -------------------------------------------- 0.2.0: the CLI and the agent
+// The release that made the package usable without writing code. The page
+// must name the commands, the status model, and both agent entry points; a
+// visitor who reads only this section should be able to drive a phone.
+const cli = sectionHtml("cli");
+for (const needle of [
+  "uitest-phone",
+  "npx uitest-sdk",
+  "observe",
+  "tap",
+  "read-list",
+  "scroll-until",
+  "pinch",
+  "window",
+  "apps --current",
+  "report",
+  "settled",
+  "not_found",
+  "approval_pending",
+  "lease_held",
+  "uitest-sdk mcp",
+  "uitest-sdk install-skill",
+  "refs-&lt;hash&gt;.json",
+]) {
+  if (!cli.includes(needle)) fail(`#cli 缺少「${needle}」`);
+}
+// Every one of the 19 commands must be reachable from the page, either in the
+// section's table or in its example.
+for (const name of [
+  "observe", "tap", "type", "swipe", "double-click", "drag", "fling", "pinch",
+  "key", "wait-for", "read-list", "scroll-until", "launch", "apps", "window",
+  "doctor", "screenshot", "report", "status",
+]) {
+  if (!cli.includes(name)) fail(`#cli 没有列出命令 ${name}`);
+}
+// The CLI numbers are wall-clock time per command on a real phone, measured
+// on 2026-11-16. They include device open, one step, settle and release.
+for (const needle of ["1.2 s", "1.7 s", "2.3 s"]) {
+  if (!cli.includes(needle)) fail(`#cli 缺少实测耗时「${needle}」`);
+}
+
 // ------------------------------------------------------- task 6: numbers
 const bench = sectionHtml("bench");
 for (const needle of ["107–193 ms", "21–50 ms", "386–640 ms", "15–89 fps", "10–16 fps"]) {
@@ -132,7 +173,7 @@ for (const needle of [
 
 const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
-if (cards !== 8) fail(`#features 有 ${cards} 张 .card，必须恰好 8 张`);
+if (cards !== 10) fail(`#features 有 ${cards} 张 .card，必须恰好 10 张`);
 
 // ------------------------------------------------------------ task 8: video
 for (const name of ["demo.mp4", "demo-poster.jpg"]) {
@@ -234,12 +275,38 @@ if (!footer.includes("MIT") || !footer.includes("https://github.com/growvv/uites
 // ------------------------------------------------- docs and release pages
 // The usage documentation must be a real page on this site, not a link to a
 // markdown file in the repository (the site has to work on its own).
-for (const needle of ["Device.connect", "AgentClient", "createCast", "captureScreen", "UitestError", "0.1.0"]) {
+for (const needle of [
+  "Device.connect",
+  "AgentClient",
+  "createCast",
+  "captureScreen",
+  "UitestError",
+  "0.2.0",
+  // The CLI half of the package is documented here, not only on the home page.
+  "Session.open",
+  "TraceRecorder",
+  "uitest-phone",
+  "mcp",
+]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
 if (docsHtml.length < 8000) fail(`docs.html is only ${docsHtml.length} bytes; expected the full usage guide`);
 
-for (const needle of ["0.1.0", "2026-11-15", "0.0.0-stage", "计划中", "59.0×", "3.8×"]) {
+for (const needle of [
+  "0.2.0",
+  "0.1.0",
+  "2026-11-15",
+  "2026-11-16",
+  "0.0.0-stage",
+  "计划中",
+  "59.0×",
+  "3.8×",
+  // 0.2.0 must name both agent entry points and its four fixes.
+  "install-skill",
+  "mcp",
+  "--read-only",
+  "同一毫秒",
+]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }
 for (const href of ['href="docs.html"', 'href="changelog.html"']) {

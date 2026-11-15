@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>uitest-sdk · 用一条长连接控制鸿蒙设备</title>
-  <meta name="description" content="HarmonyOS uitest 扩展的 Node.js SDK：UI 自动化、截图、H.264 投流与 MP4 录制。">
+  <meta name="description" content="HarmonyOS uitest 扩展的 Node.js SDK 与命令行：UI 自动化、截图、H.264 投流与 MP4 录制，并可作为 MCP 服务供 Agent 调用。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -12,6 +12,7 @@
     <a class="nav-brand" href="#hero">uitest-sdk</a>
     <div class="nav-links">
       <a href="#features">能力</a>
+      <a href="#cli">命令行</a>
       <a href="#compare">对比</a>
       <a href="#bench">实测</a>
       <a href="#video">视频</a>
@@ -53,6 +54,136 @@
 <span class="term-line" data-kind="ok">✓ captureScreen() → 608×1344 JPEG  118 ms</span></pre>
       </div>
     </section>
+    <section id="cli" class="section cli reveal">
+      <h2>也可以不开编辑器</h2>
+      <p class="section-lede">包里带一个命令行：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。同一套命令还能以 MCP 暴露给 Agent——写代码不是前提。</p>
+
+      <div class="cli-grid">
+        <div class="cli-col">
+          <div class="term">
+            <div class="term-bar"><span></span><span></span><span></span></div>
+            <pre class="term-body"><span class="term-line" data-kind="cmd">$ npx uitest-sdk doctor</span>
+<span class="term-line" data-kind="ok">settled · doctor</span>
+<span class="term-line" data-kind="ok">targets: dev-&lt;8 位哈希&gt;</span>
+<span class="term-line" data-kind="ok">capabilities: waitForIdle=yes findComponent=yes</span>
+<span class="term-line" data-kind="cmd">$ npx uitest-sdk observe --task "check WLAN"</span>
+<span class="term-line" data-kind="ok">settled</span>
+<span class="term-line" data-kind="ok">screen 1216x2688 · app: com.huawei.hmos.settings</span>
+<span class="term-line" data-kind="ok">[65] button "WLAN" @608,432 focused checked</span>
+<span class="term-line" data-kind="ok">[66] toggle "WLAN" @1067,433 checked</span></pre>
+          </div>
+          <p class="cli-note">真实输出，2026-11-16 真机 BRA-AL00。序列号只以 8 位哈希出现。</p>
+        </div>
+
+        <div class="cli-col">
+          <h3>为什么是一条命令一个进程</h3>
+          <ul class="cli-points">
+            <li><strong>不常驻。</strong>没有后台 daemon，也没有「先连上再记住」的会话；崩掉的命令不会留下半开的状态。</li>
+            <li><strong>能看见结果。</strong>每条命令都把动作后的屏幕或 diff 打出来，下一步照着最新的 ref 走。</li>
+            <li><strong>能被审。</strong>策略在碰设备前判定，审批 id 绑命令与目标签名，一台设备一个任务。</li>
+            <li><strong>能复现。</strong>每步一条 trace，报告从磁盘读回整轮任务，包括不走屏幕的那些命令。</li>
+          </ul>
+          <p class="cli-note">需要省掉每步的设备启动开销时，用 <code>uitest-sdk mcp</code>：一个进程、一次连接、逐步调用。</p>
+        </div>
+      </div>
+
+      <h3 class="cli-sub">19 条命令</h3>
+      <div class="table-wrap">
+        <table class="cli-table cli-commands">
+          <tbody>
+            <tr><td><code>observe</code></td><td>读屏，每个元素一行，带 ref、角色、标签与中心点</td></tr>
+            <tr><td><code>tap</code></td><td>按 ref、按标签或按 selector 点击；<code>--long</code> 长按</td></tr>
+            <tr><td><code>type</code></td><td>输入文本，走设备 IME，中文与 emoji 可用</td></tr>
+            <tr><td><code>swipe</code></td><td>方向或两点滑动</td></tr>
+            <tr><td><code>double-click</code></td><td>双击</td></tr>
+            <tr><td><code>drag</code></td><td>先按住再移动，用于拖拽排序</td></tr>
+            <tr><td><code>fling</code></td><td>短促快滑，松手后列表继续滑行</td></tr>
+            <tr><td><code>pinch</code></td><td>双指缩放，走设备 <code>PointerMatrix</code></td></tr>
+            <tr><td><code>key</code></td><td>back / home / power / enter 等系统键</td></tr>
+            <tr><td><code>wait-for</code></td><td>等某个标签出现，设备侧一次往返</td></tr>
+            <tr><td><code>read-list</code></td><td>逐屏读完整个列表，每个标签只出现一次</td></tr>
+            <tr><td><code>scroll-until</code></td><td>逐屏翻到目标标签为止</td></tr>
+            <tr><td><code>launch</code></td><td>按别名或 bundle 启动，自动读入口 ability</td></tr>
+            <tr><td><code>apps</code></td><td>列已装应用；<code>--current</code> 当前应用；<code>--has</code> 是否安装</td></tr>
+            <tr><td><code>window</code></td><td>焦点窗口或某 bundle 的窗口，可 <code>--focus</code> / <code>--close</code></td></tr>
+            <tr><td><code>doctor</code></td><td>探测设备与所需能力</td></tr>
+            <tr><td><code>screenshot</code></td><td>存一张 JPEG，报告帧尺寸与缩放因子</td></tr>
+            <tr><td><code>report</code></td><td>把整轮任务写成自包含 HTML 报告</td></tr>
+            <tr><td><code>status</code></td><td>当前任务、设备哈希、策略设置</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="cli-sub">一次调用一条命令，状态留在磁盘上</h3>
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>ref 跨进程稳定</h3>
+          <ul>
+            <li>ref 表存在 <code>&lt;state-dir&gt;/refs-&lt;hash&gt;.json</code>。</li>
+            <li><code>observe</code> 打印的 <code>[65]</code> 在下一条 <code>tap --ref 65</code> 里仍指向同一元素。</li>
+            <li>不在当前屏幕上的 ref 直接 <code>not_found</code>，不会悄悄指向别的控件。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>审批跨进程可用</h3>
+          <ul>
+            <li><code>approval_pending</code> 给出的 id 存在 <code>approvals-&lt;hash&gt;.json</code>。</li>
+            <li>下一条命令带 <code>--approval-id</code> 就能兑现；id 一次性、10 分钟过期。</li>
+            <li>页面在等待期间变了返回 <code>stale</code>，不会执行到别的东西上。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>报告跨进程聚合</h3>
+          <ul>
+            <li>每条命令各写一个 trace 文件；<code>report</code> 按 task 从磁盘读回来、跨文件重新编号。</li>
+            <li>覆盖整轮任务，包括 <code>apps</code>、<code>launch</code> 这类不走屏幕动作的命令。</li>
+            <li><code>--trace-shots</code> 每步存一张截图，链接相对报告自身。</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 class="cli-sub">每条命令的实际耗时</h3>
+      <div class="table-wrap">
+        <table class="table-compare">
+          <thead>
+            <tr><th>命令</th><th>实测</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>status</code></td><td>1.2 s</td><td>只读状态文件，不碰设备</td></tr>
+            <tr><td><code>apps --current</code></td><td>1.5 s</td><td>一次 hdc 查询</td></tr>
+            <tr><td><code>observe</code></td><td>1.7 s</td><td>读屏 + 稳定 + 记录</td></tr>
+            <tr><td><code>doctor</code></td><td>1.9 s</td><td>探测 5 项能力</td></tr>
+            <tr><td><code>tap --ref</code></td><td>2.3 s</td><td>读屏 + 点击 + 等稳定</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">每条命令都是一次独立进程：设备打开、执行一步、等 UI 稳定、释放。数字是 2026-11-16 真机上 2–3 次采样的范围，含 Node 启动；设备侧动作本身仍是 SDK 的毫秒级。</p>
+
+      <h3 class="cli-sub">同一套命令，接给 Agent</h3>
+      <pre class="cli-code"><code>npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
+npx uitest-sdk install-skill      # 把随包 Skill 写进 ~/.claude/skills/uitest-phone</code></pre>
+      <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
+
+      <h3 class="cli-sub">状态即结果</h3>
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr><th>状态</th><th>退出码</th><th>含义</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>settled</code></td><td>0</td><td>执行完且 UI 已稳定</td></tr>
+            <tr><td><code>uncertain</code></td><td>1</td><td>等不到 UI 停止变化</td></tr>
+            <tr><td><code>not_found</code></td><td>1</td><td>ref、标签或列表不在屏幕上</td></tr>
+            <tr><td><code>lease_held</code></td><td>2</td><td>另一个任务占着这台设备</td></tr>
+            <tr><td><code>approval_pending</code></td><td>3</td><td>需要人确认这一步</td></tr>
+            <tr><td><code>blocked</code></td><td>4</td><td>策略在碰设备前就拒绝了</td></tr>
+            <tr><td><code>approval_denied</code></td><td>4</td><td>审批 id 错误、用过或过期</td></tr>
+            <tr><td><code>stale</code></td><td>4</td><td>等待审批期间页面变了</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section id="bench" class="section bench reveal">
       <h2>真机实测</h2>
       <p class="section-lede">同一台真机、同一个脚本跑出来的对比（<code>scripts/bench-compare.ts</code>）。hdc CLI 的数字包含 hdc 进程启动、shell 往返与 uitest 启动——也就是手敲命令时真正付出的时间。</p>
@@ -136,7 +267,8 @@
             <tr><td>连续 H.264 投流</td><td>不支持</td><td>不支持</td><td>内置投屏，未公开 API</td><td>15–89 fps</td></tr>
             <tr><td>MP4 录制</td><td>不支持</td><td>不支持</td><td>7.0 上失效</td><td>6.8 casting</td></tr>
             <tr><td>多实例并发</td><td>命令无状态，受设备锁限制</td><td>命令无状态，受设备锁限制</td><td>单设备会话为主</td><td>复用 daemon + 退避</td></tr>
-            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，22 个导出</td></tr>
+            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，81 个导出</td></tr>
+            <tr><td>命令行 / Agent</td><td>手敲命令</td><td>手敲命令</td><td>图形化界面</td><td>19 条命令 + MCP + Skill</td></tr>
             <tr><td>结构化错误</td><td>文本输出</td><td>文本输出</td><td>文本 / 异常为主</td><td><code>UitestError</code> + code</td></tr>
           </tbody>
         </table>
@@ -179,6 +311,14 @@
         <article class="card">
           <h3>失败即报错</h3>
           <p>每个失败都是 UitestError 子类，不做静默兜底，问题停在它发生的地方。</p>
+        </article>
+        <article class="card">
+          <h3>命令行</h3>
+          <p>19 条命令覆盖读屏、动作、列表、窗口与报告，每条开一次设备、执行一步、释放。不写代码也能操作手机。</p>
+        </article>
+        <article class="card">
+          <h3>Agent 接入</h3>
+          <p>同一套命令以 MCP 暴露成 <code>uitest_&lt;command&gt;</code>，并随包发布 Skill；策略与审批由 CLI 自己校验，不靠提示词。</p>
         </article>
       </div>
     </section>

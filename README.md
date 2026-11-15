@@ -88,6 +88,8 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 ## 命令行与 Agent Skill
 
 SDK 之上有一层给人和 Agent 用的 CLI：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
+共 19 条命令：`observe`、`tap`、`type`、`swipe`、`double-click`、`drag`、`fling`、`pinch`、`key`、
+`wait-for`、`read-list`、`scroll-until`、`launch`、`apps`、`window`、`doctor`、`screenshot`、`report`、`status`。
 
 ```bash
 npx uitest-sdk doctor                     # 探测设备与能力，确认可用
@@ -96,6 +98,10 @@ npx uitest-sdk tap --ref 12 --task "check WLAN"
 npx uitest-sdk apps --current
 npx uitest-sdk report --title "WLAN check"
 ```
+
+真机上每条命令的端到端耗时（含 Node 启动与设备打开，2026-11-16 采样）：
+`status` 1.2 s、`apps --current` 1.5 s、`observe` 1.7 s、`doctor` 1.9 s、`tap --ref` 2.3 s。
+设备侧动作本身仍是 SDK 的毫秒级；CLI 付的是「开一次设备」的固定开销。
 
 包只有一个可执行文件，安装后命令名是 `uitest-phone`：
 
@@ -121,6 +127,29 @@ npx uitest-sdk install-skill   # 把 Skill 写进 ~/.claude/skills/uitest-phone
 
 Skill 正文见 [`assets/skill/SKILL.md`](assets/skill/SKILL.md)，完整命令参考见
 [`assets/skill/REFERENCE.md`](assets/skill/REFERENCE.md)。
+
+## 在代码里用同一层（Session）
+
+CLI 的每条命令就是一个 `Session`：它持有租约、策略、ref 表和 trace。想在自己的脚本里拿到同样的语义，直接用 `Session`。
+
+```ts
+import { Device, Session } from "uitest-sdk";
+
+const dev = await Device.connect();
+const session = await Session.open(dev, { task: "check WLAN" });
+try {
+  await session.observe();
+  const r = await session.tap({ ref: 12 });   // settled · 一行 diff
+  console.log(r.status, r.text);
+} finally {
+  await session.release();
+}
+```
+
+`Session` 提供 `observe`、`tap`、`type`、`swipe`、`longPress`、`doubleClick`、`pinch`、`drag`、`fling`、
+`waitFor`、`readList`、`scrollUntilVisible`、`window`、`pressKey`、`settle`、`release`，
+以及 `steps`（本会话已记录的步数）与 `record()`（记录不经过动作路径的命令）。
+被别的任务占用时 `Session.open` 抛 `LeaseHeldError`，此时设备还没被读写。
 
 ## 多实例
 

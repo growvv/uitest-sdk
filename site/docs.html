@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>使用文档 · uitest-sdk</title>
-  <meta name="description" content="uitest-sdk 完整使用文档：安装、快速开始、Device / AgentClient API、投流与录制、错误码与并发模型。">
+  <meta name="description" content="uitest-sdk 完整使用文档：安装、快速开始、Device / AgentClient API、Session 与命令行、MCP 服务、投流与录制、错误码与并发模型。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -12,6 +12,7 @@
     <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
     <div class="nav-links">
       <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
       <a href="index.html#compare">对比</a>
       <a href="index.html#bench">实测</a>
       <a href="docs.html">文档</a>
@@ -27,6 +28,7 @@
       <a href="#concepts">核心概念</a>
       <a href="#device">Device</a>
       <a href="#agent">AgentClient</a>
+      <a href="#session">Session 与命令行</a>
       <a href="#cast">投流与录制</a>
       <a href="#uitree">UI 树与窗口</a>
       <a href="#tools">工具类</a>
@@ -37,11 +39,12 @@
 
     <article class="doc-body">
       <h1>使用文档</h1>
-      <p class="doc-meta">uitest-sdk <strong>0.1.0</strong> · Node.js ≥ 20 · MIT</p>
-      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。</p>
+      <p class="doc-meta">uitest-sdk <strong>0.2.0</strong> · Node.js ≥ 20 · MIT</p>
+      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。0.2.0 起，同一套能力还有一层命令行，可作为 <code>uitest-phone</code> 使用，也能以 MCP 暴露给 Agent。</p>
 
       <h2 id="install">1. 安装与前提</h2>
-      <pre><code>npm install uitest-sdk</code></pre>
+      <pre><code>npm install uitest-sdk
+npx uitest-sdk doctor      # 确认设备与所需能力都在</code></pre>
       <ul>
         <li><strong>Node.js ≥ 20</strong>，ESM（<code>import</code>）。</li>
         <li><strong>hdc</strong>：DevEco Studio 自带的 <code>hdc</code> 在 <code>PATH</code> 上，或设置 <code>HDC_PATH</code>，或传 <code>Device.connect({ hdcPath })</code>。</li>
@@ -155,7 +158,70 @@ await dev.agent.call("CtrlCmd", { api: "getDisplaySize", args: [] });
 await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);</code></pre>
       <p><code>call</code> 的 method 只能是 <code>"Captures"</code> / <code>"CtrlCmd"</code> / <code>"Gestures"</code> / <code>"callHypiumApi"</code>。</p>
 
-      <h2 id="cast">6. 投流与录制</h2>
+      <h2 id="session">6. Session 与命令行</h2>
+      <p><code>Session</code> 是 SDK 里「一个任务看一台设备」的那一层：它持有租约（两个任务不能交错）、策略（危险步骤在碰设备前停下）、ref 表（ref 只指向它被观察时的那个元素）和 trace。CLI 的每条命令都只是开一个 <code>Session</code>、跑一步、关掉。</p>
+
+      <h3>直接使用 Session</h3>
+      <pre><code>import { Device, Session } from "uitest-sdk";
+
+const dev = await Device.connect();
+const session = await Session.open(dev, { task: "check WLAN" });
+try {
+  await session.observe();                 // 读屏并记录
+  const r = await session.tap({ ref: 12 }); // 按 ref 点击
+  console.log(r.status, r.text);           // settled · 一行 diff
+} finally {
+  await session.release();                 // 释放租约、关 trace、dispose 设备
+}</code></pre>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>成员</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>Session.open(device, opts)</code></td><td>取设备租约；被别的任务占用时抛 <code>LeaseHeldError</code>，此时设备还没被读写</td></tr>
+            <tr><td><code>observe()</code> / <code>screen()</code></td><td>读屏并记录；<code>screen()</code> 返回上一次读到的屏幕，没有则新读</td></tr>
+            <tr><td><code>tap(target, opts)</code></td><td><code>{ref}</code> 走坐标点击，<code>{text}</code> 或 <code>On</code> 走设备自己的 <code>Component.click</code></td></tr>
+            <tr><td><code>type(text, opts)</code></td><td>默认输入到焦点框；密码框在任何按键前被策略拒绝</td></tr>
+            <tr><td><code>swipe</code> / <code>longPress</code> / <code>doubleClick</code> / <code>drag</code> / <code>fling</code> / <code>pinch</code></td><td>手势；<code>pinch</code> 走 <code>PointerMatrix</code>，单指通道表达不了两条同时的轨迹</td></tr>
+            <tr><td><code>waitFor</code> / <code>readList</code> / <code>scrollUntilVisible</code></td><td>设备侧等待、逐屏读列表、逐屏翻到目标</td></tr>
+            <tr><td><code>window(filter, opts)</code></td><td>报告焦点窗口或某 bundle 的窗口，可 focus / close</td></tr>
+            <tr><td><code>pressKey(key)</code></td><td>命名按键或数字 key code</td></tr>
+            <tr><td><code>steps</code></td><td>本会话已记录的步数</td></tr>
+            <tr><td><code>release()</code></td><td>结束任务</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>SessionOptions</h3>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>字段</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>task</code></td><td>string</td><td>—</td><td>任务名，出现在租约、trace 与报告里</td></tr>
+            <tr><td><code>stateDir</code></td><td>string</td><td><code>.uitest-phone</code></td><td>trace、截图、租约所在目录</td></tr>
+            <tr><td><code>lease</code></td><td>object | false</td><td>开</td><td><code>false</code> 表示放弃独占</td></tr>
+            <tr><td><code>policy</code></td><td>PolicyOptions</td><td>—</td><td>read-only、confirm 规则、应用白名单</td></tr>
+            <tr><td><code>traceShots</code></td><td>boolean</td><td>false</td><td>每步存一张截图</td></tr>
+            <tr><td><code>settleMs</code></td><td>number</td><td>3000</td><td>动作后等待 UI 稳定的上限</td></tr>
+            <tr><td><code>noTrace</code></td><td>boolean</td><td>false</td><td>不读写 trace 文件</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>命令行</h3>
+      <p>安装后命令名是 <code>uitest-phone</code>；<code>npx uitest-sdk &lt;command&gt;</code> 等价，无需全局安装。</p>
+      <pre><code>uitest-phone doctor
+uitest-phone observe --task "check WLAN"
+uitest-phone tap --ref 12 --task "check WLAN"
+uitest-phone read-list --ref 20
+uitest-phone report --title "WLAN check"</code></pre>
+      <p>全局 flag 对所有命令生效：<code>--task</code>、<code>--state-dir</code>、<code>--device</code>、<code>--read-only</code>、<code>--apps</code>、<code>--confirm</code>、<code>--settle-ms</code>、<code>--trace-shots</code>、<code>--approval-id</code>、<code>--json</code>。完整命令与参数见 <code>--help</code> 与随包 Skill 的 <code>REFERENCE.md</code>。</p>
+      <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
+
+      <h3>MCP 与 Skill</h3>
+      <pre><code>uitest-phone mcp               # stdio 上以 JSON-RPC 2.0 暴露 uitest_&lt;command&gt;
+uitest-phone install-skill     # 写进 ~/.claude/skills/uitest-phone</code></pre>
+      <p>MCP 进程只开一次设备，工具调用不再付每步的设备启动开销。返回非 <code>settled</code> 的工具调用是 <code>isError: true</code> 的工具错误，文本里带状态与原因，而不是传输失败。<code>install-skill</code> 默认保留已有的 <code>SKILL.md</code>，除非给 <code>--force</code>。</p>
+
+      <h2 id="cast">7. 投流与录制</h2>
       <pre><code>const cast = await dev.createCast({
   mode: "stream",   // "stream" | "record"
   frameRate: 60,    // 15 | 30 | 60 | 120，默认 30
@@ -208,7 +274,7 @@ await cast.dispose();</code></pre>
 await cast.dispose(); // 关闭 muxer → 等待设备写完 → 拉回 out.mp4</code></pre>
       <p>设备侧文件路径写死在扩展里（<code>/data/local/tmp/mytest.mp4</code>），不可改。编码器是起停驱动的：<code>createCast</code> 返回时已经在录，<code>dispose()</code> 后才完成。</p>
 
-      <h2 id="uitree">7. UI 树与窗口</h2>
+      <h2 id="uitree">8. UI 树与窗口</h2>
       <h3>整屏 UI 树</h3>
       <pre><code>const tree = await dev.agent.captureLayout(); // { attributes, children }
 console.log(tree.attributes.bundleName, tree.children.length);</code></pre>
@@ -231,7 +297,7 @@ if (bounds) {
   await dev.agent.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 }</code></pre>
 
-      <h2 id="tools">8. 工具类与导出</h2>
+      <h2 id="tools">9. 工具类与导出</h2>
       <div class="doc-table">
         <table>
           <thead><tr><th>导出</th><th>说明</th></tr></thead>
@@ -248,11 +314,22 @@ if (bounds) {
             <tr><td><code>resolveCastingExtension(abi, dir)</code></td><td>该 ABI 的 casting 扩展路径，没有返回 null</td></tr>
             <tr><td><code>loadScrcpyService()</code></td><td>加载 <code>scrcpy.proto</code> 的 gRPC service 构造器</td></tr>
             <tr><td><code>H264CastClient</code> / <code>MjpegCastClient</code></td><td>低层客户端；正常用 <code>dev.createCast()</code></td></tr>
+            <tr><td><code>Session</code></td><td>一个任务看一台设备：租约、策略、ref 表、trace</td></tr>
+            <tr><td><code>ScreenReader</code> / <code>ScreenBuilder</code></td><td>读屏与渲染；<code>renderDiff</code> / <code>renderFull</code> 生成 CLI 打印的那份文本</td></tr>
+            <tr><td><code>Components</code> / <code>Gestures</code> / <code>AppManager</code></td><td>设备侧控件操作、手势、应用与窗口管理</td></tr>
+            <tr><td><code>Policy</code> / <code>Approvals</code> / <code>Lease</code></td><td>标签策略、一次性审批、每设备租约</td></tr>
+            <tr><td><code>TraceRecorder</code></td><td>逐步 JSONL trace 与 HTML 报告</td></tr>
+            <tr><td><code>CommandRunner</code> / <code>COMMANDS</code></td><td>命令层；CLI 与 MCP 共用同一张表</td></tr>
+            <tr><td><code>McpServer</code> / <code>toolDefinitions</code></td><td>stdio JSON-RPC 服务与工具定义</td></tr>
+            <tr><td><code>DevicePool</code></td><td>多设备连接池</td></tr>
+            <tr><td><code>installSkill()</code> / <code>skillFiles()</code></td><td>随包 Skill 的安装</td></tr>
+            <tr><td><code>doctor()</code> / <code>deviceTagOf(id)</code></td><td>能力探测；设备序列号的 8 位哈希</td></tr>
+            <tr><td><code>VERSION</code></td><td>从 <code>package.json</code> 读出的版本号</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h2 id="errors">9. 错误码</h2>
+      <h2 id="errors">10. 错误码</h2>
       <p>所有错误继承 <code>UitestError</code>，带 <code>code</code> 与可选 <code>cause</code>。</p>
       <div class="doc-table">
         <table>
@@ -268,7 +345,7 @@ if (bounds) {
         </table>
       </div>
 
-      <h2 id="concurrency">10. 并发与生命周期</h2>
+      <h2 id="concurrency">11. 并发与生命周期</h2>
       <ul>
         <li><strong>一条连接一个在途请求</strong>：<code>SerialQueue</code> 串行化；断开后 <code>autoRestart</code> 用新 socket 重连，不重放失败中的请求。</li>
         <li><strong>全局锁冲突</strong>：只有 <code>Disallow concurrent use</code> 会退避重试（0.5 s 起，抖动后翻倍，最多 40 次，20 s 封顶）。</li>
@@ -278,7 +355,7 @@ if (bounds) {
         <li><strong>退出前 <code>dispose()</code></strong>：撤销 fport，否则本地会留下隧道。</li>
       </ul>
 
-      <h2 id="examples">11. 完整示例</h2>
+      <h2 id="examples">12. 完整示例</h2>
       <h3>点击、滑动与输入</h3>
       <pre><code>const { width, height } = await dev.agent.getDisplaySize();
 await dev.agent.click(width / 2, height / 2);
@@ -310,7 +387,7 @@ try {
   await Promise.all(devices.map((d) =&gt; d.dispose()));
 }</code></pre>
 
-      <p class="doc-meta">文档对应 uitest-sdk 0.1.0（2026-11-15）。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告。</p>
+      <p class="doc-meta">文档对应 uitest-sdk 0.2.0（2026-11-16）。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告。</p>
     </article>
   </main>
 

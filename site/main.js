@@ -79,20 +79,32 @@ function initTyping() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   if (!("IntersectionObserver" in window)) return;
 
-  const texts = lines.map((line) => line.textContent);
-  let started = false;
+  // Each terminal types when it comes into view. Grouping by .term matters
+  // now that the page has more than one: a single shared queue would start
+  // the off-screen terminal while the visitor is still reading the first.
+  const groups = new Map();
+  for (const line of lines) {
+    const term = line.closest(".term");
+    if (!term) continue;
+    if (!groups.has(term)) groups.set(term, []);
+    groups.get(term).push(line);
+  }
 
   const observer = new IntersectionObserver(
     (entries) => {
-      if (started || !entries.some((entry) => entry.isIntersecting)) return;
-      started = true;
-      observer.disconnect();
-      lines.forEach((line) => (line.textContent = ""));
-      typeLines(lines, texts);
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const group = groups.get(entry.target);
+        observer.unobserve(entry.target);
+        if (!group) continue;
+        const texts = group.map((line) => line.textContent);
+        group.forEach((line) => (line.textContent = ""));
+        typeLines(group, texts);
+      }
     },
     { threshold: 0.35 },
   );
-  observer.observe(lines[0].closest(".term") ?? lines[0]);
+  for (const term of groups.keys()) observer.observe(term);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
