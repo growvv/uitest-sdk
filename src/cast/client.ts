@@ -85,6 +85,14 @@ export class H264CastClient implements CastClient {
     if (opts.scale !== undefined && (opts.scale < 1 || opts.scale > 5)) {
       throw new UitestError(`scale must be 1..5, got ${opts.scale}`, "EBADARG");
     }
+    // The device path is hardcoded in the extension. Without a pull destination
+    // the recording would be closed and then silently left on the device.
+    if (opts.mode === "record" && !opts.outputPath) {
+      throw new UitestError(
+        "record mode needs outputPath: the device-side file is pulled there on dispose()",
+        "EBADARG",
+      );
+    }
 
     const before = pids(await hdc.shell("pidof uitest"));
 
@@ -116,16 +124,34 @@ export class H264CastClient implements CastClient {
     // and neither /proc/<pid>/fd nor `netstat -p` is readable from shell.
     const after = pids(await hdc.shell("pidof uitest"));
     const fresh = [...after].filter((p) => !before.has(p));
-    if (fresh.length === 0) {
+    // Exactly one new pid is attributable to this call; zero means the daemon
+    // never started, several means a sibling started one in the same window.
+    if (fresh.length !== 1) {
       throw new DaemonStartError(
-        `casting daemon did not start (pidof uitest unchanged; extension ${EXTENSION_NAME})`,
+        `casting daemon did not start (pidof uitest showed ${fresh.length} new processes; extension ${EXTENSION_NAME})`,
         "ENODAEMON",
       );
     }
-    const ownPid = fresh[fresh.length - 1]!;
+    const ownPid = fresh[0]!;
 
-    await waitForSocket(hdc, socketName);
-    const localPort = await hdc.fportAdd(await freePort(), `localabstract:${socketName}`);
+    let localPort = 0;
+    try {
+      await waitForSocket(hdc, socketName);
+      // The socket name is fixed per mode, so a name match may belong to an
+      // older daemon. Only our own process being alive proves it is serving us.
+      if (!pids(await hdc.shell("pidof uitest")).has(ownPid)) {
+        throw new DaemonStartError(
+          `casting daemon ${ownPid} exited before serving ${socketName}`,
+          "ENODAEMON",
+        );
+      }
+      localPort = await hdc.fportAdd(await freePort(), `localabstract:${socketName}`);
+    } catch (e) {
+      // Never leak the process we spawned, nor a half-made forward.
+      if (localPort !== 0) await hdc.fportRemove(localPort).catch(() => undefined);
+      await hdc.shell(`kill -9 ${ownPid}`).catch(() => undefined);
+      throw e;
+    }
 
     const Service = loadScrcpyService();
     const stub = new Service(`127.0.0.1:${localPort}`, grpc.credentials.createInsecure());

@@ -53,6 +53,19 @@ describe("AgentClient actions", () => {
     expect(received.some((r) => r.params.api === "Driver.swipe")).toBe(false);
   });
 
+  it("swipe releases the pointer when a move fails mid-gesture", async () => {
+    // A gesture that dies mid-move must not leave a finger held on the device.
+    let moves = 0;
+    replyFn = (req) => {
+      if (req.params.api === "touchMove" && ++moves === 2) {
+        return '{"result":null,"exception":"Invalid params"}\n';
+      }
+      return '{"result":true}\n';
+    };
+    await expect(client.swipe(0, 0, 100, 100, { steps: 3 })).rejects.toThrow(/Invalid params/);
+    expect(received.at(-1)?.params.api).toBe("touchUp");
+  });
+
   it("captureLayout returns the tree", async () => {
     replyFn = () => '{"result":{"attributes":{"id":"root"},"children":[]}}\n';
     const tree = await client.captureLayout();
@@ -95,18 +108,34 @@ describe("AgentClient actions", () => {
     expect(received[0].params.args[0]).toEqual({ displayId: 0, scale: 0.5 });
   });
 
-  it("cropToWindow crops to the window bounds", async () => {
-    // 整屏 100x200，窗口在左下 1/4；scale 0.5 → 采集图 50x100，裁剪 25x50
-    replyFn = (req) => {
+  /** Screen 100x200, window at the lower-left quarter; capture always 50x100. */
+  function cropFixture(getSize: string): (req: any) => string | Buffer {
+    return (req) => {
       if (req.params.api === "captureLayout") {
         return '{"result":{"attributes":{"bounds":"[0,100][50,200]","bundleName":"com.demo"},"children":[]}}\n';
       }
+      if (req.params.api === "getDisplaySize") return getSize;
       if (req.params.api === "startCaptureScreen") {
         return Buffer.concat([Buffer.from('{"result":true}\n'), solidJpeg(50, 100)]);
       }
       return '{"result":true}\n';
     };
+  }
+
+  it("cropToWindow crops to the window bounds", async () => {
+    replyFn = cropFixture('{"result":{"width":100,"height":200}}\n');
     const out = await client.cropToWindow({ bundleName: "com.demo", scale: 0.5 });
+    const img = jpeg.decode(out);
+    expect(img.width).toBe(25);
+    expect(img.height).toBe(50);
+  });
+
+  it("cropToWindow derives the crop factor from the frame, not the requested scale", async () => {
+    // The device ignores `scale` and returns a fixed-size frame (measured:
+    // 608x1344 for a 1216x2688 screen). Bounds are in display coordinates, so
+    // the factor must come from the image itself.
+    replyFn = cropFixture('{"result":{"width":100,"height":200}}\n');
+    const out = await client.cropToWindow({ bundleName: "com.demo", scale: 1 });
     const img = jpeg.decode(out);
     expect(img.width).toBe(25);
     expect(img.height).toBe(50);

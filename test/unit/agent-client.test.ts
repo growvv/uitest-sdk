@@ -90,6 +90,21 @@ describe("AgentClient", () => {
     expect(n).toBe(1);
   });
 
+  it("fails 'Capture already running' immediately, without retrying", async () => {
+    // spec §4.6: one capture channel per device; taking over another
+    // process's stream is wrong behaviour, not something to wait for.
+    let n = 0;
+    replyFn = () => {
+      n++;
+      return '{"result":null,"exception":"Capture already running: copyScreen"}\n';
+    };
+    const t0 = Date.now();
+    await expect(client.call("Captures", { api: "startCaptureScreen", args: [] }))
+      .rejects.toThrow(AgentBusyError);
+    expect(n).toBe(1);
+    expect(Date.now() - t0).toBeLessThan(300);
+  });
+
   it("retryOnBusy:false surfaces the busy error immediately", async () => {
     let n = 0;
     replyFn = () => { n++; return '{"result":null,"exception":"Disallow concurrent use"}\n'; };

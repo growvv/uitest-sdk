@@ -15,6 +15,11 @@ const hdcState = {
   shellCalls: [] as string[],
   pushed: [] as string[],
   removedPorts: [] as number[],
+  /** `pidof uitest` before any daemon start. */
+  pidof: "1000",
+  /** `pidof uitest` after `start-daemon` succeeded. */
+  pidofAfterStart: "1000 2000",
+  extDir: "",
   /** Port the fake agent listens on; FakeHdc forwards to it. */
   agentPort: 0,
 };
@@ -37,6 +42,26 @@ async function startFakeAgent(): Promise<{ port: number; close(): Promise<void> 
   return { port, close: () => new Promise<void>((r) => server.close(() => r())) };
 }
 
+/** Accepts the TCP connection but never answers: the health check must time out. */
+async function startSilentAgent(): Promise<{ port: number; close(): Promise<void> }> {
+  const sockets = new Set<net.Socket>();
+  const server = net.createServer((s) => {
+    sockets.add(s);
+    s.on("close", () => sockets.delete(s));
+    s.on("error", () => undefined);
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as net.AddressInfo).port;
+  return {
+    port,
+    close: () =>
+      new Promise<void>((r) => {
+        for (const s of sockets) s.destroy();
+        server.close(() => r());
+      }),
+  };
+}
+
 function makeExtDir(abi: "arm64" | "x86_64", withCasting: boolean): string {
   const dir = mkdtempSync(join(tmpdir(), "ext-"));
   mkdirSync(join(dir, abi));
@@ -52,7 +77,12 @@ vi.mock("../../src/hdc.js", () => {
     async shell(cmd: string): Promise<string> {
       hdcState.shellCalls.push(cmd);
       if (cmd.startsWith("param get")) return hdcState.abi;
-      if (cmd.includes("pidof uitest")) return hdcState.listening ? "1000\n" : "1000";
+      if (cmd.includes("start-daemon")) {
+        hdcState.listening = true;
+        hdcState.pidof = hdcState.pidofAfterStart;
+        return "";
+      }
+      if (cmd.includes("pidof uitest")) return hdcState.pidof;
       if (cmd.includes("/proc/net/tcp")) {
         return hdcState.listening ? "  2: 00000000:1F4C 00000000:0000 0A" : "";
       }
@@ -78,6 +108,8 @@ beforeEach(() => {
   hdcState.shellCalls = [];
   hdcState.pushed = [];
   hdcState.removedPorts = [];
+  hdcState.pidof = "1000";
+  hdcState.pidofAfterStart = "1000 2000";
   hdcState.extDir = makeExtDir("arm64", true);
   hdcState.agentPort = 0;
 });
@@ -165,11 +197,68 @@ describe("Device.connect", () => {
     await agent.close();
   });
 
-  it("reconnects before the next call when autoRestart is on", async () => {
+  it("pushes the casting extension along with agent.so", async () => {
+    // createCast picks H.264 from a local file, but the daemon loads the .so
+    // from /data/local/tmp — a device that never got the push cannot cast.
     hdcState.listening = true;
     const agent = await startFakeAgent();
     hdcState.agentPort = agent.port;
-    const dev = await Device.connect({ extensionDir: hdcState.extDir, autoRestart: true });
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    expect(hdcState.pushed.some((p) => p.endsWith("->/data/local/tmp/libscreen_casting.z.so"))).toBe(true);
+    await dev.dispose();
+    await agent.close();
+  });
+
+  it("removes the tunnel and kills its daemon when the health check fails", async () => {
+    const agent = await startSilentAgent();
+    hdcState.agentPort = agent.port;
+    await expect(
+      Device.connect({ extensionDir: hdcState.extDir, requestTimeoutMs: 60 }),
+    ).rejects.toThrow();
+    expect(hdcState.removedPorts).toContain(agent.port);
+    expect(hdcState.shellCalls).toContain("kill -9 2000");
+    await agent.close();
+  });
+
+  it("does not claim ownership when several fresh pids appear at once", async () => {
+    hdcState.pidofAfterStart = "1000 2000 3000"; // a sibling started one too
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir, ownDaemon: true });
+    expect(dev.ownsDaemon).toBe(false);
+    await dev.dispose();
+    expect(hdcState.shellCalls.some((c) => c.includes("kill"))).toBe(false);
+    await agent.close();
+  });
+
+  it("does not claim ownership when no fresh pid appears", async () => {
+    hdcState.pidofAfterStart = "1000";
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir, ownDaemon: true });
+    expect(dev.ownsDaemon).toBe(false);
+    await dev.dispose();
+    expect(hdcState.shellCalls.some((c) => c.includes("kill"))).toBe(false);
+    await agent.close();
+  });
+
+  it("refuses record mode on a device without a casting extension", async () => {
+    hdcState.abi = "x86_64";
+    hdcState.listening = true;
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: makeExtDir("x86_64", false) });
+    await expect(dev.createCast({ mode: "record", outputPath: "/tmp/out.mp4" }))
+      .rejects.toThrow(ExtensionMissingError);
+    await dev.dispose();
+    await agent.close();
+  });
+
+  it("reconnects before the next call by default", async () => {
+    hdcState.listening = true;
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
 
     // Kill the transport the way a daemon crash would.
     const sock = (dev.agent as unknown as { sock: net.Socket }).sock;
@@ -184,11 +273,11 @@ describe("Device.connect", () => {
     await agent.close();
   });
 
-  it("stays failed when autoRestart is off", async () => {
+  it("stays failed when autoRestart is explicitly off", async () => {
     hdcState.listening = true;
     const agent = await startFakeAgent();
     hdcState.agentPort = agent.port;
-    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    const dev = await Device.connect({ extensionDir: hdcState.extDir, autoRestart: false });
 
     const sock = (dev.agent as unknown as { sock: net.Socket }).sock;
     sock.destroy();

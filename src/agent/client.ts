@@ -6,6 +6,7 @@ import {
   AgentBusyError,
   AgentConnectionError,
   AgentProtocolError,
+  UitestError,
 } from "../errors.js";
 import type { Rect, UiEvent, UiNode } from "../model.js";
 import { cropRect, parseBounds } from "../util/bounds.js";
@@ -26,10 +27,17 @@ export interface AgentClientOptions {
 
 export const MODULE_ID = "com.ohos.devicetest.hypiumApiHelper";
 
-const BUSY_PATTERNS = ["Disallow concurrent use", "Capture already running"];
+/** The device-side global lock. This is the only condition worth retrying. */
+const BUSY_PATTERN = "Disallow concurrent use";
+/** One capture channel per device: waiting on it would steal another's stream. */
+const CAPTURE_CONFLICT_PATTERN = "Capture already running";
 
 export function isBusyException(msg: string): boolean {
-  return BUSY_PATTERNS.some((p) => msg.includes(p));
+  return msg.includes(BUSY_PATTERN);
+}
+
+function isCaptureConflict(msg: string): boolean {
+  return msg.includes(CAPTURE_CONFLICT_PATTERN);
 }
 
 const NOT_RUNNING_PATTERNS = [
@@ -96,6 +104,8 @@ export class AgentClient {
   private frameWaiters: Array<(f: Buffer | null) => void> = [];
   /** Consumers blocked in `nextJson()` for unsolicited UI events. */
   private jsonWaiters: Array<(v: unknown) => void> = [];
+  /** Callbacks run once when the transport dies, so one-shot waits can abort. */
+  private closeHandlers = new Set<(e: unknown) => void>();
   /** The transport is unusable (dropped or closed). */
   private closed = false;
   /** `close()` was called by the owner: no reconnect, ever. */
@@ -161,6 +171,12 @@ export class AgentClient {
     return () => this.frameHandlers.delete(handler);
   }
 
+  /** Registers a one-shot-safe listener for transport loss. */
+  onClose(handler: (e: unknown) => void): () => void {
+    this.closeHandlers.add(handler);
+    return () => this.closeHandlers.delete(handler);
+  }
+
   call(method: AgentMethod, params: object): Promise<unknown> {
     if (!this.connected) {
       if (!this.reconnect || this.disposed) {
@@ -168,12 +184,29 @@ export class AgentClient {
       }
       return this.tryReconnect().then(() => this.call(method, params));
     }
+    return this.callQueued(method, params).catch((e: unknown) => {
+      // A timed-out request is still in flight on the wire, and replies carry no
+      // request id: the late one would be paired with whatever request comes
+      // next. The connection is unusable after a timeout.
+      if (e instanceof UitestError && e.code === "ETIMEDOUT") {
+        this.fail(new AgentConnectionError("request timed out; connection discarded", "ECONN", e));
+      }
+      throw e;
+    });
+  }
+
+  private callQueued(method: AgentMethod, params: object): Promise<unknown> {
     return this.queue.run(async () => {
       let delay = 0.5;
       for (let attempt = 0; ; attempt++) {
         const raw = await this.sendOnce(method, params);
         if (raw.exception == null) return raw.result;
 
+        // spec §4.6: a capture conflict is thrown immediately — no waiting,
+        // no takeover. Only the global-lock conflict is retried.
+        if (isCaptureConflict(raw.exception)) {
+          throw new AgentBusyError(raw.exception, "EBUSY");
+        }
         const busy = isBusyException(raw.exception);
         if (!this.retryOnBusy || !busy) {
           throw busy
@@ -245,10 +278,21 @@ export class AgentClient {
     const steps = opts.steps ?? 8;
     const durationMs = opts.durationMs ?? 300;
     const stepDelay = Math.max(1, Math.round(durationMs / steps));
+    let lastX = x1;
+    let lastY = y1;
     await this.touchDown(x1, y1);
-    for (let i = 1; i <= steps; i++) {
-      await this.touchMove(x1 + ((x2 - x1) * i) / steps, y1 + ((y2 - y1) * i) / steps);
-      await sleep(stepDelay);
+    try {
+      for (let i = 1; i <= steps; i++) {
+        lastX = x1 + ((x2 - x1) * i) / steps;
+        lastY = y1 + ((y2 - y1) * i) / steps;
+        await this.touchMove(lastX, lastY);
+        await sleep(stepDelay);
+      }
+    } catch (e) {
+      // A gesture that dies mid-move would leave a finger held down, turning the
+      // caller's next click into a drag. Release it, then surface the failure.
+      await this.touchUp(lastX, lastY).catch(() => undefined);
+      throw e;
     }
     await this.touchUp(x2, y2);
   }
@@ -287,23 +331,51 @@ export class AgentClient {
    */
   async captureScreen(opts: { scale?: number } = {}): Promise<Buffer> {
     const scale = opts.scale ?? 0.5;
+    let cancel = (): void => undefined;
     const first = new Promise<Buffer>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        off();
-        reject(new AgentProtocolError("no frame received from capture stream", "ETIMEDOUT"));
-      }, this.requestTimeoutMs);
-      const off = this.onFrame((f) => {
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
-        off();
-        resolve(f);
-      });
+        offFrame();
+        offClose();
+        fn();
+      };
+      const timer = setTimeout(
+        () => finish(() => reject(new AgentProtocolError("no frame received from capture stream", "ETIMEDOUT"))),
+        this.requestTimeoutMs,
+      );
+      const offFrame = this.onFrame((f) => finish(() => resolve(f)));
+      const offClose = this.onClose((e) =>
+        finish(() =>
+          reject(e instanceof Error ? e : new AgentConnectionError("agent connection closed", "ECONN", e)),
+        ),
+      );
+      cancel = () => finish(() => reject(new AgentConnectionError("capture start failed", "ECONN")));
     });
+    // The start call can fail before anyone awaits `first`; without this the
+    // abandoned promise would surface as an unhandled rejection later.
+    first.catch(() => undefined);
 
-    await this.call("Captures", { api: "startCaptureScreen", args: [{ displayId: 0, scale }] });
+    let started = false;
+    let failure: unknown;
     try {
+      await this.call("Captures", { api: "startCaptureScreen", args: [{ displayId: 0, scale }] });
+      started = true;
       return await first;
+    } catch (e) {
+      failure = e;
+      throw e;
     } finally {
-      await this.call("Captures", { api: "stopCaptureScreen", args: [] });
+      cancel();
+      if (started) {
+        try {
+          await this.stopStream();
+        } catch (e) {
+          if (failure === undefined) throw e; // never mask the primary failure
+        }
+      }
     }
   }
 
@@ -326,13 +398,18 @@ export class AgentClient {
       throw new AgentProtocolError(`node has no parsable bounds: ${JSON.stringify(node.attributes)}`, "ENOBOUNDS");
     }
 
+    // Bounds are in display coordinates; the frame is not. The device ignores
+    // `scale` and returns a fixed-size frame (measured 608x1344 for 1216x2688),
+    // so the factor has to come from the frame itself, never from the option.
+    const display = await this.getDisplaySize();
     const frame = await this.captureScreen({ scale });
     const img = jpeg.decode(frame);
+    const factor = display.width > 0 ? img.width / display.width : 1;
     const scaled: Rect = {
-      x: Math.round(bounds.x * scale),
-      y: Math.round(bounds.y * scale),
-      width: Math.round(bounds.width * scale),
-      height: Math.round(bounds.height * scale),
+      x: Math.round(bounds.x * factor),
+      y: Math.round(bounds.y * factor),
+      width: Math.round(bounds.width * factor),
+      height: Math.round(bounds.height * factor),
     };
     const rect = cropRect(scaled, { x: 0, y: 0, width: img.width, height: img.height });
     if (rect.width === 0 || rect.height === 0) {
@@ -392,9 +469,17 @@ export class AgentClient {
    */
   async stopStream(): Promise<void> {
     try {
-      await this.call("Captures", { api: "stopCaptureScreen", args: [] });
+      // With no live connection there is no device-side session left to stop.
+      if (this.connected) {
+        await this.call("Captures", { api: "stopCaptureScreen", args: [] });
+      }
     } catch (e) {
       if (!isNotRunning(e)) throw e;
+    } finally {
+      // Stopping ends the capture session: release parked consumers and drop
+      // frames buffered from it, or the next stream starts on stale frames.
+      this.frameQueue.length = 0;
+      for (const w of this.frameWaiters.splice(0)) w(null);
     }
   }
 
@@ -417,7 +502,8 @@ export class AgentClient {
   close(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.closed = true;
+    // `fail` marks the transport closed; setting `closed` first would make the
+    // guard below skip both the waiter release and the close listeners.
     this.fail(new AgentConnectionError("agent client closed", "ECONN"));
     this.sock.destroy();
   }
@@ -477,7 +563,7 @@ export class AgentClient {
   }
 
   private fail(err: unknown): void {
-    if (this.closed && this.pending === null) return;
+    const firstFailure = !this.closed;
     this.closed = true;
     const p = this.pending;
     this.pending = null;
@@ -485,5 +571,6 @@ export class AgentClient {
     // Unblock stream consumers so their `finally` runs instead of hanging.
     for (const w of this.frameWaiters.splice(0)) w(null);
     for (const w of this.jsonWaiters.splice(0)) w(null);
+    if (firstFailure) for (const h of this.closeHandlers) h(err);
   }
 }

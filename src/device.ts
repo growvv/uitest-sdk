@@ -6,7 +6,7 @@ import { CliRunner } from "./cli.js";
 import { HdcRunner } from "./hdc.js";
 import { H264CastClient } from "./cast/client.js";
 import { MjpegCastClient } from "./cast/mjpeg.js";
-import { resolveCastingExtension } from "./cast/resolve.js";
+import { CASTING_EXTENSION, resolveCastingExtension } from "./cast/resolve.js";
 import type { CastClient, CastOptions } from "./cast/types.js";
 import {
   AgentConnectionError,
@@ -27,6 +27,7 @@ export interface DeviceOptions {
 }
 
 const AGENT_REMOTE = "/data/local/tmp/agent.so";
+const CAST_REMOTE = `/data/local/tmp/${CASTING_EXTENSION}`;
 const AGENT_PORT_HEX = "1F4C"; // 8012
 const START_TIMEOUT_MS = 5000;
 
@@ -97,6 +98,10 @@ export class Device {
     }
 
     await ensurePushed(hdc, agentLocal, AGENT_REMOTE);
+    // The casting daemon loads its extension from /data/local/tmp too, so
+    // selecting H.264 from a local file is only honest if it is also on the device.
+    const castLocal = resolveCastingExtension(abi, extDir);
+    if (castLocal) await ensurePushed(hdc, castLocal, CAST_REMOTE);
 
     const listening = await isAgentListening(hdc);
     let ownPid: string | null = null;
@@ -106,28 +111,41 @@ export class Device {
       await waitForAgent(hdc);
     }
 
-    const localPort = await hdc.fportAdd(opts.agentPort ?? 8012, "tcp:8012");
-    const sock = await connectTcp(localPort);
-    const reconnect =
-      opts.autoRestart === true
-        ? async () => {
-            if (!(await isAgentListening(hdc))) {
-              await startDaemon(hdc);
-              await waitForAgent(hdc);
+    let localPort = 0;
+    let sock: net.Socket | null = null;
+    let agent: AgentClient | null = null;
+    try {
+      localPort = await hdc.fportAdd(opts.agentPort ?? 8012, "tcp:8012");
+      sock = await connectTcp(localPort);
+      const reconnect =
+        opts.autoRestart !== false
+          ? async () => {
+              if (!(await isAgentListening(hdc))) {
+                await startDaemon(hdc);
+                await waitForAgent(hdc);
+              }
+              return connectTcp(localPort);
             }
-            return connectTcp(localPort);
-          }
-        : undefined;
-    const agent = new AgentClient(sock, {
-      requestTimeoutMs: opts.requestTimeoutMs,
-      retryOnBusy: opts.retryOnBusy,
-      reconnect,
-    });
+          : undefined;
+      agent = new AgentClient(sock, {
+        requestTimeoutMs: opts.requestTimeoutMs,
+        retryOnBusy: opts.retryOnBusy,
+        reconnect,
+      });
 
-    // Health check: proves the tunnel really reaches the extension.
-    await agent.getDisplaySize();
+      // Health check: proves the tunnel really reaches the extension.
+      await agent.getDisplaySize();
+    } catch (e) {
+      // A half-built tunnel must not outlive the failure: the open socket keeps
+      // the event loop alive and a stale port forward blocks the next attempt.
+      if (agent) agent.close();
+      else if (sock) sock.destroy();
+      if (localPort !== 0) await hdc.fportRemove(localPort).catch(() => undefined);
+      if (ownPid !== null) await hdc.shell(`kill -9 ${ownPid}`).catch(() => undefined);
+      throw e;
+    }
 
-    return new Device(hdc, opts, abi, extDir, agent, localPort, ownPid);
+    return new Device(hdc, opts, abi, extDir, agent!, localPort, ownPid);
   }
 
   get state(): "connected" | "disconnected" {
@@ -153,6 +171,14 @@ export class Device {
     if (this.resolveCastExtension() !== null) {
       return H264CastClient.start(this.hdc, opts);
     }
+    // MJPEG is a stream wrapper with no recorder behind it. Handing back a
+    // client that silently records nothing is the fallback this SDK forbids.
+    if (opts.mode === "record") {
+      throw new ExtensionMissingError(
+        `record mode needs ${CASTING_EXTENSION}, which has no ${this.abi} build`,
+        "ENOCAST",
+      );
+    }
     return new MjpegCastClient(this.agent, { scale: opts.scale });
   }
 
@@ -164,7 +190,7 @@ export class Device {
     await this.hdc.fportRemove(this.localPort).catch(() => undefined);
 
     // Only a daemon this instance started, and only when explicitly asked for.
-    if (this.ownPid !== null && this.opts.ownDaemon === true) {
+    if (this.ownPid !== null && this.ownPid !== "" && this.opts.ownDaemon === true) {
       await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
     }
   }
@@ -206,12 +232,16 @@ async function isAgentListening(hdc: HdcRunner): Promise<boolean> {
  * Starts the agent daemon and returns its pid, located as the pidof difference.
  * Never kills anything here: an unrelated casting daemon may be running.
  */
-async function startDaemon(hdc: HdcRunner): Promise<string> {
+async function startDaemon(hdc: HdcRunner): Promise<string | null> {
   const before = pids(await hdc.shell("pidof uitest"));
   await hdc.shell(`/system/bin/uitest start-daemon singleness --extension-name agent.so`);
   const after = pids(await hdc.shell("pidof uitest"));
   const fresh = [...after].filter((p) => !before.has(p));
-  return fresh[fresh.length - 1] ?? "";
+  // Exactly one new pid is attributable to this call. Zero means a sibling won
+  // the race and its daemon is the one listening; several means a sibling
+  // started one in the same window. Either way ownership is unknown, and
+  // claiming it would let dispose() kill someone else's daemon.
+  return fresh.length === 1 ? fresh[0]! : null;
 }
 
 async function waitForAgent(hdc: HdcRunner): Promise<void> {
