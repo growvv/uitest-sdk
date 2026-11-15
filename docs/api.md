@@ -539,6 +539,12 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 
 两个目标先全部检查再写，拒绝时不会留下半套；已有 `SKILL.md` 默认保留，`--force` 覆盖，`--dir` 只写一处。
 
+安装时目录里会写 `.uitest-skill.json`（包名、版本、两个文件的摘要）。`mcp` 每次启动前调用
+`refreshSkill()`：包升级后，若副本摘要仍与记录一致，就地更新到当前版本，不需要重跑
+`install-skill --force`。人改过的副本（`modified`）、没有记录的手写副本（`unmanaged`）和根本没有
+Skill 的目录（`missing`）都不动；0.3.0 装的副本没有记录，按该版本两个文件的精确摘要识别后接管。
+刷新失败不会阻止 MCP server 启动。
+
 ## 14. 接管与交接
 
 ```

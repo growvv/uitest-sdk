@@ -5,7 +5,7 @@ import { agentConnected, connectAgent, mcpEntry } from "./connect.js";
 import type { AgentId } from "./connect.js";
 import { Device } from "./device.js";
 import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevice } from "./hold.js";
-import { installSkill } from "./install-skill.js";
+import { installSkill, refreshSkill } from "./install-skill.js";
 import { McpServer } from "./mcp.js";
 import { Session } from "./session.js";
 import { UitestError } from "./errors.js";
@@ -53,6 +53,11 @@ async function mcpMain(argv: string[]): Promise<number> {
     return 0;
   }
 
+  // Before the agent reads anything: if the package was upgraded after the
+  // skill was installed, bring the copy forward. The skill names the commands
+  // this build implements, and an old copy teaches calls that may not exist.
+  await refreshSkillQuietly();
+
   const device = await Device.connect({
     deviceId: parsed.options.device,
   });
@@ -75,6 +80,25 @@ async function mcpMain(argv: string[]): Promise<number> {
   } finally {
     await session.release();
     await device.dispose();
+  }
+}
+
+/**
+ * The skill half of an upgrade, on the way into a serving session.
+ *
+ * Every failure is swallowed: a permissions problem or another agent rewriting
+ * the same directory must not stop the MCP server, which is the job the agent
+ * actually launched. On success only a real rewrite says anything, so a normal
+ * start stays silent on stderr.
+ */
+async function refreshSkillQuietly(): Promise<void> {
+  try {
+    const result = await refreshSkill();
+    for (const dir of result.updated) {
+      process.stderr.write(`uitest-phone: refreshed skill to ${VERSION} at ${dir}\n`);
+    }
+  } catch {
+    // Documentation is never worth failing the session over.
   }
 }
 

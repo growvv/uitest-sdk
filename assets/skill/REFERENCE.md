@@ -51,6 +51,12 @@ refusal leaves no half install. An existing `SKILL.md` is kept unless
 `--dir` writes one directory instead. The skill ships inside the package, so
 its commands and the binary are always the same version.
 
+An upgrade refreshes its own copy: each install writes `.uitest-skill.json`
+(version and file digests), and `mcp` startup rewrites an unchanged copy to the
+running version, so no manual reinstall is needed. A copy the person edited is
+left alone, as is a hand-written one; an untouched 0.3.0 copy is recognised by
+its published digests and adopted.
+
 ## Connect an agent
 
 ```

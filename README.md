@@ -119,6 +119,9 @@ npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两�
   因为从 Dock / 开始菜单启动的 Agent 看不到终端的 `PATH`。
 - **两处 Skill 目录**：`~/.claude/skills` 给 Claude Code，`~/.agents/skills` 是 agentskills.io 的跨 runtime
   别名，Codex、Copilot CLI、Gemini CLI 都读它。两个目标先全部检查再写，拒绝时不会留下半套。
+- **升级后 Skill 自己跟上**：安装目录里记着本包写入时的版本与文件摘要；`mcp` 启动时若发现包已升级、
+  且副本仍是本包写的那份，就地把两份文档更新到当前版本——不需要重跑 `install-skill --force`。人改过的
+  副本与手写的 Skill 不动；0.3.0 装的副本按发布时的精确摘要识别后接管。
 
 - **ref 跨进程稳定**：ref 表存在 `<state-dir>/refs-<device-hash>.json`，`observe` 打印的 ref 在
   下一条 `tap` 里仍指向同一个元素；不在当前屏幕上的 ref 直接 `not_found`，绝不悄悄指向别的控件。

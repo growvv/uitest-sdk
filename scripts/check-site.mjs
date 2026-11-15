@@ -319,6 +319,7 @@ for (const needle of [
   "device_needs_setup",
   "device_offline",
   "--approval-scope",
+  "升级不需要重跑",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -356,6 +357,8 @@ for (const needle of [
   "hdc list targets -v",
   "同一条审批可以记住",
   "--approval-scope task",
+  "升级后 Skill 自己跟上",
+  ".uitest-skill.json",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

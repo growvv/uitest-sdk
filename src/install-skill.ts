@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { UitestError } from "./errors.js";
+import { VERSION } from "./version.js";
 
 export interface SkillFile {
   /** Path relative to the skill directory. */
@@ -63,6 +65,28 @@ function assetDir(): string {
 
 const SKILL_FILES = ["SKILL.md", "REFERENCE.md"] as const;
 
+/** The record written beside an installed skill, so an upgrade knows the copy is ours. */
+export const SKILL_MARKER = ".uitest-skill.json";
+export const SKILL_PACKAGE = "uitest-sdk";
+
+/**
+ * Line endings are normalised before hashing: the same skill checked out with
+ * CRLF and installed from an LF package must count as the same content.
+ */
+function digest(text: string): string {
+  return createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
+}
+
+/**
+ * Digests of the two files 0.3.0 installed. That release predates the marker,
+ * so an exact match is the only safe proof the copy is unmodified package
+ * content; anything else is treated as the person's and left alone.
+ */
+const LEGACY_DIGESTS_0_3_0: Record<string, string> = {
+  "SKILL.md": "4fa29d7dd3307ee65202b794fc9bd1fbee108993e9342c8a4f153eece02d0cef",
+  "REFERENCE.md": "2ed37ad6b9b75785de1028040d2df097d80b040ddc825c02bd371b606ca9583f",
+};
+
 /** Reads the bundled skill files. */
 export function skillFiles(): SkillFile[] {
   const dir = assetDir();
@@ -111,6 +135,158 @@ export async function installSkill(opts: InstallSkillOptions = {}): Promise<Inst
       await writeFile(path, file.content);
       written.push(path);
     }
+    // Last, so a crash mid-install never leaves a marker claiming files that
+    // were not written. `refreshSkill` treats a markerless copy as unmanaged.
+    await writeMarker(dir, VERSION, files);
   }
   return { dir: dirs[0]!, dirs, written };
+}
+
+/** One marker, written in the skill directory itself. */
+interface SkillMarker {
+  package?: unknown;
+  version?: unknown;
+  files?: unknown;
+}
+
+async function writeMarker(dir: string, version: string, files: SkillFile[]): Promise<void> {
+  const record = {
+    package: SKILL_PACKAGE,
+    version,
+    files: Object.fromEntries(files.map((file) => [file.path, digest(file.content)])),
+  };
+  await writeFile(join(dir, SKILL_MARKER), `${JSON.stringify(record, null, 2)}\n`);
+}
+
+function readMarker(dir: string): SkillMarker | null {
+  try {
+    const parsed = JSON.parse(readFileSync(join(dir, SKILL_MARKER), "utf8")) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as SkillMarker) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The recorded digests, or null when the marker is not a usable one of ours. */
+function markerDigests(marker: SkillMarker | null): Record<string, string> | null {
+  if (!marker || marker.package !== SKILL_PACKAGE || typeof marker.version !== "string") {
+    return null;
+  }
+  if (!marker.files || typeof marker.files !== "object") return null;
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(marker.files)) {
+    if (typeof value === "string") out[name] = value;
+  }
+  return out;
+}
+
+async function filesMatch(
+  dir: string,
+  files: SkillFile[],
+  digests: Record<string, string>,
+): Promise<boolean> {
+  for (const file of files) {
+    const path = join(dir, file.path);
+    if (!existsSync(path)) return false;
+    const text = await readFile(path, "utf8");
+    if (digest(text) !== digests[file.path]) return false;
+  }
+  return true;
+}
+
+export interface RefreshSkillOptions {
+  dirs?: string[];
+  home?: string;
+  /** This package's version; defaults to the running package's. */
+  version?: string;
+  /** The bundled files; tests supply their own. */
+  files?: SkillFile[];
+  /** Digests of a markerless install, when a test or a caller knows them. */
+  legacy?: Record<string, string>;
+}
+
+export interface RefreshSkillResult {
+  /** Directories rewritten to this version. */
+  updated: string[];
+  /** Directories already at this version. */
+  current: string[];
+  /** Directories left untouched, and why. */
+  skipped: Array<{ dir: string; reason: "missing" | "unmanaged" | "modified" }>;
+}
+
+/**
+ * Brings an installed skill forward after the package was upgraded.
+ *
+ * The skill and the CLI ship together, and a skill from another version names
+ * commands this package may not have. `refreshSkill` rewrites only copies this
+ * package wrote: a copy the person edited after installing is left alone
+ * (`modified`), and so is a hand-written skill with no marker (`unmanaged`).
+ * An exact match with 0.3.0's files is adopted, because that release installed
+ * the skill before markers existed.
+ *
+ * This never installs into an empty directory: putting a skill where the agent
+ * reads none is `install-skill`'s job, not an upgrade's.
+ */
+export async function refreshSkill(opts: RefreshSkillOptions = {}): Promise<RefreshSkillResult> {
+  const dirs = opts.dirs ?? defaultSkillDirs(opts.home ?? homedir());
+  const files = opts.files ?? skillFiles();
+  const version = opts.version ?? VERSION;
+  const legacy = opts.legacy ?? LEGACY_DIGESTS_0_3_0;
+  const fresh = Object.fromEntries(files.map((file) => [file.path, digest(file.content)]));
+
+  const result: RefreshSkillResult = { updated: [], current: [], skipped: [] };
+
+  for (const dir of dirs) {
+    if (!existsSync(join(dir, "SKILL.md")) && !existsSync(join(dir, SKILL_MARKER))) {
+      result.skipped.push({ dir, reason: "missing" });
+      continue;
+    }
+
+    const marker = readMarker(dir);
+    const recorded = markerDigests(marker);
+    let known = recorded;
+    if (!known) {
+      if (!(await filesMatch(dir, files, legacy))) {
+        result.skipped.push({ dir, reason: "unmanaged" });
+        continue;
+      }
+      known = legacy;
+    } else if (marker?.version === version) {
+      result.current.push(dir);
+      continue;
+    }
+
+    // A crash between writing the files and writing the marker leaves the new
+    // content with an old marker; recognise that instead of wedging forever.
+    if (await filesMatch(dir, files, fresh)) {
+      await writeMarker(dir, version, files);
+      result.updated.push(dir);
+      continue;
+    }
+
+    // The marker says what was installed. A file that no longer matches was
+    // edited by the person; refresh all or nothing so a half-updated skill
+    // never teaches a mix of two versions.
+    let edited = false;
+    for (const file of files) {
+      const path = join(dir, file.path);
+      if (!existsSync(path)) continue; // a deleted file is restored below
+      const text = await readFile(path, "utf8");
+      if (digest(text) !== known[file.path]) {
+        edited = true;
+        break;
+      }
+    }
+    if (edited) {
+      result.skipped.push({ dir, reason: "modified" });
+      continue;
+    }
+
+    for (const file of files) {
+      await writeFile(join(dir, file.path), file.content);
+    }
+    await writeMarker(dir, version, files);
+    result.updated.push(dir);
+  }
+  return result;
 }

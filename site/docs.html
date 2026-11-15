@@ -223,7 +223,7 @@ uitest-phone report --title "WLAN check"</code></pre>
       <h3>MCP 与 Skill</h3>
       <pre><code>uitest-phone mcp               # stdio 上以 JSON-RPC 2.0 暴露 uitest_&lt;command&gt;
 uitest-phone install-skill     # 写进 ~/.claude/skills 与 ~/.agents/skills</code></pre>
-      <p>MCP 进程只开一次设备，工具调用不再付每步的设备启动开销。返回非 <code>settled</code> 的工具调用是 <code>isError: true</code> 的工具错误，文本里带状态与原因，而不是传输失败。<code>install-skill</code> 同时写两个目录：<code>~/.claude/skills</code> 给 Claude Code，<code>~/.agents/skills</code> 是 agentskills.io 的跨 runtime 别名，Codex、Copilot CLI、Gemini CLI 都读它。两个目标先全部检查再写，拒绝时不会留下半套；已有的 <code>SKILL.md</code> 默认保留，除非给 <code>--force</code>。</p>
+      <p>MCP 进程只开一次设备，工具调用不再付每步的设备启动开销。返回非 <code>settled</code> 的工具调用是 <code>isError: true</code> 的工具错误，文本里带状态与原因，而不是传输失败。<code>install-skill</code> 同时写两个目录：<code>~/.claude/skills</code> 给 Claude Code，<code>~/.agents/skills</code> 是 agentskills.io 的跨 runtime 别名，Codex、Copilot CLI、Gemini CLI 都读它。两个目标先全部检查再写，拒绝时不会留下半套；已有的 <code>SKILL.md</code> 默认保留，除非给 <code>--force</code>。升级不需要重跑：安装目录里记着版本与文件摘要，<code>mcp</code> 启动时会把本包写的那份就地更新到当前版本；人改过的与手写的副本不动。</p>
 
       <h3>一步接好 Agent<span class="doc-tag">0.3.0 · npm 待发</span></h3>
       <pre><code>uitest-phone connect                     # 默认 claude
