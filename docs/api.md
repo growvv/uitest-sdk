@@ -2,6 +2,7 @@
 
 面向 Node.js 的鸿蒙 `uitest` 扩展 SDK：UI 自动化、整屏截图、窗口截图、MJPEG / H.264 投流与 MP4 录制。
 一条 TCP 长连接（`agent.so`）负责所有交互；H.264 投流与录制走另一条 gRPC 通道（`libscreen_casting.z.so`）。
+包内还带一个给人和 Agent 用的命令行（`uitest-phone`）、一个 stdio MCP server 和一份随包 Skill。
 
 - 实测数字见 [benchmarks.md](benchmarks.md) 与 [../docs/acceptance/report.md](acceptance/report.md)。
 - 已知限制见 [README](../README.md#已知限制)。
@@ -19,6 +20,10 @@
 9. [错误](#9-错误)
 10. [并发与生命周期](#10-并发与生命周期)
 11. [示例](#11-示例)
+12. [命令行 uitest-phone](#12-命令行-uitest-phone)
+13. [Agent 接入：MCP 与 Skill](#13-agent-接入mcp-与-skill)
+14. [接管与交接](#14-接管与交接)
+15. [Session、策略与审批](#15-session策略与审批)
 
 ## 1. 安装与前提
 
@@ -408,6 +413,177 @@ try {
 await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 ```
 
+## 12. 命令行 `uitest-phone`
+
+包内只有一个可执行文件。`npm install -g uitest-sdk` 之后命令名是 `uitest-phone`；不装全局也可以用
+`npx uitest-sdk <command>`。每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
+跨进程状态（ref、审批、租约、trace）留在 `--state-dir`，默认 `.uitest-phone/`，里面是用户屏幕内容，
+不要提交或外发。
+
+### 全局参数
+
+| 参数 | 作用 |
+|---|---|
+| `--task <name>` | 任务名，写进租约与 trace |
+| `--state-dir <dir>` | trace、截图、ref、审批和租约的目录（默认 `.uitest-phone`） |
+| `--device <id>` | 多台设备时指定 hdc target |
+| `--read-only` | 拒绝任何改变数据的动作 |
+| `--confirm <rules>` | `payments,finance,deletes,sends,commits`、`all` 或 `none` |
+| `--apps <bundles>` | 逗号分隔的应用白名单，其它应用被拦截 |
+| `--approval-id <id>` | 兑现一次人工审批 |
+| `--settle-ms <n>` | 动作后等 UI 安静的最长时间 |
+| `--trace-shots` | 每步存一张截图（约 +180 ms） |
+| `--json` | 输出 `{ status, code, text, data }` |
+
+### 命令
+
+| 命令 | 作用 |
+|---|---|
+| `observe` | 读屏：每个元素一行，带 ref、角色、标签与中心点；`--out` 存截图 |
+| `tap` | 按 ref / 标签 / selector / 坐标点击；`--long` 长按 |
+| `type` | 输入文本；`--ref` 指定输入框，默认焦点框 |
+| `swipe` | 两点滑动或四向滑动；`--ref` 在元素内滑 |
+| `double-click` | 双击 |
+| `drag` | 按住再移动（拖拽排序） |
+| `fling` | 快滑，松手后列表继续滑行 |
+| `pinch` | 双指缩放，走设备 `PointerMatrix` |
+| `key` | `back` / `home` / `power` / `enter` 或数字键码 |
+| `wait-for` | 等标签出现（设备侧一次往返） |
+| `read-list` | 逐屏读完整个列表，每个标签只出现一次 |
+| `scroll-until` | 逐屏翻到目标标签为止；不使用设备侧 `scrollSearch` |
+| `launch` | 按别名或 bundle 启动 |
+| `apps` | 列应用 / `--current` / `--has` |
+| `window` | 焦点窗口或某 bundle 的窗口；`--focus` / `--close` |
+| `doctor` | 探测设备与能力 |
+| `screenshot` | 存一张 JPEG，报告帧尺寸与缩放因子 |
+| `report` | 按 task 把各进程的 trace 聚合为 HTML 报告 |
+| `status` | 当前任务、设备哈希、策略设置 |
+| `handoff` | 请人接手：只写租约，不碰设备（见第 14 节） |
+
+### 状态与退出码
+
+| 状态 | 退出码 | 含义 |
+|---|---|---|
+| `settled` | 0 | 执行完且 UI 已稳定 |
+| `uncertain` | 1 | 等不到 UI 停止变化，动作可能已生效 |
+| `not_found` | 1 | ref、标签或列表不在当前屏幕 |
+| `lease_held` | 2 | 另一个任务（或人）占着设备 |
+| `handoff` | 2 | Agent 主动把手机交给了人，等 `resume` |
+| `approval_pending` | 3 | 需要人确认这一步 |
+| `blocked` | 4 | 策略在碰设备前拒绝 |
+| `approval_denied` | 4 | 审批 id 错误、用过或过期 |
+| `stale` | 4 | 等待审批期间页面变了 |
+
+### 跨进程状态
+
+- ref 表在 `<state-dir>/refs-<hash>.json`：`observe` 打印的 ref 在下一条命令里仍指向同一个元素。
+- 审批 id 在 `<state-dir>/approvals-<hash>.json`：一次性、10 分钟 TTL、绑定命令与目标签名。
+- 租约在 `<state-dir>/leases/<tag>.lock`；设备序列号只以 8 位哈希出现。
+- 每条命令各写一个 trace 文件；`report` 按 task 从磁盘读回并跨文件重新编号。
+
+## 13. Agent 接入：MCP 与 Skill
+
+### `uitest-phone connect [--agent claude|codex] [--force]`
+
+一步接好 Agent：把 MCP server 写进 Agent 自己的设置文件，并安装随包 Skill。
+
+| Agent | 设置文件 | Skill 目录 |
+|---|---|---|
+| `claude`（默认） | `~/.claude.json`（`$CLAUDE_CONFIG_DIR`） | `~/.claude/skills`、`~/.agents/skills` |
+| `codex` | `~/.codex/config.toml`（`$CODEX_HOME`） | `~/.agents/skills` |
+
+- 只改本包的那一项；注释、键顺序、其它 server 的排版原样保留，已经正确时零写入。
+- 文件解析失败就拒绝并报出文件名与偏移，不替人重写；写入前留一份 `.uitest-phone.bak`。
+- 入口是当前 `node` 加本包绝对路径：从 Dock / 开始菜单启动的 Agent 看不到终端的 `PATH`。
+- 只在本包只存在于 npx 缓存时才写成 `npx -y uitest-sdk@<version> mcp`。
+
+### `uitest-phone mcp`
+
+在 stdio 上以 JSON-RPC 2.0 提供 `initialize`、`tools/list`、`tools/call`。每个命令对应工具
+`uitest_<command>`（如 `uitest_tap`、`uitest_handoff`），参数与 CLI 同名。
+
+- 整个进程只打开一次设备，只持一次租约；schema 由 `COMMANDS` 生成，不会与 CLI 漂移。
+- 非 `settled` 的结果是 MCP 的 **error result**（`isError: true`），内容仍包含状态、退出码与原因。
+- 全局参数同样生效：`uitest-phone mcp --device <id> --read-only --confirm deletes`。
+- 长期运行的会话会在每条命令前重新确认租约：人被 `hold`/`handoff` 拿走的手机，会在下一条命令返回
+  `lease_held`；`resume` 之后自动继续，不用重启 MCP server。
+
+### `uitest-phone install-skill [--dir <path>] [--force]`
+
+把随包的 `SKILL.md` 与 `REFERENCE.md` 写进 Agent 读取的目录：
+
+- `~/.claude/skills/uitest-phone`（Claude Code）
+- `~/.agents/skills/uitest-phone`（agentskills.io 跨 runtime 别名，Codex、Copilot CLI、Gemini CLI 都读）
+
+两个目标先全部检查再写，拒绝时不会留下半套；已有 `SKILL.md` 默认保留，`--force` 覆盖，`--dir` 只写一处。
+
+## 14. 接管与交接
+
+```
+uitest-phone hold [--device <id>] [--state-dir <dir>]
+uitest-phone handoff --reason <text> [--device <id>] [--state-dir <dir>]
+uitest-phone resume [--device <id>] [--state-dir <dir>]
+```
+
+`hold` 把租约写成 `"held by a person"` 后退出。它会抢走正在运行的任务，包括整个进程只持一次租约的
+`uitest-phone mcp` 会话；任务不会在动作中途被打断，而是在下一条命令前拿到 `lease_held`（退出码 2）。
+hold 不按进程存活判断，所以不会自己过期。
+
+`handoff` 是 Agent 发起的一半：Agent 遇到只有人能做的步骤（登录、验证码、解锁）时交出手机。
+它写同一条租约，并把 `reason` 存在租约里；调用立即返回 `handoff`（退出码 2），之后每个拿到
+`lease_held` 的命令都会重复这个原因。Agent 应停下、告诉人需要做什么、结束本轮。
+
+`resume` 释放 hold 或 handoff，且只释放这两种；属于其它任务的租约不碰。交还后同一个 Agent 会话在
+下一条命令自动重新取得设备。MCP 工具名是 `uitest_handoff`，`reason` 必填。
+
+**为什么不用设备侧 UI 事件流**：`streamUiActions` 在停止时会关闭采集会话、能把 agent daemon 卡死，
+而且 agent 注入的合成触摸也会被当成手指上报，无法区分真人和程序。接管因此是人的明确声明，
+这也是 Agent 唯一能遵守的形式。
+
+## 15. Session、策略与审批
+
+CLI 的每条命令就是一个 `Session`。想在自己的脚本里拿到同样的语义，直接用 `Session`：
+
+```ts
+import { Device, Session } from "uitest-sdk";
+
+const dev = await Device.connect();
+const session = await Session.open(dev, { task: "check WLAN" });
+try {
+  await session.observe();
+  const r = await session.tap({ ref: 12 });
+  console.log(r.status, r.text);
+} finally {
+  await session.release();
+}
+```
+
+`Session.open` 的选项：`task`、`stateDir`、`policy: { readOnly, confirm, apps }`、`settleMs`、
+`traceShots`、`lease: { dir, staleMs } | false`。方法包括 `observe`、`tap`、`type`、`swipe`、
+`longPress`、`doubleClick`、`pinch`、`drag`、`fling`、`waitFor`、`readList`、`scrollUntilVisible`、
+`window`、`pressKey`、`settle`、`release`，以及 `steps` 与 `record()`。被其它任务占用时
+`Session.open` 抛 `LeaseHeldError`，此时设备还没被读写。
+
+### 策略
+
+| 规则 | 例子 | 默认 |
+|---|---|---|
+| `credentials` | 密码、password、OTP、PIN、验证码 | 永久拦截 |
+| `payments` | 支付、付款、pay、checkout、transfer | 需要审批 |
+| `finance` | 银行、钱包、bank、wallet、alipay | 需要审批 |
+| `deletes` | 删除、delete、remove、清空 | 需要审批 |
+| `sends` | 发送、send、post、提交消息 | 需要审批 |
+| `commits` | 确认、保存、confirm、save | 不默认，`--confirm commits` 开启 |
+
+`commits` 不默认，是因为手机上半数普通表单按钮都叫「确认 / 保存」，每次都问会把人训练成不看就点同意。
+`--read-only` 拒绝一切改数据的动作；`--apps` 是应用白名单。
+
+### 审批
+
+`approval_pending` 返回一次性 `approvalId`、命中的 rule 与原因。人同意后，用**完全相同的命令**加
+`--approval-id` 重跑。id 绑定命令与目标签名、10 分钟过期、只能用一次；页面变了返回 `stale`。
+审批由 CLI 自己校验，不靠提示词约束 Agent。
+
 ---
 
-生成于 2026-11-15。行为与数字对应的源码版本：`0.1.0`。
+生成于 2026-11-16。行为与数字对应的源码版本：`0.3.0`。

@@ -316,6 +316,7 @@ for (const needle of [
 if (docsHtml.length < 8000) fail(`docs.html is only ${docsHtml.length} bytes; expected the full usage guide`);
 
 for (const needle of [
+  "0.3.0",
   "0.2.0",
   "0.1.0",
   "2026-11-15",

@@ -228,6 +228,7 @@ const dev = await Device.connect({
 ```bash
 npm test                                  # 单元测试（不碰设备）
 npm run test:device                       # 集成测试，需连接设备
+npm run acceptance:handoff                # 真机验收 Agent 接管/交接（需先 build）
 UITEST_TARGET=127.0.0.1:5555 npm run test:device   # 指定目标
 npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 ```
