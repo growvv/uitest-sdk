@@ -151,7 +151,7 @@ uitest dumpLayout -p <path> -w <windowId> -b <bundleName> -a
 | 文本输入 | `uitest uiInput inputText` | ~1,100 ms | 未测 |
 | H.264 流 | casting | 13.6~89 fps（随 `-frameRate`） | **不可用**（无 x86_64 构建） |
 
-模拟器上 agent 多数能力快于真机（虚拟化 CPU + 无真机 SELinux 开销），但 **`Driver.swipe` 是反例：慢 1000 倍以上**（实测 6.2~12.6 s）。所以 `swipe()` **必须走 `Gestures` 三段式**，不能走 `Driver.swipe` —— 真机上也一样（三段式延迟可控且能驱动出帧）。
+模拟器上 agent 多数能力快于真机（虚拟化 CPU + 无真机 SELinux 开销），但 **`Driver.swipe` 是反例：模拟器上慢 19~38 倍**（实测 6.2~12.6 s，三段式 ~330 ms）。所以 `swipe()` **必须走 `Gestures` 三段式**，不能走 `Driver.swipe` —— 真机上它也不快：默认速度单次 1.5~2.2 s，同任务三段式 0.39~0.5 s（快 3~5 倍，见 `docs/12` F2）。
 
 **性能基线以真机为准**，模拟器只做功能验收。
 
@@ -857,7 +857,7 @@ docs/acceptance/
 5. **静态画面帧率**：MJPEG 靠脏区驱动，静止画面**只出 1 帧**（实测，不是「帧率下降」而是「几乎不出帧」）。截图不受影响（起停一次必出帧）；要连续帧必须有画面变化。
 6. **模拟器无 H.264 casting**：不存在 x86_64 构建的 `libscreen_casting`，华为也不公开发布该文件、无公开源码。模拟器上 `createCast()` **自动选 MJPEG 路径**（5.4~10.5 fps），`castKind` 为 `"mjpeg"`。MP4 录制和多路并发在模拟器上不可用（MJPEG 无录制能力，agent 只有一个 capture 通道）。
 7. **冲突率随客户端数上升**：3 客户端 66% 冲突、2 客户端 40%。退避重试能清零失败，但客户端越多，单次调用平均延迟越高。超过 ~5 个客户端同时高频调用时，应改为让一个进程做代理，其他进程连代理。
-8. **`Driver.swipe` 在模拟器上不可用**：实测 6.2~12.6 秒（真机毫秒级）。SDK 的 `swipe()` 走 `Gestures` 三段式（~330 ms），`Driver.swipe` / `drag` / `fling` 一律不封装。
+8. **`Driver.swipe` 在模拟器上不可用**：实测 6.2~12.6 秒（真机默认速度 1.5~2.2 秒，SDK 三段式 0.39~0.5 秒）。SDK 的 `swipe()` 走 `Gestures` 三段式（~330 ms），`Driver.swipe` / `drag` / `fling` 一律不封装。
 9. **capture 期间 `callHypiumApi` 可能阻塞**：实测 capture 开着时 `Driver.click` 正常（128 ms），但 `Driver.swipe` 超时。`Gestures` / `CtrlCmd` / `Captures.captureLayout` 全程正常。这也是 `swipe()` 走 Gestures 的另一个理由。
 10. **7.0 WebSocket 通道未纳入 v1**：`libscrcpy_server_unix_7.0-20260930.z.so` 已实测跑通（同条件帧率 27.4/59.3 fps 与 6.8 持平、首帧 ~390 ms、`-p` 端口隔离多实例、`-m 1` 录制 1,318 帧、`cpd` 单独下发 SPS/PPS）。它**是华为官方签名**（`DevEcoTesting Release ← Huawei CBG Software Signing Service CA ← Huawei CBG Root CA G2`，与 6.8 同链），由华为员工从 HOScrcpy 2.13 提取后提交进 `OldBeer1/hscrcpy`（commit `a3da359`，2026-10-22）。**不进 v1 的理由是供应链而非可信度**：HOScrcpy 2.13 无公开发行渠道、无升级通道、无技术支持、再分发条款未声明。见 `docs/09` §1.6。
 11. **7.0 的 `stopped.frameCount` 上报有 bug**：实测录了 1,318 帧却返回 `frameCount: 1`。若纳入 v2，录制成功判定必须改用文件大小或解析 MP4 `stsz.sample_count`，不能用这个字段。6.8 的 `onEnd` 返回的是真实帧数。

@@ -1,9 +1,13 @@
 # uitest-sdk
 
+[![npm](https://img.shields.io/npm/v/uitest-sdk.svg)](https://www.npmjs.com/package/uitest-sdk)
+[![Node.js](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org/)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 [官网](https://growvv.github.io/uitest-sdk/) · [使用文档](https://growvv.github.io/uitest-sdk/docs.html) · [更新日志](https://growvv.github.io/uitest-sdk/changelog.html) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
 
 把鸿蒙 `uitest` 的设备侧扩展（`agent.so` / `libscreen_casting.z.so`）封装成 TypeScript SDK：
-一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。
+一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。包里同时带一个给人和 Agent 用的命令行。
 
 ```bash
 npm install uitest-sdk
@@ -81,6 +85,43 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 设备侧 `/data/local/tmp/mytest.mp4`（路径写死在扩展里，不可改）拉回 `outputPath`。
 静止画面不产生样本 —— 录制期间要让 UI 动。
 
+## 命令行与 Agent Skill
+
+SDK 之上有一层给人和 Agent 用的 CLI：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
+
+```bash
+npx uitest-sdk doctor                     # 探测设备与能力，确认可用
+npx uitest-sdk observe --task "check WLAN"
+npx uitest-sdk tap --ref 12 --task "check WLAN"
+npx uitest-sdk apps --current
+npx uitest-sdk report --title "WLAN check"
+```
+
+包只有一个可执行文件，安装后命令名是 `uitest-phone`：
+
+```bash
+npm install -g uitest-sdk   # 之后可直接用 uitest-phone
+npx uitest-sdk mcp          # 以 MCP（stdio）暴露全部命令，供 Agent 调用
+npx uitest-sdk install-skill   # 把 Skill 写进 ~/.claude/skills/uitest-phone
+```
+
+- **ref 跨进程稳定**：ref 表存在 `<state-dir>/refs-<device-hash>.json`，`observe` 打印的 ref 在
+  下一条 `tap` 里仍指向同一个元素；不在当前屏幕上的 ref 直接 `not_found`，绝不悄悄指向别的控件。
+- **审批跨进程可用**：`approval_pending` 给出的 id 存在 `<state-dir>/approvals-<device-hash>.json`，
+  下一条命令带 `--approval-id` 就能兑现；id 一次性、有 TTL，页面变了返回 `stale`。
+- **报告跨进程聚合**：每条命令各写一个 trace 文件，`report` 按 task 把它们从磁盘读回来、跨文件重新编号，
+  覆盖整轮任务（含之前那些进程写的步骤），而不是只有写报告这一步。加 `--trace-shots` 每步存一张截图，
+  报告里的链接相对报告自身，截图和 HTML 可以整体搬走。
+- **窗口与多指**：`window` 报告焦点窗口（或某个 bundle 的窗口）的 bundle、焦点与 bounds，可 `--focus`/`--close`；
+  `pinch` 走设备 `PointerMatrix` 做双指缩放，单指通道表达不了两条同时的轨迹。
+- **状态即结果**：`settled` / `uncertain` / `not_found` / `blocked` / `approval_pending` /
+  `approval_denied` / `stale` / `lease_held`，退出码 0/1/1/4/3/4/4/2，非 `settled` 时把
+  `approvalId`、`rule`、`reason` 放进 `--json` 的 `data`。
+- 设备序列号不进任何文件或输出，只用 8 位哈希；`<state-dir>` 里是用户屏幕内容，已被 gitignore。
+
+Skill 正文见 [`assets/skill/SKILL.md`](assets/skill/SKILL.md)，完整命令参考见
+[`assets/skill/REFERENCE.md`](assets/skill/REFERENCE.md)。
+
 ## 多实例
 
 多个进程可以同时连同一台设备：
@@ -92,6 +133,8 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 - **同一时刻只能有一个 capture 会话**：另一个进程会收到 `AgentBusyError`。
 - `dispose()` 默认不杀 daemon。要连带杀掉自己起的那个，用 `{ ownDaemon: true }`。
 - 掉线后下一次调用自动重连（`{ autoRestart: true }`）；**失败的请求不重放** —— 写操作重放不安全。
+- 客户端被强杀后守护进程会留死连接锁住设备；`connect()` 会检测并只重启 `agent.so` 那个守护进程
+  （见「已知限制」）。
 
 ## 已知限制
 
@@ -101,6 +144,15 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 - **静止画面只出 1 帧**。采集是脏区驱动的，这不是卡死；`stopStream()` 随时能结束。
 - **`stopCaptureUiAction` 会关闭会话**，同一连接上的后续调用会失败。UI 事件只上报真实用户输入，
   通过 agent 注入的合成触摸不会回传。
+- **`Component.scrollSearch` 不能用**：目标不存在时设备侧一直阻塞到请求超时（30 s），
+  之后全局锁仍被占住，后续所有命令都报 `Disallow concurrent use`。CLI 的 `scroll-until`
+  改为逐屏翻页，未命中约 4 s 且设备保持可用。
+- **`UIEventObserver.once` 尚不可用**：参数校验要求 `ComponentEventOptions`，传入合法形状后
+  守护进程直接断连（实测 `agent connection closed`）。Toast/UI 事件暂不提供。
+- **被 `kill -9` 的客户端会把设备锁住**：守护进程留下 `CLOSE_WAIT` 连接（`/proc/net/tcp` 状态 `08`），
+  锁不会随超时释放。`connect()` 检测到「有死连接且没有活连接」时，按 `cmdline` 精确定位
+  `--extension-name agent.so` 的进程并重启它（不碰 casting daemon）；识别不到 pid 时报错并给出命令，
+  不会盲杀。
 - **x86_64 没有 casting 构建**（华为不公开发布，也无公开源码），模拟器上只有 MJPEG。
 - `perfmonitor.so`（HTTP 9999）与 AAMS 不在本 SDK 范围内。
 

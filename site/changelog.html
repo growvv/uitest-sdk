@@ -22,6 +22,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-2-0">0.2.0 · 命令行与 Agent</a>
       <a href="#v0-1-0">0.1.0 · 首个公开版本</a>
       <a href="#v0-0-0-stage">0.0.0-stage · npm 占位</a>
       <a href="#roadmap">计划中</a>
@@ -30,6 +31,67 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-2-0">
+        <div class="release-head">
+          <h2>0.2.0</h2>
+          <span class="release-date">2026-11-15</span>
+          <span class="release-tag">命令行与 Agent</span>
+        </div>
+        <p>SDK 之上多了一层给人和 Agent 用的命令行：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。同一套命令既走 CLI，也走 MCP。SDK 的公开接口只增不改，0.1.0 的代码不用改。</p>
+
+        <h3>命令行</h3>
+        <ul>
+          <li>18 条命令：<code>observe</code>、<code>tap</code>、<code>type</code>、<code>swipe</code>、<code>double-click</code>、<code>drag</code>、<code>fling</code>、<code>pinch</code>、<code>key</code>、<code>wait-for</code>、<code>read-list</code>、<code>scroll-until</code>、<code>launch</code>、<code>apps</code>、<code>window</code>、<code>doctor</code>、<code>screenshot</code>、<code>report</code>、<code>status</code>。</li>
+          <li>屏幕模型：每行一个元素，带 ref、角色、标签、中心点与状态；动作后打印 diff。</li>
+          <li>设备侧稳定：动作后先 <code>Driver.waitForIdle</code>，再由 host 轮询两次相同哈希，超时记为 <code>uncertain</code> 而不是抛错。</li>
+          <li>退出码即结果：<code>0</code> settled、<code>1</code> uncertain/not_found、<code>2</code> lease held、<code>3</code> 待审批、<code>4</code> 被拒。</li>
+        </ul>
+
+        <h3>跨进程状态</h3>
+        <ul>
+          <li>ref 表存在 <code>&lt;state-dir&gt;/refs-&lt;hash&gt;.json</code>：<code>observe</code> 打印的 ref 在下一条 <code>tap</code> 里仍指向同一元素；不在当前屏幕就 <code>not_found</code>，绝不悄悄指向别的控件。</li>
+          <li>审批 id 存在 <code>&lt;state-dir&gt;/approvals-&lt;hash&gt;.json</code>：一次性、10 分钟 TTL、绑定命令与目标签名；页面变了返回 <code>stale</code>。</li>
+          <li>报告按 task 把各进程写的 trace 读回来，跨文件重新编号，覆盖整轮任务——包括 <code>apps</code>、<code>launch</code> 这类不走屏幕动作的命令。</li>
+          <li>设备序列号在任何文件与输出里都只以 8 位哈希出现。</li>
+        </ul>
+
+        <h3>安全</h3>
+        <ul>
+          <li>策略层按标签分类：凭据类永久拦截，支付与金融默认需要人工审批，<code>--confirm</code> 可把删除/发送/确认也纳入。</li>
+          <li>审批由 CLI 自己校验，不是靠提示词约束 Agent。</li>
+          <li>一台设备一个任务：第二个任务在碰设备之前拿到 <code>lease_held</code>。</li>
+          <li>被强杀的客户端会在 daemon 上留下 <code>CLOSE_WAIT</code> 死连接并永久锁住设备；<code>connect()</code> 只在没有任何活连接时才重启 agent daemon。</li>
+        </ul>
+
+        <h3>Agent 接入</h3>
+        <ul>
+          <li><code>npx uitest-sdk mcp</code>：stdio 上以 JSON-RPC 2.0 暴露 <code>uitest_&lt;command&gt;</code>，整个进程只开一次设备。</li>
+          <li><code>npx uitest-sdk install-skill</code>：把随包发布的 Skill 写进 Agent 的 skills 目录，命令与二进制永远同版本。</li>
+          <li><code>--trace-shots</code> 每步存截图，报告里的链接相对报告自身，截图与 HTML 可整体搬走。</li>
+        </ul>
+
+        <h3>SDK 新增（兼容）</h3>
+        <ul>
+          <li><code>Session</code>、<code>ScreenReader</code>、<code>Components</code>、<code>Gestures</code>、<code>AppManager</code>、<code>Policy</code>、<code>Approvals</code>、<code>Lease</code>、<code>TraceRecorder</code>、<code>DevicePool</code> 全部导出。</li>
+          <li><code>Device</code> 新增 <code>readonly hdc</code> 与 <code>readonly deviceId</code>；原有成员与方法签名不变。</li>
+          <li><code>isBusyException</code> 参数放宽为 <code>unknown</code>（设备 1.2.x 会把异常发成对象），新增 <code>exceptionText()</code>。</li>
+        </ul>
+
+        <h3>修复</h3>
+        <ul>
+          <li><code>--read-only</code> 之前从未生效：布尔 flag 以 kebab-case 存、以 camelCase 读，被静默丢弃。</li>
+          <li>报告里的截图链接指向文件系统路径，浏览器打不开；改为相对报告目录的正斜杠路径。</li>
+          <li>同一毫秒创建的两个 trace 记录器文件名相同，后者会截断前者的文件。</li>
+          <li><code>apps</code>、<code>launch</code>、<code>doctor</code> 之前完全不进 trace，报告漏掉改变应用的那一步。</li>
+        </ul>
+
+        <h3>工程</h3>
+        <ul>
+          <li>npm 包 919.1 kB / 84 个文件，新增 <code>dist/bin.js</code> 与随包 Skill。</li>
+          <li>335 个单元测试；<code>--version</code> 与 MCP 握手都从 <code>package.json</code> 读版本，不再有第二处字面量。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-1-0">
         <div class="release-head">

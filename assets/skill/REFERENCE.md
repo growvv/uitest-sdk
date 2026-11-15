@@ -1,0 +1,455 @@
+# uitest-phone reference
+
+Complete command and behavior reference. The working loop and safety rules are
+in [SKILL.md](SKILL.md).
+
+## Architecture
+
+```
+agent → uitest-phone → uitest-sdk → agent.so (TCP 8012) → HarmonyOS device
+```
+
+One command opens the device, runs one step, settles, prints the result, and
+releases. There is no background daemon: state that must outlive a command
+(the trace, the lease, pending approvals) lives in the state directory.
+
+- The device extension is pushed and its daemon started on first use; later
+  commands reuse it.
+- The lease is one file per device under `<state-dir>/leases/`. A second task
+  gets `lease_held` before touching anything.
+- Traces are one JSON line per step under `<state-dir>/traces/`, with the
+  device serial replaced by an 8-character hash.
+
+## Requirements and installation
+
+- Node.js 20 or newer.
+- `hdc` on `PATH`, or `HDC_PATH` pointing at it, with one phone or emulator
+  attached.
+- No other install step: `npx uitest-sdk` fetches the package, which carries
+  the device extension for arm64 and x86_64. The installed command is
+  `uitest-phone`; `npx uitest-sdk` runs it without a global install.
+
+Environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `HDC_PATH` | Explicit path to `hdc`. |
+| `HDC_TARGET` | Default device id, when several are attached. |
+
+Install the skill for an agent:
+
+```
+npx uitest-sdk install-skill [--dir <path>] [--force]
+```
+
+The default target is `<home>/.claude/skills/uitest-phone`. An existing
+`SKILL.md` is kept unless `--force` is given, so a hand-edited copy is never
+overwritten by accident. The skill ships inside the package, so its commands
+and the binary are always the same version.
+
+## MCP server
+
+```
+npx uitest-sdk mcp [--device <id>] [--read-only] [--apps a.b] [--confirm rules]
+```
+
+Serves every command as a tool named `uitest_<command>` over stdio, JSON-RPC
+2.0. The session is opened once for the life of the process, so tool calls do
+not pay device startup per step. A tool that returns a non-`settled` status is
+reported as a tool error (`isError: true`) with the status and its reason in
+the text, not as a transport failure.
+
+```json
+{"mcpServers": {"phone": {"command": "npx", "args": ["uitest-sdk", "mcp"]}}}
+```
+
+## Screen model
+
+Each screen line:
+
+```
+[ref] role "label" @centerX,centerY state1 state2
+```
+
+The header is:
+
+```
+screen <width>x<height> · app: <bundle> · rotation <degrees>° · focus [ref]
+```
+
+- `ref` is allocated per session and stays bound to a signature of
+  `role | label | bounds | description | hint`. The ref survives rerenders while
+  all of those stay the same.
+- Refs reset when the process exits; they are not global IDs. A new command
+  reads a fresh screen, so refs from a previous command only work if the screen
+  did not change.
+- Scroll changes bounds, so refs to list items change after a scroll. That is
+  why `read-list` exists.
+- Labels prefer `text`, then `description`, then `hint`; labeled buttons fall
+  back to descendant text, then to a cleaned `id`. An input with only an id gets
+  a humanized label such as `"history record go"`.
+- Hidden nodes, zero-area nodes, the top status bar, the bottom navigation bar,
+  and structural containers (`column`, `row`, `stack`, `scroll`, `swiper`, …)
+  are omitted.
+- A clickable ancestor that only repeats a deeper clickable control's label is
+  dropped, so the agent aims at the control rather than its container.
+- Roles: `text`, `button`, `input`, `list`, `toggle`, `checkbox`, `radio`,
+  `slider`, `tabs`, `nav`, and raw component names.
+- States: `focused`, `disabled`, `checked`, `selected`, `scrollable`,
+  `password`.
+
+After an action, a diff is printed:
+
+```
++ [31] button "Save" @658,2400
+- [12] button "Edit" @1200,610
+~ [4] input "hello" @658,300 focused
+```
+
+`no change` means the screen hash did not change. A full screen is printed when
+the bundle, display size, or rotation changed, or when more than half the lines
+changed.
+
+## Settling
+
+After every action the CLI waits for the UI to stop changing:
+
+1. `Driver.waitForIdle(200, 3000)` on the device. This is one round trip and the
+   device sees animations a host cannot.
+2. Then host polling: two consecutive identical screen hashes. A repaint takes a
+   frame or two, so an unchanged screen is disbelieved for 400 ms after an
+   action — otherwise the old page is read twice and reported as "no change".
+3. The whole wait is bounded by `--settle-ms` (default 3000). Exceeding it is
+   reported as `uncertain`, not thrown.
+
+## Commands
+
+All commands accept the global flags from SKILL.md and print a status line
+first. `--json` prints `{status, code, text, data}` instead.
+
+### observe
+
+```
+observe [--out shot.jpg] [--wait-ms 3000]
+```
+
+Reads the screen. `--wait-ms` first waits for the screen to change, which is
+useful right after a `launch`. `--out` also saves a JPEG.
+
+### tap
+
+```
+tap --ref 12 [--long]
+tap --text WLAN
+tap --selector "type=Button&text=Save"
+tap --x 600 --y 1200
+```
+
+A ref is resolved against the current screen and tapped at its center. `--text`
+and `--selector` go through the device's own `Component.click`, which does not
+need a layout read. `--long` holds the pointer for 800 ms.
+
+### type
+
+```
+type --text "hello" [--ref 7]
+```
+
+Types into the focused input, or the input at `--ref`. Uses the device IME, so
+Chinese and emoji work. A password field is refused before any keystroke.
+
+### swipe
+
+```
+swipe --direction up|down|left|right [--ref 20] [--duration-ms 300]
+swipe --from 600,1800 --to 600,600
+```
+
+The direction form swipes inside `--ref` when given, otherwise inside a box
+inset 12% from the screen edge. Every path is built from pointer down/move/up;
+`Driver.swipe` is 3–5x slower on a real device and 19–38x slower on the
+emulator, and gives no control over the path.
+
+### double-click
+
+```
+double-click --ref 12
+double-click --text "Photo"
+```
+
+Uses the device's own `Component.doubleClick` when the target came from a
+label or selector, so the two taps are timed by the device rather than by the
+host.
+
+### drag
+
+```
+drag --from 600,1400 --to 600,500 [--hold-ms 300] [--duration-ms 500]
+```
+
+Holds before moving. The hold is what makes the device treat the gesture as
+dragging a held item; without it the list scrolls instead. Use `swipe` for
+scrolling and `drag` only when the UI expects a reorder.
+
+### fling
+
+```
+fling --direction up
+fling --from 600,1800 --to 600,600
+```
+
+A short, fast path (120 ms by default): the release velocity keeps the list
+moving after the finger lifts. A `swipe` of the same distance stops when the
+finger stops.
+
+### pinch
+
+```
+pinch --ref 20 --scale 2
+pinch --center 608,1300 --from 150 --to 400
+```
+
+Two fingers moving apart or together, through the device's `PointerMatrix`.
+The single-pointer channel cannot express two simultaneous paths.
+
+- `--ref` pinches inside that element; its middle becomes the center and the
+  fingers start a quarter of its shorter side apart.
+- `--center x,y` pinches around a point, with `--from` and `--to` as
+  half-distances.
+- `--scale` sets the end distance as a multiple of the start: `2` zooms in,
+  `0.5` zooms out. `--to` wins over `--scale` when both are given.
+
+### window
+
+```
+window
+window --bundle com.example.app
+window --bundle com.example.app --focus
+window --bundle com.example.app --close
+```
+
+Reports the focused window, or the one a bundle owns: bundle id, whether it
+has focus, and its bounds. `--focus` raises it first; `--close` closes it and
+reports `bounds: -`, because a closed window has none.
+
+The extension has no window enumeration — `Driver.findWindows` does not exist —
+so a window is always addressed by filter. A filter that matches nothing is
+`not_found`.
+
+### key
+
+```
+key --key back|home|power|enter|escape|volume-up|...
+key --key 2054
+```
+
+Named keys map to HarmonyOS key codes. `power` is sent as 26, which is the code
+measured to wake this device's display.
+
+### wait-for
+
+```
+wait-for --text "Connected" [--timeout-ms 10000]
+```
+
+Uses `Driver.waitForComponent` on the device: one round trip, and the device
+sees layout passes a host poll cannot. A timeout is `not_found`, not an error.
+
+### read-list
+
+```
+read-list [--ref 20] [--max-screens 8]
+```
+
+Pages the largest scrollable on screen, or the one at `--ref`, and prints every
+distinct label once, in reading order. Stops at the list's own end marker, when
+a scroll reveals nothing new, or at the screen budget. A list that does not
+announce its end costs one extra scroll.
+
+### scroll-until
+
+```
+scroll-until --text "About" [--ref 20] [--max-screens 8]
+```
+
+Pages the list one screen at a time, like `read-list`, and stops at the first
+page containing the label. A label already on screen costs no scroll.
+
+The device's `Component.scrollSearch` is deliberately not used. Measured on a
+real device, a search that misses blocks for 30 s until the request times out,
+and the device's global lock stays held afterwards — every following command
+then fails with `Disallow concurrent use` for about a minute. Paging costs one
+scroll per screen and leaves the device usable.
+
+### launch
+
+```
+launch --app settings
+launch --app com.example.app --ability EntryAbility
+```
+
+Resolves a short name through the alias table, then against installed bundles;
+an ambiguous name is an error that lists the candidates. The entry ability is
+read from `bm dump` — Settings declares
+`com.huawei.hmos.settings.MainAbility`, Calculator declares
+`CalculatorAbility` — and an `aa start` failure is surfaced rather than
+reported as success.
+
+Aliases: `settings`, `launcher`/`home`, `camera`, `photos`/`gallery`, `clock`,
+`calendar`, `calculator`.
+
+### apps
+
+```
+apps [--query wechat]
+apps --current
+apps --has com.example.app
+```
+
+Lists installed bundle ids, filtered by substring. Exact match first, then
+last-segment match, then substring.
+
+`--current` reports the app in front, as `bundle · ability`. A locked device
+has no foreground mission and answers `not_found`, which is the truth rather
+than a failure.
+
+`--has` answers whether one bundle is installed: `settled` with
+`installed: true`, or `not_found` with exit code 1. Use it before `launch`
+when the bundle id is uncertain.
+
+### doctor
+
+```
+doctor
+```
+
+Probes each capability this CLI depends on — `waitForIdle`, `findComponent`,
+`waitForComponent`, `findWindow`, `multiTouch` — and reports the target count,
+display size and session policy. A missing capability is reported, not thrown.
+Serial numbers appear only as an 8-character hash.
+
+### screenshot
+
+```
+screenshot [--out shot.jpg]
+```
+
+Saves the device JPEG and reports `frame`, `display` and `factor`. The device
+ignores the requested scale and returns a fixed frame (measured 608x1344 for a
+1216x2688 display), so the factor comes from the frame itself. Double any pixel
+measured in the image before using it as a tap coordinate.
+
+### report
+
+```
+report [--title "WLAN check"] [--task "WLAN check"]
+```
+
+Writes a self-contained HTML file with every step to `<state-dir>/traces/`.
+With `--trace-shots`, each row also links to the screenshot saved for that
+step; the link is relative to the report, so the pair can be moved together.
+
+Every command is recorded, including the ones that never read the screen
+(`apps`, `launch`, `doctor`, `window`), so the step that changed the app is in
+the report too.
+
+Each command is its own process and writes its own trace file, so the report
+reads the task's files back from disk and renumbers the steps across them. It
+covers the most recent run of the task — files more than 30 minutes apart start
+a new run, so an old attempt at the same task name does not get mixed in.
+
+`--task` picks a task other than this session's. With neither `--task` nor a
+task that recorded steps, it falls back to the newest task and prints which one
+it covered, rather than writing an empty report. The status line says how many
+steps and trace files went in.
+
+### status
+
+```
+status
+```
+
+Prints the task name, device hash, read-only flag, confirm rules and app
+allow-list.
+
+## Selectors
+
+```
+text=WLAN            exact label
+text~=WLAN           label contains
+type=Button          component type (case-sensitive on the device)
+id=id_content        component id
+clickable            bare predicate means "true"
+type=Button&text=Save
+text="A & B = C"     quote a value that contains & or =
+```
+
+## Statuses and exit codes
+
+| Status | Exit | Meaning |
+| --- | --- | --- |
+| `settled` | 0 | The step ran and the UI settled. |
+| `uncertain` | 1 | The UI never stopped changing within `--settle-ms`. |
+| `not_found` | 1 | The ref, label or list is not on screen. |
+| `lease_held` | 2 | Another task holds this device. |
+| `approval_pending` | 3 | A person must approve this exact step. |
+| `blocked` | 4 | Policy refused before the device was touched. |
+| `approval_denied` | 4 | The approval id was wrong, used or expired. |
+| `stale` | 4 | The screen changed while the approval waited. |
+
+## Approvals
+
+The policy classifies the labels of every element under the target:
+
+| Rule | Examples | Default |
+| --- | --- | --- |
+| `credentials` | 密码, password, OTP, PIN | always blocked |
+| `payments` | 支付, 付款, pay, checkout, transfer | approval |
+| `finance` | 银行, 钱包, bank, wallet, alipay | approval |
+| `deletes` | 删除, 卸载, delete, reset | allowed |
+| `sends` | 发送, 发布, send, publish | allowed |
+| `commits` | 确认, 保存, confirm, save | allowed |
+
+Latin words match on word boundaries, so `pay` does not fire inside
+`paypal`; Chinese matches as a substring. `--confirm` moves rules into the
+approval set.
+
+An approval id is bound to the command, its arguments and the target's
+signature. It is single-use and expires after 10 minutes. A step whose target
+moved between approval and execution returns `stale`; a step that changed in any
+other way returns `approval_denied`.
+
+## State directory
+
+```
+<state-dir>/
+  leases/<device-hash>.lock        one task per device
+  refs-<device-hash>.json          ref table, so refs outlive a command
+  approvals-<device-hash>.json     ids a person has been asked for
+  traces/<timestamp>-<task>.jsonl  one file per command
+  traces/<timestamp>-<title>.html
+  shots/                           per-step screenshots, with --trace-shots
+```
+
+The ref and approval files are what make the one-command-per-invocation model
+work: the ref an `observe` printed still addresses the same element in the
+next `tap`, and the id an `approval_pending` printed can be redeemed by the
+command that replays the step. A ref that is not on the current screen does not
+resolve at all — it never silently addresses whatever took its place.
+
+The device serial never appears in any of these files; only an 8-character
+hash. The directory contains the person's screen contents: never commit it or
+paste it into a document.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `no hdc target attached` | Device not visible to `hdc` | `hdc list targets`; enable USB debugging. |
+| `agent daemon never listened on 8012` | `uitest` could not start | Check `pidof uitest`; reboot the device if the daemon is wedged. |
+| `lease_held` | Another task holds the device | Wait for its heartbeat to expire, or remove the lock file if that task is gone. |
+| `Disallow concurrent use` | Two processes drive one device, or a killed one still holds it | Use one task per device. A client killed mid-command leaves a `CLOSE_WAIT` socket on the daemon that holds the lock indefinitely; `connect` restarts the agent daemon when no live client is connected, and tells you the exact command when it cannot. |
+| `Capture already running` | A recording is active | Stop it; capture is one channel per device. |
+| `not_found` right after a tap | The ref belongs to the previous screen | `observe` and use the new refs. |
+| `uncertain` on launch | The app animates longer than `--settle-ms` | Raise `--settle-ms` or `wait-for` the expected label. |
+| `waitForIdle=no` in `doctor` | Older extension build | Settling falls back to host polling; everything else still works. |

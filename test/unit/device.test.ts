@@ -15,6 +15,8 @@ const hdcState = {
   shellCalls: [] as string[],
   pushed: [] as string[],
   removedPorts: [] as number[],
+  /** Pids the code killed explicitly. */
+  killed: [] as string[],
   /** `pidof uitest` before any daemon start. */
   pidof: "1000",
   /** `pidof uitest` after `start-daemon` succeeded. */
@@ -22,6 +24,15 @@ const hdcState = {
   extDir: "",
   /** Port the fake agent listens on; FakeHdc forwards to it. */
   agentPort: 0,
+  /** Extra lines for the fake `cat /proc/net/tcp`, beyond the listener. */
+  sockets: [] as string[],
+  /**
+   * The fake agent answers "Disallow concurrent use" while this is true.
+   * Killing the daemon clears it, the way a restarted daemon starts clean.
+   */
+  stuck: false,
+  /** `cat /proc/<pid>/cmdline` output for each pid `pidof uitest` reports. */
+  cmdlines: {} as Record<string, string>,
 };
 
 /** Fake agent server that answers the connect-time health check. */
@@ -33,7 +44,11 @@ async function startFakeAgent(): Promise<{ port: number; close(): Promise<void> 
       let i;
       while ((i = buf.indexOf(0x0a)) >= 0) {
         buf = buf.subarray(i + 1);
-        sock.write('{"result":{"width":1216,"height":2688}}\n');
+        if (hdcState.stuck) {
+          sock.write('{"result":null,"exception":"Disallow concurrent use"}\n');
+        } else {
+          sock.write('{"result":{"width":1216,"height":2688}}\n');
+        }
       }
     });
   });
@@ -80,11 +95,22 @@ vi.mock("../../src/hdc.js", () => {
       if (cmd.includes("start-daemon")) {
         hdcState.listening = true;
         hdcState.pidof = hdcState.pidofAfterStart;
+        hdcState.stuck = false;
         return "";
+      }
+      if (cmd.startsWith("kill -9 ")) {
+        hdcState.killed.push(cmd.slice("kill -9 ".length));
+        hdcState.stuck = false;
+        return "";
+      }
+      if (cmd.startsWith("cat /proc/") && cmd.includes("/cmdline")) {
+        const pid = cmd.split("/")[2] ?? "";
+        return hdcState.cmdlines[pid] ?? "";
       }
       if (cmd.includes("pidof uitest")) return hdcState.pidof;
       if (cmd.includes("/proc/net/tcp")) {
-        return hdcState.listening ? "  2: 00000000:1F4C 00000000:0000 0A" : "";
+        if (!hdcState.listening) return "";
+        return ["  2: 00000000:1F4C 00000000:0000 0A", ...hdcState.sockets].join("\n");
       }
       if (cmd.startsWith("ls -l /data/local/tmp/agent.so")) return "-rwxr-xr-x 1 root root 123456 /data/local/tmp/agent.so";
       return "";
@@ -113,6 +139,10 @@ beforeEach(() => {
   hdcState.pidofAfterStart = "1000 2000";
   hdcState.extDir = makeExtDir("arm64", true);
   hdcState.agentPort = 0;
+  hdcState.sockets = [];
+  hdcState.stuck = false;
+  hdcState.killed = [];
+  hdcState.cmdlines = { "1000": "/system/bin/uitest\u0000start-daemon\u0000singleness\u0000--extension-name\u0000agent.so\u0000" };
 });
 
 // --------------------------------------------------------------------- tests
@@ -298,6 +328,98 @@ describe("Device.connect", () => {
       .rejects.toThrow(AgentConnectionError);
 
     await dev.dispose();
+    await agent.close();
+  });
+
+  it("restarts a daemon whose global lock is held by a dead connection", async () => {
+    // Measured on a real device: a client killed mid-request leaves a
+    // CLOSE_WAIT socket on the daemon (state 08), and that dead socket keeps
+    // the global lock forever — every request answers "Disallow concurrent
+    // use" and waiting does not help. The daemon is alive, so `pidof` cannot
+    // tell this from a healthy one.
+    hdcState.listening = true;
+    hdcState.sockets = [" 14: 0100007F:1F4C 0100007F:DC6E 08 00000000:00000001 00:00000000"];
+    hdcState.stuck = true;
+    hdcState.pidofAfterStart = "1000 4000";
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    expect(hdcState.killed).toContain("1000");
+    expect(hdcState.shellCalls.some((c) => c.includes("start-daemon"))).toBe(true);
+    expect(dev.state).toBe("connected");
+    await dev.dispose();
+    await agent.close();
+  });
+
+  it("leaves a casting daemon alone when the agent daemon is the stuck one", async () => {
+    // Both are the same binary, so `pidof uitest` cannot tell them apart. Only
+    // the agent daemon's command line names agent.so.
+    hdcState.listening = true;
+    hdcState.sockets = [" 14: 0100007F:1F4C 0100007F:DC6E 08 00000000:00000001 00:00000000"];
+    hdcState.stuck = true;
+    hdcState.pidof = "1000 1001";
+    hdcState.pidofAfterStart = "1000 1001 4000";
+    hdcState.cmdlines = {
+      "1000": "/system/bin/uitest\u0000start-daemon\u0000singleness\u0000--extension-name\u0000agent.so\u0000",
+      "1001": "/system/bin/uitest\u0000start-daemon\u0000singleness\u0000--extension-name\u0000libscreen_casting.z.so\u0000",
+    };
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    expect(hdcState.killed).toEqual(["1000"]);
+    expect(hdcState.killed).not.toContain("1001");
+    await dev.dispose();
+    await agent.close();
+  });
+
+  it("does not restart when the socket is merely in TIME_WAIT", async () => {
+    // 06 is TIME_WAIT: the peer is gone and the kernel will reap it, but it is
+    // not holding the lock. Restarting for it would kill a healthy daemon.
+    hdcState.listening = true;
+    hdcState.sockets = [" 11: 0100007F:1F4C 0100007F:A16A 06 00000000:00000000"];
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    expect(hdcState.shellCalls.some((c) => c.includes("kill"))).toBe(false);
+    await dev.dispose();
+    await agent.close();
+  });
+
+  it("never restarts a daemon another client is still using", async () => {
+    // A live peer (01) means someone else's task owns the daemon. The busy
+    // reply is theirs to finish with; killing the daemon would break it.
+    hdcState.listening = true;
+    hdcState.sockets = [
+      " 14: 0100007F:1F4C 0100007F:DC6E 08 00000000:00000001 00:00000000",
+      " 15: 0100007F:1F4C 0100007F:1234 01 00000000:00000000 00:00000000",
+    ];
+    hdcState.stuck = true;
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+
+    await expect(Device.connect({ extensionDir: hdcState.extDir }))
+      .rejects.toThrow(/busy|concurrent/i);
+    expect(hdcState.killed).toEqual([]);
+    await agent.close();
+  });
+
+  it("explains a stuck daemon instead of retrying forever when it cannot restart", async () => {
+    hdcState.listening = true;
+    hdcState.sockets = [" 14: 0100007F:1F4C 0100007F:DC6E 08 00000000:00000001 00:00000000"];
+    hdcState.stuck = true;
+    // No pid's command line names agent.so, so nothing can be safely killed.
+    hdcState.cmdlines = {};
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+
+    // A short timeout would mask the point: the busy reply is retried inside
+    // the request, so the failure that must be explained is the busy one.
+    await expect(Device.connect({ extensionDir: hdcState.extDir }))
+      .rejects.toThrow(/dead connection|kill -9/i);
+    expect(hdcState.killed).toEqual([]);
     await agent.close();
   });
 

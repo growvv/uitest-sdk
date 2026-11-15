@@ -113,6 +113,24 @@ describe("AgentClient", () => {
     expect(n).toBe(1);
     c.close();
   });
+
+  it("accepts an object exception without crashing", async () => {
+    replyFn = () => '{"result":null,"exception":{"code":-1,"message":"WindowFilter cannot be empty"}}\n';
+    await expect(client.call("CtrlCmd", { api: "x", args: [] })).rejects.toThrow(AgentProtocolError);
+    await expect(client.call("CtrlCmd", { api: "x", args: [] })).rejects.toThrow(/WindowFilter cannot be empty/);
+  });
+
+  it("recognises a busy exception delivered as an object", async () => {
+    let n = 0;
+    replyFn = () => {
+      n++;
+      return '{"result":null,"exception":{"code":1,"message":"Disallow concurrent use"}}\n';
+    };
+    const c = new AgentClient(connectedSocket(), { maxBusyRetries: 2 });
+    await expect(c.call("CtrlCmd", { api: "x", args: [] })).rejects.toThrow(AgentBusyError);
+    expect(n).toBe(3);
+    c.close();
+  });
 });
 
 function connectedSocket(): net.Socket {

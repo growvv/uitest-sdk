@@ -2,7 +2,7 @@ import net from "node:net";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentClient } from "./agent/client.js";
+import { AgentClient, isBusyException } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
 import { HdcRunner } from "./hdc.js";
 import { H264CastClient } from "./cast/client.js";
@@ -10,6 +10,7 @@ import { MjpegCastClient } from "./cast/mjpeg.js";
 import { CASTING_EXTENSION, resolveCastingExtension } from "./cast/resolve.js";
 import type { CastClient, CastOptions } from "./cast/types.js";
 import {
+  AgentBusyError,
   AgentConnectionError,
   DaemonStartError,
   DeviceNotConnectedError,
@@ -71,18 +72,28 @@ function connectTcp(port: number): Promise<net.Socket> {
 export class Device {
   readonly agent: AgentClient;
   readonly cli: CliRunner;
+  /**
+   * The hdc target this device drives. Public because the session layer needs a
+   * shell for app management, and because a lease and a trace are keyed by it.
+   */
+  readonly hdc: HdcRunner;
+  /** Serial of the target in use; hashed before it reaches a trace or lease. */
+  readonly deviceId: string;
 
   private _state: "connected" | "disconnected" = "connected";
 
   private constructor(
-    private readonly hdc: HdcRunner,
+    hdc: HdcRunner,
     private readonly opts: DeviceOptions,
+    deviceId: string,
     private readonly abi: "arm64" | "x86_64",
     private readonly extDir: string,
     agent: AgentClient,
     private readonly localPort: number,
     private readonly ownPid: string | null,
   ) {
+    this.hdc = hdc;
+    this.deviceId = deviceId;
     this.agent = agent;
     this.cli = new CliRunner(hdc);
   }
@@ -145,7 +156,39 @@ export class Device {
       });
 
       // Health check: proves the tunnel really reaches the extension.
-      await agent.getDisplaySize();
+      try {
+        await agent.getDisplaySize();
+      } catch (e) {
+        // A killed client leaves a CLOSE_WAIT socket on the daemon, and that
+        // dead socket holds the global lock forever: every request answers
+        // "Disallow concurrent use" and waiting does not help. The daemon is
+        // alive, so `pidof` cannot tell this from a healthy one — the socket
+        // state can. Only restart when nothing else is connected.
+        if (!isBusyException(e) || !(await lockHeldByDeadSocket(hdc))) throw e;
+        const pids = await agentDaemonPids(hdc);
+        if (pids.length === 0) {
+          throw new AgentBusyError(
+            "the agent daemon's lock is held by a dead connection and its pid cannot be " +
+              "identified; run `hdc shell kill -9 $(pidof uitest)` and retry",
+            "EBUSY",
+            e,
+          );
+        }
+        agent.close();
+        agent = null;
+        sock = null;
+        for (const pid of pids) await hdc.shell(`kill -9 ${pid}`).catch(() => undefined);
+        await sleep(200);
+        await startDaemon(hdc);
+        await waitForAgent(hdc);
+        sock = await connectTcp(localPort);
+        agent = new AgentClient(sock, {
+          requestTimeoutMs: opts.requestTimeoutMs,
+          retryOnBusy: opts.retryOnBusy,
+          reconnect,
+        });
+        await agent.getDisplaySize();
+      }
     } catch (e) {
       // A half-built tunnel must not outlive the failure: the open socket keeps
       // the event loop alive and a stale port forward blocks the next attempt.
@@ -156,7 +199,10 @@ export class Device {
       throw e;
     }
 
-    return new Device(hdc, opts, abi, extDir, agent!, localPort, ownPid);
+    // The target actually in use: an explicit id, the environment's, or the
+    // only attached target. A trace and a lease are keyed by it.
+    const deviceId = opts.deviceId ?? process.env.HDC_TARGET ?? targets[0]!;
+    return new Device(hdc, opts, deviceId, abi, extDir, agent!, localPort, ownPid);
   }
 
   get state(): "connected" | "disconnected" {
@@ -253,6 +299,54 @@ async function startDaemon(hdc: HdcRunner): Promise<string | null> {
   // started one in the same window. Either way ownership is unknown, and
   // claiming it would let dispose() kill someone else's daemon.
   return fresh.length === 1 ? fresh[0]! : null;
+}
+
+/**
+ * True when the agent's listening socket has a peer in CLOSE_WAIT (state 08)
+ * and no live peer at all.
+ *
+ * Measured on a real device: a client killed mid-request leaves exactly this,
+ * and the daemon's global lock stays held until the daemon exits — waiting
+ * does not clear it. Two conditions keep the restart safe:
+ *
+ * - TIME_WAIT (06) is not counted. That peer is gone and the kernel reaps it,
+ *   so restarting for it would kill a healthy daemon.
+ * - A live peer (01) means someone else is using the daemon. Killing it would
+ *   break that task, and the lock will be released when they finish.
+ */
+async function lockHeldByDeadSocket(hdc: HdcRunner): Promise<boolean> {
+  const out = await hdc.shell("cat /proc/net/tcp").catch(() => "");
+  let dead = false;
+  for (const line of out.split(/\r?\n/)) {
+    const f = line.trim().split(/\s+/);
+    if (f.length < 4) continue;
+    const local = f[1] ?? "";
+    const remote = f[2] ?? "";
+    const st = f[3] ?? "";
+    if (!local.endsWith(`:${AGENT_PORT_HEX}`)) continue;
+    if (remote.startsWith("00000000")) continue; // the listener itself
+    if (st === "01") return false; // a live client owns the daemon
+    if (st === "08") dead = true;
+  }
+  return dead;
+}
+
+/**
+ * The pid(s) of the agent daemon, read from each process's command line.
+ *
+ * `pidof uitest` is not enough: a casting daemon is the same binary, and
+ * killing it would break someone's stream. `--extension-name agent.so` is what
+ * tells them apart.
+ */
+async function agentDaemonPids(hdc: HdcRunner): Promise<string[]> {
+  const candidates = pids(await hdc.shell("pidof uitest"));
+  const found: string[] = [];
+  for (const pid of candidates) {
+    const cmdline = await hdc.shell(`cat /proc/${pid}/cmdline`).catch(() => "");
+    // The file is NUL-separated and `tr` is missing on this device's shell.
+    if (cmdline.includes("agent.so")) found.push(pid);
+  }
+  return found;
 }
 
 async function waitForAgent(hdc: HdcRunner): Promise<void> {

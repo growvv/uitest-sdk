@@ -79,10 +79,33 @@
 | 单张截图 | `snapshot_display` 675 ms | agent MJPEG 起停 **178 ms** | **3.8× 快** |
 | UI 树 | `dumpLayout` + pull | `captureLayout` 473 ms | **2× 快** |
 | 单次点击 | agent RPC 113 ms | `Gestures` **7.7 ms** | **15× 快** |
-| 滑动 | agent `Driver.swipe` | `Gestures` 三段式 **48 ms** | 真机持平；模拟器快 1000× |
+| 滑动 | agent `Driver.swipe`（真机默认 1.5–2.2 s；模拟器 6.2–12.6 s） | `Gestures` 三段式（300 ms 手势，端到端 0.39–0.5 s） | 真机 3–5× 快；模拟器 19–38× 快 |
 | 文本输入 | agent `Driver.inputText` | 同 | 持平（730~1540 ms） |
 | 录屏 | ❌ 7.0 上坏 | ✅ 6.8 `-m 1` | **只有我们能跑** |
 | 投流 | gRPC 6.5 | gRPC 6.8（~89 fps）/ WebSocket 7.0 | 我们更新 |
+
+### F2. 手势合成 vs `Driver.swipe` 行为对比（真机 BRA-AL00 / uitest 7.0.0.1）
+
+同一段 600 px 竖滑（`(608,1500) → (608,900)`），在「设置 → 应用和元服务」的应用列表里执行；
+每次先把列表滚回顶部，再用同一批文本节点在执行前后的 y 位移算 `scrollPx`。
+
+| 实现 | 参数 | 调用耗时 | 列表滚动 |
+|---|---|---|---|
+| 手势合成 | 300 ms / 8 步 | 464 ms | 991 px |
+| 手势合成 | 150 ms / 8 步 | 272 ms | 1351 px |
+| 手势合成 | 80 ms / 6 步 | 215 ms | 2175 px |
+| `Driver.swipe` | 默认速度 | 1504 ms | 676 px |
+| `Driver.swipe` | speed 1000 | 882 ms | 769 px |
+| `Driver.swipe` | speed 2000 | 467 ms | 877 px |
+| `Driver.swipe` | speed 4000 | 224 ms | 1389 px |
+| `Driver.swipe` | speed 7500 | 133 ms | 0 px（不滚动） |
+
+- 常规速度下行为一致：桌面横滑两边都恰好切一页；列表滚动方向与量级一致。调用耗时相同的一对
+  （手势 300 ms / 991 px vs `Driver.swipe` 2000 / 877 px）我们多约 13% 惯性。
+- `Driver.swipe` 的 speed 超过约 4000 px/s 后不可靠：7500 时列表完全不动；手势合成 80 ms
+  仍能滚 2175 px。
+- 未覆盖：多指手势（两者都不是多指接口）、长按拖拽（需用 `touchDown/Move/Up` 组合）、
+  手势中断恢复（我们实现会先 `touchUp` 再抛错，`Driver.swipe` 内部处理）。
 
 ---
 

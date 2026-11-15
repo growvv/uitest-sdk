@@ -32,12 +32,33 @@ const BUSY_PATTERN = "Disallow concurrent use";
 /** One capture channel per device: waiting on it would steal another's stream. */
 const CAPTURE_CONFLICT_PATTERN = "Capture already running";
 
-export function isBusyException(msg: string): boolean {
-  return msg.includes(BUSY_PATTERN);
+/**
+ * The device sends `exception` either as a string (1.1.x) or as an object with
+ * `code`/`message` (some APIs, and 1.2.x). Normalise before matching, or the
+ * first `.includes` on an object takes the whole client down.
+ */
+export function exceptionText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    for (const key of ["message", "msg", "error", "reason", "code"]) {
+      if (typeof o[key] === "string") return o[key] as string;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value ?? "unknown exception");
 }
 
-function isCaptureConflict(msg: string): boolean {
-  return msg.includes(CAPTURE_CONFLICT_PATTERN);
+export function isBusyException(msg: unknown): boolean {
+  return exceptionText(msg).includes(BUSY_PATTERN);
+}
+
+function isCaptureConflict(msg: unknown): boolean {
+  return exceptionText(msg).includes(CAPTURE_CONFLICT_PATTERN);
 }
 
 const NOT_RUNNING_PATTERNS = [
@@ -48,13 +69,13 @@ const NOT_RUNNING_PATTERNS = [
 
 /** True for the "another process already stopped it" failures `stopStream` tolerates. */
 function isNotRunning(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
+  const msg = e instanceof Error ? e.message : exceptionText(e);
   return NOT_RUNNING_PATTERNS.some((p) => msg.includes(p));
 }
 
 interface AgentReply {
   result?: unknown;
-  exception?: string;
+  exception?: unknown;
   pts?: number;
 }
 
@@ -201,21 +222,22 @@ export class AgentClient {
       for (let attempt = 0; ; attempt++) {
         const raw = await this.sendOnce(method, params);
         if (raw.exception == null) return raw.result;
+        const text = exceptionText(raw.exception);
 
         // spec §4.6: a capture conflict is thrown immediately — no waiting,
         // no takeover. Only the global-lock conflict is retried.
         if (isCaptureConflict(raw.exception)) {
-          throw new AgentBusyError(raw.exception, "EBUSY");
+          throw new AgentBusyError(text, "EBUSY");
         }
         const busy = isBusyException(raw.exception);
         if (!this.retryOnBusy || !busy) {
           throw busy
-            ? new AgentBusyError(raw.exception, "EBUSY")
-            : new AgentProtocolError(raw.exception, "EPROTO");
+            ? new AgentBusyError(text, "EBUSY")
+            : new AgentProtocolError(text, "EPROTO");
         }
         if (attempt >= this.maxBusyRetries) {
           throw new AgentBusyError(
-            `device stayed busy after ${attempt + 1} attempts: ${raw.exception}`,
+            `device stayed busy after ${attempt + 1} attempts: ${text}`,
             "EBUSY",
           );
         }
