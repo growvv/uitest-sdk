@@ -117,4 +117,26 @@ if (seconds === null) fail("demo.mp4 has no parsable mvhd box");
 if (seconds < 29 || seconds > 31) fail(`demo.mp4 is ${seconds.toFixed(1)}s, expected 29–31s`);
 console.log(`video ${seconds.toFixed(1)}s`);
 
+// ------------------------------------- task 7: architecture, limits, video
+const arch = sectionHtml("arch");
+for (const needle of ["<svg", "agent.so", "libscreen_casting.z.so"]) {
+  if (!arch.includes(needle)) fail(`#arch 缺少「${needle}」`);
+}
+
+const limits = sectionHtml("limits");
+const limitItems = (limits.match(/<li>/g) ?? []).length;
+if (limitItems < 5) fail(`#limits 只有 ${limitItems} 条 <li>，至少需要 5 条`);
+
+const videoTag = html.match(/<video\b[^>]*>/)?.[0] ?? "";
+if (!videoTag) fail("页面缺少 <video>");
+for (const attr of ["controls", "playsinline", 'poster="assets/demo-poster.jpg"', 'src="assets/demo.mp4"']) {
+  if (!videoTag.includes(attr)) fail(`<video> 缺少 ${attr}`);
+}
+if (/autoplay/i.test(videoTag)) fail("<video> 不能自动播放");
+
+const footer = html.match(/<footer[^>]*>([\s\S]*?)<\/footer>/)?.[1] ?? "";
+if (!footer.includes("MIT") || !footer.includes("https://github.com/growvv/uitest-sdk")) {
+  fail("<footer> 缺少 MIT 或 GitHub 链接");
+}
+
 console.log("site ok");

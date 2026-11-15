@@ -40,7 +40,7 @@
       </figure>
     </section>
 
-    <section id="terminal" class="section terminal">
+    <section id="terminal" class="section terminal reveal">
       <h2 id="quickstart">快速开始</h2>
       <div class="term">
         <div class="term-bar"><span></span><span></span><span></span></div>
@@ -51,7 +51,7 @@
 <span class="term-line" data-kind="ok">✓ captureScreen() → 608×1344 JPEG  118 ms</span></pre>
       </div>
     </section>
-    <section id="bench" class="section bench">
+    <section id="bench" class="section bench reveal">
       <h2>真机实测</h2>
       <p class="section-lede">数字来自自动化验收的 8 次采样（<code>docs/acceptance/report.md</code> 与日志），不是估算。</p>
       <div class="table-wrap">
@@ -71,7 +71,7 @@
       <p class="table-note">真机 BRA-AL00，1216×2688，uitest 7.0.0.1</p>
     </section>
 
-    <section id="features" class="section features">
+    <section id="features" class="section features reveal">
       <h2>能力</h2>
       <p class="section-lede">一个 SDK，覆盖从自动化点击到实时投流的全部路径。</p>
       <div class="cards">
@@ -109,12 +109,69 @@
         </article>
       </div>
     </section>
-    <section id="arch" class="section arch"></section>
-    <section id="video" class="section video"></section>
-    <section id="limits" class="section limits"></section>
+    <section id="arch" class="section arch reveal">
+      <h2>双通道架构</h2>
+      <p class="section-lede">一条长连接做 UI 自动化，一条 gRPC 通道做投流与录制。</p>
+      <div class="arch-figure">
+        <svg class="arch-svg" viewBox="0 0 1040 400" role="img" aria-labelledby="arch-title">
+          <title id="arch-title">Node 进程经 hdc fport 连接 agent.so:8012 与 libscreen_casting.z.so</title>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#9aa0aa" />
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="140" width="230" height="120" rx="14" />
+          <text x="135" y="196" text-anchor="middle" font-size="26" font-weight="600">Node 进程</text>
+          <text class="sub" x="135" y="228" text-anchor="middle" font-size="15">uitest-sdk</text>
+
+          <rect class="node" x="375" y="140" width="210" height="120" rx="14" />
+          <text x="480" y="196" text-anchor="middle" font-size="24">hdc fport</text>
+          <text class="sub" x="480" y="228" text-anchor="middle" font-size="15">TCP 隧道</text>
+
+          <rect class="node" x="720" y="34" width="300" height="126" rx="14" />
+          <text x="870" y="86" text-anchor="middle" font-size="23" font-weight="600">agent.so · :8012</text>
+          <text class="sub" x="870" y="120" text-anchor="middle" font-size="15">JSON + JPEG · 长连接</text>
+
+          <rect class="node" x="720" y="240" width="300" height="126" rx="14" />
+          <text x="870" y="292" text-anchor="middle" font-size="18" font-weight="600">libscreen_casting.z.so</text>
+          <text class="sub" x="870" y="326" text-anchor="middle" font-size="15">gRPC · H.264</text>
+
+          <path class="link" d="M250 200 H375" marker-end="url(#arrow)" />
+          <path class="link" d="M585 200 C650 200 650 97 720 97" marker-end="url(#arrow)" />
+          <path class="link" d="M585 200 C650 200 650 303 720 303" marker-end="url(#arrow)" />
+        </svg>
+      </div>
+    </section>
+
+    <section id="video" class="section video reveal">
+      <h2>30 秒了解它</h2>
+      <p class="section-lede">从安装到截图、从点击到 89 fps 投流，画面全部来自真机。</p>
+      <video src="assets/demo.mp4" poster="assets/demo-poster.jpg" controls playsinline preload="metadata"></video>
+    </section>
+
+    <section id="limits" class="section limits reveal">
+      <h2>已知限制</h2>
+      <p class="section-lede">这些都是实测撞到的设备侧事实，写在这里比藏起来有用。</p>
+      <ul class="limits-list">
+        <li><strong>窗口级截图不存在。</strong>所有截图路径都只出整屏，<code>cropToWindow()</code> 是「整屏 + 按节点 bounds 裁剪」的近似。</li>
+        <li><strong><code>captureScreen()</code> 的 <code>scale</code> 参数无效。</strong>agent 1.1.10 实测：1、2、5 都返回 608×1344。</li>
+        <li><strong>静止画面只出 1 帧。</strong>采集是脏区驱动的，这不是卡死；<code>stopStream()</code> 随时能结束。</li>
+        <li><strong><code>stopCaptureUiAction</code> 会关闭会话。</strong>同一连接上的后续调用会失败；合成触摸不会被回传。</li>
+        <li><strong>x86_64 没有 casting 构建。</strong>模拟器上只有 MJPEG，H.264 与录制需要 arm64 设备。</li>
+      </ul>
+    </section>
   </main>
 
-  <footer class="footer"></footer>
+  <footer class="footer">
+    <div class="footer-row">
+      <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
+      <div class="footer-links">
+        <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+        <a href="https://github.com/growvv/uitest-sdk#readme">文档</a>
+      </div>
+    </div>
+  </footer>
 
   <script src="main.js" defer></script>
 </body>

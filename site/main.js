@@ -49,6 +49,28 @@ async function typeLines(lines, texts) {
   }
 }
 
+export function initReveal() {
+  const sections = [...document.querySelectorAll(".reveal")];
+  if (!sections.length) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!("IntersectionObserver" in window)) return;
+
+  // Only hide what JS is about to reveal; without JS the page is fully visible.
+  document.documentElement.classList.add("js-reveal");
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("is-in");
+        observer.unobserve(entry.target);
+      }
+    },
+    { threshold: 0.08 },
+  );
+  sections.forEach((section) => observer.observe(section));
+}
+
 export function initTyping() {
   const lines = [...document.querySelectorAll(".term-line")];
   if (!lines.length) return;
@@ -75,5 +97,6 @@ export function initTyping() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initCopyButton();
+  initReveal();
   initTyping();
 });
