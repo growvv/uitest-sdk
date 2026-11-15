@@ -20,7 +20,7 @@ function copyText(text) {
   return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
 }
 
-export function initCopyButton() {
+function initCopyButton() {
   const btn = document.getElementById("copy-install");
   const code = btn?.parentElement?.querySelector("code");
   if (!btn || !code) return;
@@ -49,7 +49,7 @@ async function typeLines(lines, texts) {
   }
 }
 
-export function initReveal() {
+function initReveal() {
   const sections = [...document.querySelectorAll(".reveal")];
   if (!sections.length) return;
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -71,7 +71,7 @@ export function initReveal() {
   sections.forEach((section) => observer.observe(section));
 }
 
-export function initTyping() {
+function initTyping() {
   const lines = [...document.querySelectorAll(".term-line")];
   if (!lines.length) return;
 
@@ -96,6 +96,9 @@ export function initTyping() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // A motion-independent marker that the script actually ran; check-site.mjs
+  // asserts it in a headless browser, because a plain text check cannot.
+  document.documentElement.classList.add("js-ready");
   initCopyButton();
   initReveal();
   initTyping();
