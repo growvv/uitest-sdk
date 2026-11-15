@@ -1,6 +1,11 @@
 {
   "name": "uitest-sdk",
   "version": "0.1.0",
+  "description": "HarmonyOS uitest extension SDK for Node.js: UI automation, screenshots, H.264 casting and MP4 recording",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/growvv/uitest-sdk.git" },
+  "homepage": "https://growvv.github.io/uitest-sdk/",
+  "keywords": ["harmonyos", "openharmony", "uitest", "automation", "scrcpy", "h264"],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

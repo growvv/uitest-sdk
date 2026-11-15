@@ -9,7 +9,7 @@
       "version": "6.8-20260801",
       "size": 247989,
       "md5": "8c8df9a96af21aac71d5091ffa0b1477",
-      "source": "hscrcpy server/ (HOScrcpy 2.12.9 build; see .spike/hscrcpy-server/PROVENANCE.md)"
+      "source": "hscrcpy server (HOScrcpy 2.12.9 build)"
     }
   },
   "x86_64": {

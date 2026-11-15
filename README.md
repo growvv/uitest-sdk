@@ -1,5 +1,7 @@
 # uitest-sdk
 
+[官网](https://growvv.github.io/uitest-sdk/) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
+
 把鸿蒙 `uitest` 的设备侧扩展（`agent.so` / `libscreen_casting.z.so`）封装成 TypeScript SDK：
 一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。
 
