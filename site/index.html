@@ -170,10 +170,11 @@
 
       <h3 class="cli-sub">同一套命令，接给 Agent</h3>
       <pre class="cli-code"><code>npx uitest-sdk connect            # 把 MCP 注册写进 Agent 自己的配置，并装好 Skill
+npx uitest-sdk connect --agent gemini   # 也支持 codex、copilot
 npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
 npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
       <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
-      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供；npm 上的 latest 仍是 0.2.0（只有 <code>mcp</code> 与 <code>install-skill</code>）。</p>
+      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code> 在未发布版本里；npm 上的 latest 仍是 0.2.0（只有 <code>mcp</code> 与 <code>install-skill</code>）。</p>
 
       <div class="bench-grid">
         <article class="bench-card">

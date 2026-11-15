@@ -226,7 +226,9 @@ uitest-phone install-skill     # 写进 ~/.claude/skills 与 ~/.agents/skills</c
 
       <h3>一步接好 Agent<span class="doc-tag">0.3.0 · npm 待发</span></h3>
       <pre><code>uitest-phone connect                     # 默认 claude
-uitest-phone connect --agent codex</code></pre>
+uitest-phone connect --agent codex
+uitest-phone connect --agent gemini
+uitest-phone connect --agent copilot</code></pre>
       <p>把「改配置文件 + 装 Skill」合成一步：只改自己那一项，注释、顺序与其它 server 的格式原样保留；已经正确时什么都不写；文件解析失败就拒绝并报出文件名与偏移，不替人重写。</p>
       <div class="doc-table">
         <table>
@@ -234,6 +236,8 @@ uitest-phone connect --agent codex</code></pre>
           <tbody>
             <tr><td><code>claude</code>（默认）</td><td><code>~/.claude.json</code>（<code>$CLAUDE_CONFIG_DIR</code>）</td><td><code>~/.claude/skills</code>、<code>~/.agents/skills</code></td></tr>
             <tr><td><code>codex</code></td><td><code>~/.codex/config.toml</code>（<code>$CODEX_HOME</code>）</td><td><code>~/.agents/skills</code></td></tr>
+            <tr><td><code>gemini</code></td><td><code>~/.gemini/settings.json</code></td><td><code>~/.agents/skills</code></td></tr>
+            <tr><td><code>copilot</code></td><td><code>~/.copilot/mcp-config.json</code>（<code>$COPILOT_HOME</code>）</td><td><code>~/.agents/skills</code></td></tr>
           </tbody>
         </table>
       </div>

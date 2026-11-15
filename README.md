@@ -113,7 +113,8 @@ npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两�
 ```
 
 - **只改自己那一项**：`connect` 直接编辑 Agent 的设置文件（`claude` → `~/.claude.json`，
-  `codex` → `~/.codex/config.toml`），只插入本包的条目；注释、键顺序、其它 server 的排版原样保留，
+  `codex` → `~/.codex/config.toml`，`gemini` → `~/.gemini/settings.json`，
+  `copilot` → `~/.copilot/mcp-config.json`），只插入本包的条目；注释、键顺序、其它 server 的排版原样保留，
   已经正确时一个字节都不写。文件解析失败就拒绝并报出偏移，不替人重写。入口是当前 `node` 加本包绝对路径，
   因为从 Dock / 开始菜单启动的 Agent 看不到终端的 `PATH`。
 - **两处 Skill 目录**：`~/.claude/skills` 给 Claude Code，`~/.agents/skills` 是 agentskills.io 的跨 runtime

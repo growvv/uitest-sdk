@@ -44,7 +44,7 @@ and enforces approvals.
 ## Setup
 
 ```
-npx uitest-sdk connect [--agent claude|codex]
+npx uitest-sdk connect [--agent claude|codex|gemini|copilot]
 ```
 
 One command makes an agent ready: it registers the MCP server in that agent's

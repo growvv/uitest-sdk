@@ -54,7 +54,7 @@ its commands and the binary are always the same version.
 ## Connect an agent
 
 ```
-npx uitest-sdk connect [--agent claude|codex] [--force]
+npx uitest-sdk connect [--agent claude|codex|gemini|copilot] [--force]
 ```
 
 Does the whole setup in one step: registers the MCP server in the agent's own
@@ -64,6 +64,8 @@ settings file and installs the skill where that agent reads skills.
 | --- | --- | --- |
 | `claude` (default) | `~/.claude.json` (`$CLAUDE_CONFIG_DIR`) | `~/.claude/skills`, `~/.agents/skills` |
 | `codex` | `~/.codex/config.toml` (`$CODEX_HOME`) | `~/.agents/skills` |
+| `gemini` | `~/.gemini/settings.json` | `~/.agents/skills` |
+| `copilot` | `~/.copilot/mcp-config.json` (`$COPILOT_HOME`) | `~/.agents/skills` |
 
 Only this package's entry is touched. Comments, key order and the other
 servers' formatting stay as they were, and a run that finds the entry already

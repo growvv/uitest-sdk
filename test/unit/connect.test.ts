@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentTarget, connectAgent, mcpEntry } from "../../src/connect.js";
+import type { AgentId } from "../../src/connect.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-connect-"));
@@ -33,6 +34,39 @@ describe("agentTarget", () => {
     });
     expect(agentTarget("codex", { home: "/home/me", env: { CODEX_HOME: "/codex" } }).file).toBe(
       join("/codex", "config.toml"),
+    );
+  });
+
+  it("points Gemini CLI at its settings file", () => {
+    // Gemini keeps its user settings in ~/.gemini/settings.json, MCP servers
+    // under the same top-level mcpServers key the other JSON agents use.
+    const target = agentTarget("gemini", { home: "/home/me" });
+    expect(target).toMatchObject({
+      id: "gemini",
+      kind: "json",
+      file: join("/home/me", ".gemini", "settings.json"),
+      skillDirs: "agents",
+    });
+  });
+
+  it("points Copilot CLI at its mcp-config.json", () => {
+    // Copilot CLI stores local servers with type "local"; COPILOT_HOME moves
+    // the whole ~/.copilot directory.
+    const target = agentTarget("copilot", { home: "/home/me" });
+    expect(target).toMatchObject({
+      id: "copilot",
+      kind: "json",
+      file: join("/home/me", ".copilot", "mcp-config.json"),
+      skillDirs: "agents",
+    });
+    expect(agentTarget("copilot", { home: "/home/me", env: { COPILOT_HOME: "/ch" } }).file).toBe(
+      join("/ch", "mcp-config.json"),
+    );
+  });
+
+  it("names every supported agent when asked for an unknown one", () => {
+    expect(() => agentTarget("vscode" as unknown as AgentId, { home: "/home/me" })).toThrow(
+      /claude, codex, gemini or copilot/,
     );
   });
 });
@@ -108,6 +142,64 @@ describe("connectAgent", () => {
       expect(toml).toContain(`args = ["uitest-sdk", "mcp"]`);
       // Codex reads the cross-runtime directory, so only that copy is needed.
       expect(result.skill?.dirs).toEqual([join(dir, ".agents", "skills", "uitest-phone")]);
+    });
+  });
+
+  it("registers Gemini's settings without disturbing the rest", async () => {
+    await withDir(async (dir) => {
+      await mkdir(join(dir, ".gemini"), { recursive: true });
+      await writeFile(join(dir, ".gemini", "settings.json"), `{\n  "theme": "dark"\n}\n`);
+      const result = await connectAgent({
+        agent: "gemini",
+        home: dir,
+        entry: { command: "npx", args: ["uitest-sdk", "mcp"] },
+      });
+      expect(result.registered.changed).toBe(true);
+      const settings = JSON.parse(await readFile(join(dir, ".gemini", "settings.json"), "utf8"));
+      expect(settings.theme).toBe("dark");
+      expect(settings.mcpServers["uitest-phone"]).toEqual({ command: "npx", args: ["uitest-sdk", "mcp"] });
+      expect(result.skill?.dirs).toEqual([join(dir, ".agents", "skills", "uitest-phone")]);
+    });
+  });
+
+  it("writes the Copilot CLI local-server shape", async () => {
+    await withDir(async (dir) => {
+      await mkdir(join(dir, ".copilot"), { recursive: true });
+      await writeFile(
+        join(dir, ".copilot", "mcp-config.json"),
+        `${JSON.stringify({ mcpServers: { other: { type: "local", command: "other" } } }, null, 2)}\n`,
+      );
+      const result = await connectAgent({
+        agent: "copilot",
+        home: dir,
+        entry: { command: "npx", args: ["uitest-sdk", "mcp"] },
+      });
+      expect(result.registered.changed).toBe(true);
+      const config = JSON.parse(await readFile(join(dir, ".copilot", "mcp-config.json"), "utf8"));
+      // Copilot requires type "local" and exposes only the listed tools.
+      expect(config.mcpServers["uitest-phone"]).toEqual({
+        type: "local",
+        command: "npx",
+        args: ["uitest-sdk", "mcp"],
+        env: {},
+        tools: ["*"],
+      });
+      expect(config.mcpServers.other).toEqual({ type: "local", command: "other" });
+      expect(result.skill?.dirs).toEqual([join(dir, ".agents", "skills", "uitest-phone")]);
+    });
+  });
+
+  it("reports a no-op for a second Copilot run", async () => {
+    await withDir(async (dir) => {
+      const opts = {
+        agent: "copilot" as const,
+        home: dir,
+        entry: { command: "npx", args: ["uitest-sdk", "mcp"] },
+      };
+      await connectAgent(opts);
+      const again = await connectAgent(opts);
+      expect(again.registered.changed).toBe(false);
+      expect(again.skillKept).toMatch(/already/);
     });
   });
 

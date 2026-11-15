@@ -495,7 +495,7 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 
 ## 13. Agent 接入：MCP 与 Skill
 
-### `uitest-phone connect [--agent claude|codex] [--force]`
+### `uitest-phone connect [--agent claude|codex|gemini|copilot] [--force]`
 
 一步接好 Agent：把 MCP server 写进 Agent 自己的设置文件，并安装随包 Skill。
 
@@ -503,8 +503,12 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 |---|---|---|
 | `claude`（默认） | `~/.claude.json`（`$CLAUDE_CONFIG_DIR`） | `~/.claude/skills`、`~/.agents/skills` |
 | `codex` | `~/.codex/config.toml`（`$CODEX_HOME`） | `~/.agents/skills` |
+| `gemini` | `~/.gemini/settings.json` | `~/.agents/skills` |
+| `copilot` | `~/.copilot/mcp-config.json`（`$COPILOT_HOME`） | `~/.agents/skills` |
 
 - 只改本包的那一项；注释、键顺序、其它 server 的排版原样保留，已经正确时零写入。
+- `copilot` 的条目按它自己的 schema 写成 `type: "local"` + `tools: ["*"]`；其余 JSON Agent 是
+  `command` / `args` 两项。`gemini` 不写 `trust`，它的逐次工具确认保持默认开启。
 - 文件解析失败就拒绝并报出文件名与偏移，不替人重写；写入前留一份 `.uitest-phone.bak`。
 - 入口是当前 `node` 加本包绝对路径：从 Dock / 开始菜单启动的 Agent 看不到终端的 `PATH`。
 - 只在本包只存在于 npx 缓存时才写成 `npx -y uitest-sdk@<version> mcp`。

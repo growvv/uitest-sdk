@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { findNodeAtLocation, parse, parseTree, printParseErrorCode } from "jsonc-parser";
 import type { Node, ParseError } from "jsonc-parser";
 import { UitestError } from "./errors.js";
@@ -8,6 +9,8 @@ import { UitestError } from "./errors.js";
 export interface McpEntry {
   command: string;
   args: string[];
+  /** Extra fields an agent's JSON schema requires, written verbatim. */
+  [field: string]: unknown;
 }
 
 export interface RegisterMcpOptions {
@@ -47,6 +50,9 @@ export async function registerJsonMcp(opts: RegisterMcpOptions): Promise<Registe
   const { file, name, entry } = opts;
 
   if (!existsSync(file)) {
+    // The agent's own directory may not exist yet (a fresh machine, or an
+    // agent whose config lives elsewhere); the file we create defines it.
+    await mkdir(dirname(file), { recursive: true });
     await writeFile(file, `${JSON.stringify({ mcpServers: { [name]: entry } }, null, 2)}\n`);
     return { file, created: true, changed: true };
   }
@@ -116,6 +122,7 @@ export async function registerTomlMcp(opts: RegisterMcpOptions): Promise<Registe
   ];
 
   if (!existsSync(file)) {
+    await mkdir(dirname(file), { recursive: true });
     await writeFile(file, `${body.join("\n")}\n`);
     return { file, created: true, changed: true };
   }

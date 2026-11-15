@@ -8,7 +8,7 @@ import { isMcpRegistered, registerJsonMcp, registerTomlMcp } from "./mcp-registe
 import type { McpEntry, RegisterMcpResult } from "./mcp-register.js";
 
 /** The agents whose settings this command knows how to edit. */
-export type AgentId = "claude" | "codex";
+export type AgentId = "claude" | "codex" | "gemini" | "copilot";
 
 export interface AgentTarget {
   id: AgentId;
@@ -17,10 +17,17 @@ export interface AgentTarget {
   /** The settings file itself. */
   file: string;
   /**
-   * Skill directories this agent reads. Codex reads the cross-runtime
-   * `~/.agents/skills`; Claude Code reads `~/.claude/skills` as well.
+   * Skill directories this agent reads. Codex, Gemini CLI and Copilot CLI
+   * read the cross-runtime `~/.agents/skills`; Claude Code reads
+   * `~/.claude/skills` as well.
    */
   skillDirs: "both" | "agents";
+  /**
+   * Wraps the entry in fields the agent's JSON schema requires. Absent when
+   * `command` and `args` are the whole entry, which is what Claude and Gemini
+   * accept.
+   */
+  shapeJson?: (entry: McpEntry) => McpEntry;
 }
 
 export interface AgentTargetOptions {
@@ -29,11 +36,21 @@ export interface AgentTargetOptions {
 }
 
 /**
+ * The entry Copilot CLI expects for a local server: `type` is required, and
+ * a server exposes no tools until one is listed.
+ */
+function copilotEntry(entry: McpEntry): McpEntry {
+  return { type: "local", command: entry.command, args: entry.args, env: {}, tools: ["*"] };
+}
+
+/**
  * Where an agent keeps its MCP servers and its skills.
  *
  * The paths are the ones each tool documents: Claude Code's user scope is
  * `~/.claude.json` (`$CLAUDE_CONFIG_DIR` moves it), Codex's is
- * `~/.codex/config.toml` (`$CODEX_HOME` moves it).
+ * `~/.codex/config.toml` (`$CODEX_HOME` moves it), Gemini CLI's is
+ * `~/.gemini/settings.json`, and Copilot CLI's is
+ * `~/.copilot/mcp-config.json` (`$COPILOT_HOME` moves the directory).
  */
 export function agentTarget(agent: AgentId, opts: AgentTargetOptions = {}): AgentTarget {
   const home = opts.home ?? homedir();
@@ -46,7 +63,28 @@ export function agentTarget(agent: AgentId, opts: AgentTargetOptions = {}): Agen
     const dir = env["CODEX_HOME"] || join(home, ".codex");
     return { id: "codex", kind: "toml", file: join(dir, "config.toml"), skillDirs: "agents" };
   }
-  throw new UitestError(`unknown agent "${String(agent)}"; use claude or codex`, "EAGENT");
+  if (agent === "gemini") {
+    return {
+      id: "gemini",
+      kind: "json",
+      file: join(home, ".gemini", "settings.json"),
+      skillDirs: "agents",
+    };
+  }
+  if (agent === "copilot") {
+    const dir = env["COPILOT_HOME"] || join(home, ".copilot");
+    return {
+      id: "copilot",
+      kind: "json",
+      file: join(dir, "mcp-config.json"),
+      skillDirs: "agents",
+      shapeJson: copilotEntry,
+    };
+  }
+  throw new UitestError(
+    `unknown agent "${String(agent)}"; use claude, codex, gemini or copilot`,
+    "EAGENT",
+  );
 }
 
 export interface McpEntryOptions {
@@ -107,9 +145,10 @@ export interface ConnectAgentResult {
  */
 export async function connectAgent(opts: ConnectAgentOptions): Promise<ConnectAgentResult> {
   const target = agentTarget(opts.agent, { home: opts.home, env: opts.env });
+  const entry = target.shapeJson ? target.shapeJson(opts.entry) : opts.entry;
   const registered =
     target.kind === "json"
-      ? await registerJsonMcp({ file: target.file, name: "uitest-phone", entry: opts.entry, backup: opts.backup })
+      ? await registerJsonMcp({ file: target.file, name: "uitest-phone", entry, backup: opts.backup })
       : await registerTomlMcp({ file: target.file, name: "uitest-phone", entry: opts.entry, backup: opts.backup });
 
   const home = opts.home ?? homedir();

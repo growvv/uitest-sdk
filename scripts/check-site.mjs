@@ -305,6 +305,8 @@ for (const needle of [
   "install-skill",
   "~/.agents/skills",
   "connect --agent codex",
+  "connect --agent gemini",
+  "~/.copilot/mcp-config.json",
   "hold",
   "resume",
   "held by a person",
@@ -344,6 +346,8 @@ for (const needle of [
   "Agent 可以请人接手",
   "uitest_handoff",
   "凭据在屏幕上也会被遮住",
+  "更多 Agent 一步接好",
+  "~/.copilot/mcp-config.json",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

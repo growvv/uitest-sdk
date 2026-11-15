@@ -205,7 +205,7 @@ async function resumeMain(argv: string[]): Promise<number> {
 }
 
 /**
- * `uitest-phone connect [--agent claude|codex] [--force]`
+ * `uitest-phone connect [--agent claude|codex|gemini|copilot] [--force]`
  *
  * Makes an agent ready to drive the phone: writes the MCP server entry into
  * that agent's own settings file, and installs the skill where it reads
@@ -215,12 +215,14 @@ async function connectMain(argv: string[]): Promise<number> {
   const parsed = parseArgv(argv);
   if (parsed.help) {
     process.stdout.write(
-      "usage: uitest-phone connect [--agent claude|codex] [--force]\n\n" +
+      "usage: uitest-phone connect [--agent claude|codex|gemini|copilot] [--force]\n\n" +
         "Registers the MCP server in the agent's own settings file (only its\n" +
         "entry; comments and order are kept) and writes the skill into the\n" +
         "directories that agent reads:\n" +
-        "  claude  ~/.claude.json  +  ~/.claude/skills and ~/.agents/skills\n" +
-        "  codex   ~/.codex/config.toml  +  ~/.agents/skills\n\n" +
+        "  claude   ~/.claude.json  +  ~/.claude/skills and ~/.agents/skills\n" +
+        "  codex    ~/.codex/config.toml  +  ~/.agents/skills\n" +
+        "  gemini   ~/.gemini/settings.json  +  ~/.agents/skills\n" +
+        "  copilot  ~/.copilot/mcp-config.json  +  ~/.agents/skills\n\n" +
         "--force replaces a skill that is already installed. A hand-edited\n" +
         "skill is always kept.\n",
     );
