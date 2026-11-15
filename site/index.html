@@ -51,8 +51,64 @@
 <span class="term-line" data-kind="ok">✓ captureScreen() → 608×1344 JPEG  118 ms</span></pre>
       </div>
     </section>
-    <section id="bench" class="section bench"></section>
-    <section id="features" class="section features"></section>
+    <section id="bench" class="section bench">
+      <h2>真机实测</h2>
+      <p class="section-lede">数字来自自动化验收的 8 次采样（<code>docs/acceptance/report.md</code> 与日志），不是估算。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>能力</th><th>API</th><th>实测</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>整屏截图</td><td><code>agent.captureScreen()</code></td><td>107–193 ms</td></tr>
+            <tr><td>点击</td><td><code>agent.click(x, y)</code></td><td>21–50 ms</td></tr>
+            <tr><td>滑动</td><td><code>agent.swipe()</code></td><td>386–640 ms</td></tr>
+            <tr><td>MJPEG 流</td><td><code>agent.streamScreen()</code></td><td>10–16 fps</td></tr>
+            <tr><td>H.264 投流</td><td><code>dev.createCast()</code></td><td>15–89 fps</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">真机 BRA-AL00，1216×2688，uitest 7.0.0.1</p>
+    </section>
+
+    <section id="features" class="section features">
+      <h2>能力</h2>
+      <p class="section-lede">一个 SDK，覆盖从自动化点击到实时投流的全部路径。</p>
+      <div class="cards">
+        <article class="card">
+          <h3>一条长连接</h3>
+          <p>所有请求走同一条 TCP 长连接，串行队列加指数退避，不会因为并发把自己锁死。</p>
+        </article>
+        <article class="card">
+          <h3>毫秒级点击</h3>
+          <p>touchDown + touchMove + touchUp 三段式驱动，点击 21–50 ms，滑动 386–640 ms。</p>
+        </article>
+        <article class="card">
+          <h3>整屏截图</h3>
+          <p>起停驱动的最快路径，608×1344 JPEG 在 107–193 ms 内返回，直接是字节。</p>
+        </article>
+        <article class="card">
+          <h3>窗口截图</h3>
+          <p>设备不提供窗口级截图，SDK 整屏采集后按 UI 树的 bounds 裁剪，结果一样准。</p>
+        </article>
+        <article class="card">
+          <h3>H.264 投流</h3>
+          <p>libscreen_casting 走 gRPC，随 frameRate 输出 15–89 fps 的 Annex-B 帧。</p>
+        </article>
+        <article class="card">
+          <h3>MP4 录制</h3>
+          <p>设备侧编码器直接写 MP4，dispose() 时关闭 muxer 并把文件拉回本地。</p>
+        </article>
+        <article class="card">
+          <h3>多实例安全</h3>
+          <p>复用已在监听的 daemon，只杀自己拉起的那一个，绝不盲杀别人的进程。</p>
+        </article>
+        <article class="card">
+          <h3>失败即报错</h3>
+          <p>每个失败都是 UitestError 子类，不做静默兜底，问题停在它发生的地方。</p>
+        </article>
+      </div>
+    </section>
     <section id="arch" class="section arch"></section>
     <section id="video" class="section video"></section>
     <section id="limits" class="section limits"></section>

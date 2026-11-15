@@ -78,4 +78,14 @@ const terminal = sectionHtml("terminal");
 const termLines = (terminal.match(/class="term-line"/g) ?? []).length;
 if (termLines < 5) fail(`#terminal 只有 ${termLines} 行 .term-line，至少需要 5 行`);
 
+// ------------------------------------------------------- task 6: numbers
+const bench = sectionHtml("bench");
+for (const needle of ["107–193 ms", "21–50 ms", "386–640 ms", "15–89 fps", "10–16 fps"]) {
+  if (!bench.includes(needle)) fail(`#bench 缺少实测数字「${needle}」`);
+}
+
+const features = sectionHtml("features");
+const cards = (features.match(/<article class="card">/g) ?? []).length;
+if (cards !== 8) fail(`#features 有 ${cards} 张 .card，必须恰好 8 张`);
+
 console.log("site ok");
