@@ -4,7 +4,7 @@ import { main, parseArgv } from "./cli-main.js";
 import { agentConnected, connectAgent, mcpEntry } from "./connect.js";
 import type { AgentId } from "./connect.js";
 import { Device } from "./device.js";
-import { HOLD_TASK, holdDevice, readHold, resolveTag, resumeDevice } from "./hold.js";
+import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevice } from "./hold.js";
 import { installSkill } from "./install-skill.js";
 import { McpServer } from "./mcp.js";
 import { Session } from "./session.js";
@@ -25,6 +25,7 @@ async function run(argv: string[]): Promise<number> {
   if (first === "install-skill") return installSkillMain(argv.slice(1));
   if (first === "connect") return connectMain(argv.slice(1));
   if (first === "hold") return holdMain(argv.slice(1));
+  if (first === "handoff") return handoffMain(argv.slice(1));
   if (first === "resume") return resumeMain(argv.slice(1));
   if (first === "--version" || first === "-v") {
     process.stdout.write(`${VERSION}\n`);
@@ -106,6 +107,52 @@ async function holdMain(argv: string[]): Promise<number> {
           ? `took over from task: ${result.tookOverFrom} (it stops at its next command)\n`
           : "") +
         `\nAgent commands now stop with lease_held until you run:\n` +
+        `  uitest-phone resume --state-dir ${stateDir}\n`,
+    );
+    return 0;
+  } catch (e) {
+    process.stderr.write(`error: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 1;
+  }
+}
+
+/**
+ * `uitest-phone handoff --reason "..." [--device id] [--state-dir dir]`
+ *
+ * The agent-initiated takeover: it reached a step only a person can do and
+ * gives the phone up instead of guessing. Same lease as `hold`, so the same
+ * `resume` hands it back; the reason is stored for whoever reads the lease.
+ */
+async function handoffMain(argv: string[]): Promise<number> {
+  const parsed = parseArgv(argv);
+  if (parsed.help) {
+    process.stdout.write(
+      "usage: uitest-phone handoff --reason <text> [--device id] [--state-dir dir]\n\n" +
+        "Asks the person to take the phone for a step only they can do (sign\n" +
+        "in, enter a one-time code, unlock it). The agent stops; `resume`\n" +
+        "hands the phone back. Agents call this through the MCP tool\n" +
+        "uitest_handoff instead of the command line.\n",
+    );
+    return 0;
+  }
+  const reason = typeof parsed.args["reason"] === "string" ? parsed.args["reason"].trim() : "";
+  if (!reason) {
+    process.stderr.write(`error: handoff needs --reason "what the person must do"\n`);
+    return 1;
+  }
+  const stateDir = parsed.options.stateDir ?? ".uitest-phone";
+  try {
+    const tag = await resolveTag(parsed.options.device);
+    const result = await handoffDevice({ stateDir, tag, reason });
+    process.stdout.write(
+      `handoff · the device is yours\n` +
+        `reason: ${reason}\n` +
+        `device: ${tag}\n` +
+        `lease: ${result.path}\n` +
+        (result.tookOverFrom
+          ? `took over from task: ${result.tookOverFrom} (it stops at its next command)\n`
+          : "") +
+        `\nDo the step on the phone, then run:\n` +
         `  uitest-phone resume --state-dir ${stateDir}\n`,
     );
     return 0;

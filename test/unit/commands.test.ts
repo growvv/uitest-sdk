@@ -6,6 +6,7 @@ import jpeg from "jpeg-js";
 import { CommandRunner, COMMANDS } from "../../src/commands.js";
 import { Session, tagOf } from "../../src/session.js";
 import { holdDevice, resumeDevice } from "../../src/hold.js";
+import { readLease } from "../../src/lease.js";
 import type { UiNode } from "../../src/model.js";
 
 const page = (text: string): UiNode => ({
@@ -161,6 +162,37 @@ describe("CommandRunner", () => {
       // its next command instead of needing a restart.
       expect(await resumeDevice({ stateDir: dir, tag })).toBe(true);
       expect((await runner.run("status", {})).status).toBe("settled");
+    });
+  });
+
+  it("hands the device to a person on request, and continues after resume", async () => {
+    // `handoff` is the agent-initiated half of the same lease: the agent hits
+    // a step only a person can do (sign-in, one-time code, unlock) and gives
+    // the phone up instead of guessing or typing a credential.
+    await withRunner(async (runner, dir) => {
+      const handed = await runner.run("handoff", { reason: "Enter the one-time code" });
+      expect(handed.status).toBe("handoff");
+      expect(handed.code).toBe(2);
+      expect(handed.text).toContain("Enter the one-time code");
+
+      const tag = tagOf("SERIAL");
+      const info = await readLease(join(dir, "leases", `${tag}.lock`));
+      expect(info?.hold).toBe(true);
+      expect(info?.reason).toBe("Enter the one-time code");
+
+      // The same session is the one that asked; its next command must stop.
+      const stopped = await runner.run("status", {});
+      expect(stopped.status).toBe("lease_held");
+      expect(stopped.text).toContain("Enter the one-time code");
+
+      await resumeDevice({ stateDir: dir, tag });
+      expect((await runner.run("status", {})).status).toBe("settled");
+    });
+  });
+
+  it("rejects a handoff without a reason", async () => {
+    await withRunner(async (runner) => {
+      await expect(runner.run("handoff", {})).rejects.toThrow(/reason/);
     });
   });
 

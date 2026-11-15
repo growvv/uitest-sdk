@@ -88,8 +88,8 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 ## 命令行与 Agent Skill
 
 SDK 之上有一层给人和 Agent 用的 CLI：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
-共 19 条命令：`observe`、`tap`、`type`、`swipe`、`double-click`、`drag`、`fling`、`pinch`、`key`、
-`wait-for`、`read-list`、`scroll-until`、`launch`、`apps`、`window`、`doctor`、`screenshot`、`report`、`status`。
+共 20 条命令（`handoff` 只写租约、把手机交给人，不碰设备）：`observe`、`tap`、`type`、`swipe`、`double-click`、`drag`、`fling`、`pinch`、`key`、
+`wait-for`、`read-list`、`scroll-until`、`launch`、`apps`、`window`、`doctor`、`screenshot`、`report`、`status`、`handoff`。
 
 ```bash
 npx uitest-sdk doctor                     # 探测设备与能力，确认可用
@@ -135,8 +135,11 @@ npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两�
   因为手机上半数普通表单按钮都叫这个，每次都问会把人训练成不看就点同意。
 - **人可以随时接管**：`uitest-phone hold` 把设备交给此刻拿着手机的人，连正在运行的 MCP 会话也一并让出——
   Agent 命令随即以 `lease_held`（退出码 2）停下，不重试、不抢回；`uitest-phone resume` 交还后，
-  同一个会话下一条命令自动继续。hold 不按进程存活判断，所以不会自己过期。设备侧的 UI 事件流不能用来
-  判断「人在动手机」：它会关掉会话、能把 daemon 卡死，而且合成点击也被当成手指。
+  同一个会话下一条命令自动继续。反过来，Agent 遇到只有人能做的一步（登录、验证码、解锁）可以
+  `handoff --reason "..."`（MCP 工具 `uitest_handoff`）把手机交给人：调用立即返回 `handoff`（退出码 2），
+  原因写进租约并在每次 `lease_held` 里重复，人用同一个 `resume` 交还。hold 与 handoff 都不按进程存活
+  判断，所以不会自己过期。设备侧的 UI 事件流不能用来判断「人在动手机」：它会关掉会话、能把 daemon
+  卡死，而且合成点击也被当成手指。
 - 设备序列号不进任何文件或输出，只用 8 位哈希；`<state-dir>` 里是用户屏幕内容，已被 gitignore。
 
 Skill 正文见 [`assets/skill/SKILL.md`](assets/skill/SKILL.md)，完整命令参考见

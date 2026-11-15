@@ -6,6 +6,7 @@ import type { ActionResult, ActionStatus } from "./agent/result.js";
 import { parseOn } from "./agent/selector.js";
 import { parseKeyName } from "./agent/selector.js";
 import { LeaseHeldError, UitestError } from "./errors.js";
+import { HOLD_TASK, handoffDevice } from "./hold.js";
 import type { Session, SessionDevice, Target } from "./session.js";
 import type { TraceRecorder } from "./trace.js";
 
@@ -191,6 +192,18 @@ export const COMMANDS: CommandSpec[] = [
     description: "Report the session: task, device tag, policy, pending approvals.",
     args: {},
   },
+  {
+    name: "handoff",
+    description:
+      "Ask the person to take the phone for a step only they can do (sign in, enter a one-time code, unlock it), and stop until they run resume.",
+    args: {
+      reason: {
+        type: "string",
+        description: "What the person must do, in one line they will read.",
+        required: true,
+      },
+    },
+  },
 ];
 
 export interface RunResult {
@@ -276,6 +289,11 @@ export class CommandRunner {
         throw new UitestError(`invalid_argument: ${name} needs ${key}`, "EINVALIDARGUMENT");
       }
     }
+
+    // Handing the device over is the one command that must work precisely
+    // when the session is losing it: it writes the person's lease itself, so
+    // it runs before the ownership check instead of being stopped by it.
+    if (name === "handoff") return this.handoff(raw);
 
     // A long-lived MCP session must notice that a person took the phone. The
     // check is one file read; on a session that still owns the device it is a
@@ -399,6 +417,40 @@ export class CommandRunner {
       default:
         throw new UitestError(`unknown command "${name}"`, "EUNKNOWNCOMMAND");
     }
+  }
+
+  /**
+   * Gives the phone to the person and ends the agent's turn.
+   *
+   * The status is `handoff`, not `settled`: the step the agent wanted did not
+   * happen, and nothing should be retried until a person runs `resume`. Exit
+   * code 2 puts it with `lease_held`, which is the same instruction to a
+   * caller — the device is not yours right now.
+   */
+  private async handoff(raw: Record<string, unknown>): Promise<RunResult> {
+    const reason = String(raw.reason).replace(/\s+/g, " ").trim();
+    const result = await handoffDevice({
+      stateDir: this.opts.stateDir,
+      tag: this.session.tag,
+      reason,
+    });
+    const lines = [
+      "handoff · the phone is with the person",
+      `reason: ${reason}`,
+      "Stop here and tell them what you need. They will run `uitest-phone resume` when done;",
+      "then observe and continue. Until then every command returns lease_held.",
+    ];
+    if (result.tookOverFrom) lines.push(`handed over from task: ${result.tookOverFrom}`);
+    const text = lines.join("\n");
+    // The trace is the record the person gets at the end: the step where the
+    // agent asked for help belongs in it.
+    this.session.record("handoff", raw, "handoff", text);
+    return {
+      status: "handoff",
+      code: EXIT_CODE.handoff,
+      text,
+      data: { task: HOLD_TASK, reason, tookOverFrom: result.tookOverFrom ?? null },
+    };
   }
 
   private async observe(raw: Record<string, unknown>): Promise<RunResult> {

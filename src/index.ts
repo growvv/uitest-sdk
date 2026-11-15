@@ -85,8 +85,8 @@ export { agentTarget, connectAgent, agentConnected, mcpEntry } from "./connect.j
 export type { AgentId, AgentTarget, ConnectAgentOptions, ConnectAgentResult, McpEntryOptions } from "./connect.js";
 export { registerJsonMcp, registerTomlMcp, isMcpRegistered } from "./mcp-register.js";
 export type { McpEntry, RegisterMcpOptions, RegisterMcpResult } from "./mcp-register.js";
-export { holdDevice, resumeDevice, readHold, resolveTag, HOLD_TASK } from "./hold.js";
-export type { HoldOptions, HoldResult } from "./hold.js";
+export { handoffDevice, holdDevice, resumeDevice, readHold, resolveTag, HOLD_TASK } from "./hold.js";
+export type { HandoffOptions, HoldOptions, HoldResult } from "./hold.js";
 export { DevicePool } from "./pool.js";
 
 export { HdcRunner } from "./hdc.js";

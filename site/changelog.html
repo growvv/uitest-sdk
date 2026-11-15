@@ -39,7 +39,7 @@
           <h2>未发布</h2>
           <span class="release-tag">master · 尚未发包</span>
         </div>
-        <p>0.2.0 之后的三处功能修改，都来自「默认值不该替人放行」这一条。</p>
+        <p>0.2.0 之后的四处功能修改，都来自「默认值不该替人放行」这一条。</p>
 
         <h3>删除与发送默认要审批</h3>
         <ul>
@@ -56,6 +56,13 @@
           <li>hold 不按进程存活判断，所以不会自己过期，也没有命令能把它抢回去。</li>
           <li>实测：<code>hold</code> 之后一条 Agent 命令 2.3 s 退出 2，提示「A person is using the phone. Stop and wait; they will run <code>uitest-phone resume</code>.」；MCP 会话在 hold 期间的工具调用返回 <code>lease_held</code>，<code>resume</code> 后下一条恢复 <code>settled</code>。</li>
           <li>设备侧的 UI 事件流不可用于判断「人在动手机」：会关掉会话、能把 daemon 卡死，且合成点击也被当成手指。所以接管是人的明确声明。</li>
+        </ul>
+
+        <h3>Agent 可以请人接手</h3>
+        <ul>
+          <li><code>uitest-phone handoff --reason "请登录后继续"</code>（MCP 工具 <code>uitest_handoff</code>）把手机交给人并立即返回 <code>handoff</code>（退出码 2）：Agent 遇到登录、验证码、解锁这类只有人能做的一步时，不再猜或试图绕开。</li>
+          <li>原因写进租约，之后每个拿到 <code>lease_held</code> 的命令都会重复它；人做完后 <code>resume</code>，同一个 Agent 会话下一条命令自动继续。</li>
+          <li>与 <code>hold</code> 是同一条租约、同一个 <code>resume</code>：不做两套状态机。真机实测 MCP 会话 handoff → 同一会话 <code>lease_held</code> → resume → <code>settled</code>。</li>
         </ul>
 
         <h3>一步接好 Agent</h3>

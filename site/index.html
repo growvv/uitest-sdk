@@ -87,7 +87,7 @@
         </div>
       </div>
 
-      <h3 class="cli-sub">19 条命令</h3>
+      <h3 class="cli-sub">20 条命令</h3>
       <div class="table-wrap">
         <table class="cli-table cli-commands">
           <tbody>
@@ -110,6 +110,7 @@
             <tr><td><code>screenshot</code></td><td>存一张 JPEG，报告帧尺寸与缩放因子</td></tr>
             <tr><td><code>report</code></td><td>把整轮任务写成自包含 HTML 报告</td></tr>
             <tr><td><code>status</code></td><td>当前任务、设备哈希、策略设置</td></tr>
+            <tr><td><code>handoff</code></td><td>请人接手（登录、验证码、解锁），设备交给人直到 <code>resume</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -164,7 +165,7 @@
 npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
 npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
       <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
-      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>resume</code> 在 master 上，尚未发包；npm 上的 0.2.0 只有 <code>mcp</code> 与 <code>install-skill</code>。</p>
+      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 在 master 上，尚未发包；npm 上的 0.2.0 只有 <code>mcp</code> 与 <code>install-skill</code>。</p>
 
       <div class="bench-grid">
         <article class="bench-card">
@@ -187,9 +188,10 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
           <h3>随时可以接管</h3>
           <ul>
             <li><code>uitest-phone hold</code> 把设备交给此时拿着手机的人，连正在运行的 MCP 会话也一并让出。</li>
+            <li>Agent 也可以反向发起：<code>handoff --reason "请登录"</code> 把手机交给人，并停下等 <code>resume</code>。</li>
             <li>Agent 命令 2 秒内以 <code>lease_held</code>（退出码 2）停下，不重试、不抢回。</li>
             <li><code>resume</code> 交还后，同一个会话下一条命令自动继续，不用重启。</li>
-            <li>hold 不按进程存活判断，所以不会自己过期。</li>
+            <li>hold 与 handoff 都不按进程存活判断，所以不会自己过期。</li>
           </ul>
         </article>
       </div>
@@ -205,6 +207,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
             <tr><td><code>uncertain</code></td><td>1</td><td>等不到 UI 停止变化</td></tr>
             <tr><td><code>not_found</code></td><td>1</td><td>ref、标签或列表不在屏幕上</td></tr>
             <tr><td><code>lease_held</code></td><td>2</td><td>另一个任务——或人——占着这台设备</td></tr>
+            <tr><td><code>handoff</code></td><td>2</td><td>Agent 主动把手机交给人，等对方 <code>resume</code></td></tr>
             <tr><td><code>approval_pending</code></td><td>3</td><td>需要人确认这一步</td></tr>
             <tr><td><code>blocked</code></td><td>4</td><td>策略在碰设备前就拒绝了</td></tr>
             <tr><td><code>approval_denied</code></td><td>4</td><td>审批 id 错误、用过或过期</td></tr>
@@ -297,8 +300,8 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
             <tr><td>连续 H.264 投流</td><td>不支持</td><td>不支持</td><td>内置投屏，未公开 API</td><td>15–89 fps</td></tr>
             <tr><td>MP4 录制</td><td>不支持</td><td>不支持</td><td>7.0 上失效</td><td>6.8 casting</td></tr>
             <tr><td>多实例并发</td><td>命令无状态，受设备锁限制</td><td>命令无状态，受设备锁限制</td><td>单设备会话为主</td><td>复用 daemon + 退避</td></tr>
-            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，94 个导出</td></tr>
-            <tr><td>命令行 / Agent</td><td>手敲命令</td><td>手敲命令</td><td>图形化界面</td><td>19 条命令 + MCP + Skill</td></tr>
+            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，95 个导出</td></tr>
+            <tr><td>命令行 / Agent</td><td>手敲命令</td><td>手敲命令</td><td>图形化界面</td><td>20 条命令 + MCP + Skill</td></tr>
             <tr><td>结构化错误</td><td>文本输出</td><td>文本输出</td><td>文本 / 异常为主</td><td><code>UitestError</code> + code</td></tr>
           </tbody>
         </table>
@@ -344,7 +347,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
         </article>
         <article class="card">
           <h3>命令行</h3>
-          <p>19 条命令覆盖读屏、动作、列表、窗口与报告，每条开一次设备、执行一步、释放。不写代码也能操作手机。</p>
+          <p>20 条命令覆盖读屏、动作、列表、窗口与报告，每条开一次设备、执行一步、释放。不写代码也能操作手机。</p>
         </article>
         <article class="card">
           <h3>Agent 接入</h3>
@@ -352,7 +355,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
         </article>
         <article class="card">
           <h3>人随时接管</h3>
-          <p><code>hold</code> 之后所有 Agent 命令以 <code>lease_held</code> 停下，不会重试也不会抢回；<code>resume</code> 交还。</p>
+          <p><code>hold</code> 之后所有 Agent 命令以 <code>lease_held</code> 停下，不会重试也不会抢回；<code>resume</code> 交还。Agent 遇到登录或验证码也可以 <code>handoff</code>，把手机交给人并等待。</p>
         </article>
       </div>
     </section>

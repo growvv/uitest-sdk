@@ -57,11 +57,43 @@ function lockPath(stateDir: string, tag: string): string {
  * The task is not stopped mid-gesture; it finds out on its next command.
  */
 export async function holdDevice(opts: HoldOptions): Promise<HoldResult> {
+  return takeDevice(opts);
+}
+
+/** What an agent asks the person to do, in one line they can act on. */
+export interface HandoffOptions extends HoldOptions {
+  reason: string;
+}
+
+/**
+ * Takes the device because the agent asked the person to.
+ *
+ * This is the agent-initiated half of `hold`: the agent reached a step only a
+ * person can do — signing in, a one-time code, unlocking the phone — and gives
+ * the phone up instead of guessing or typing a credential. It writes the same
+ * person's lease as `hold`, so every command (including the MCP session that
+ * asked) stops with `lease_held` until the person runs `resume`.
+ *
+ * The difference is the reason: `hold` is the person speaking, while a handoff
+ * has to tell them what the agent needs. The reason is stored in the lease, so
+ * another agent that knocks gets it too.
+ */
+export async function handoffDevice(opts: HandoffOptions): Promise<HoldResult> {
+  return takeDevice(opts);
+}
+
+/** The write both entry points share; `reason` is what makes a handoff. */
+async function takeDevice(opts: HoldOptions & { reason?: string }): Promise<HoldResult> {
   const path = lockPath(opts.stateDir, opts.tag);
   await mkdir(join(opts.stateDir, "leases"), { recursive: true });
   const current = await readLease(path);
   const lease = await Lease.acquire({
-    path, task: HOLD_TASK, staleMs: opts.staleMs, hold: true, force: true,
+    path,
+    task: HOLD_TASK,
+    staleMs: opts.staleMs,
+    hold: true,
+    force: true,
+    ...(opts.reason ? { reason: opts.reason } : {}),
   });
   const tookOverFrom = current && !current.hold ? current.task : undefined;
   return { path, token: lease.info.token, task: lease.info.task, ...(tookOverFrom ? { tookOverFrom } : {}) };

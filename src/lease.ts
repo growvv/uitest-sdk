@@ -18,6 +18,13 @@ export interface LeaseInfo {
    * would make every agent command steal the device back immediately.
    */
   hold?: true;
+  /**
+   * Why a person was asked to take the phone (`uitest-phone handoff`).
+   *
+   * A hold outlives the call that created it, so this is what a later reader
+   * (the person, or another agent that gets `lease_held`) has to go on.
+   */
+  reason?: string;
 }
 
 export interface LeaseOptions {
@@ -35,6 +42,8 @@ export interface LeaseOptions {
   host?: string;
   /** Mark this lease as a person's hold, so pid liveness does not apply. */
   hold?: boolean;
+  /** What the person was asked to do; shown in `lease_held`. */
+  reason?: string;
   /**
    * Take the device even from a live task.
    *
@@ -61,6 +70,7 @@ export async function readLease(path: string): Promise<LeaseInfo | null> {
       heartbeatAt: Number(parsed.heartbeatAt ?? 0),
     };
     if (parsed.hold === true) info.hold = true;
+    if (typeof parsed.reason === "string" && parsed.reason) info.reason = parsed.reason;
     return info;
   } catch {
     return null;
@@ -113,6 +123,8 @@ export class Lease {
     for (let attempt = 0; attempt < 3; attempt++) {
       const at = now();
       const token = randomBytes(8).toString("hex");
+      // One line: the reason is appended to a status line in `lease_held`.
+      const reason = String(opts.reason ?? "").replace(/\s+/g, " ").trim();
       const info: LeaseInfo = {
         task: String(opts.task ?? "").trim() || "task",
         token,
@@ -122,6 +134,7 @@ export class Lease {
         heartbeatAt: at,
       };
       if (opts.hold) info.hold = true;
+      if (reason) info.reason = reason;
       try {
         // `wx` is the atomic part: exactly one process creates the file.
         const handle = await open(opts.path, "wx");
@@ -143,6 +156,13 @@ export class Lease {
       }
       if (current.task === info.task) {
         // Re-entering the same task is a no-op that keeps the original owner.
+        // A handoff that asks again is the exception: the person may now need
+        // a different step, and the reason is the message they are acting on.
+        if (info.reason && current.hold && current.reason !== info.reason) {
+          const next = { ...current, reason: info.reason };
+          await writeFile(opts.path, `${JSON.stringify(next)}\n`);
+          return new Lease(next, opts.path, now, staleMs);
+        }
         return new Lease(current, opts.path, now, staleMs);
       }
       const sameHost = current.host === host;
@@ -157,7 +177,7 @@ export class Lease {
         throw new LeaseHeldError(
           `lease_held · this device already runs task "${current.task}"` +
             (current.hold
-              ? `\nA person is using the phone. Stop and wait; they will run \`uitest-phone resume\`.`
+              ? `\nA person is using the phone${current.reason ? ` (the agent asked: ${current.reason})` : ""}. Stop and wait; they will run \`uitest-phone resume\`.`
               : `\nIf that task is gone, remove ${opts.path} or wait for its heartbeat to expire.`),
           "ELEASE",
         );

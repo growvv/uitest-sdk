@@ -421,9 +421,20 @@ text="A & B = C"     quote a value that contains & or =
 ## Takeover: the person takes the phone
 
 ```
+uitest-phone handoff --reason <text> [--device <id>] [--state-dir <dir>]
 uitest-phone hold [--device <id>] [--state-dir <dir>]
 uitest-phone resume [--device <id>] [--state-dir <dir>]
 ```
+
+`handoff` is the agent's side of the same lease: it reached a step only a
+person can do — signing in, a one-time code, unlocking the phone — and gives
+the phone up instead of guessing. It writes `"held by a person"` at once and
+returns `handoff` (exit 2); stop, tell the person exactly what you need, and
+end your turn. The reason is stored in the lease and repeated by every command
+that gets `lease_held`, so the person and any other agent can see what is
+needed. Agents call it as the MCP tool `uitest_handoff`, where `reason` is
+required. `resume` hands the phone back; the same agent session continues on
+its next command.
 
 `hold` writes the device's lease as `"held by a person"` and exits; every
 agent command on that device then stops with `lease_held` (exit 2) in a couple
@@ -432,8 +443,8 @@ of seconds. It preempts a task that is already running — including an open
 is not stopped mid-gesture; it finds out on its next command, and `hold` prints
 which task it took the device from. `resume` releases it, and the same agent
 session takes the device again on its next command instead of needing a
-restart. Only a hold is released: a lease that belongs to another task is left
-alone, because only the task that took the device can end cleanly.
+restart. Only a hold or handoff is released: a lease that belongs to another
+task is left alone, because only the task that took the device can end cleanly.
 
 A hold is not judged by process liveness — the command that wrote it has
 already exited — so it never expires on its own and no agent command steals it
@@ -453,6 +464,7 @@ which is also the only version an agent can obey.
 | `uncertain` | 1 | The UI never stopped changing within `--settle-ms`. |
 | `not_found` | 1 | The ref, label or list is not on screen. |
 | `lease_held` | 2 | Another task, or a person, holds this device. |
+| `handoff` | 2 | You asked the person to take the phone; wait for `resume`. |
 | `approval_pending` | 3 | A person must approve this exact step. |
 | `blocked` | 4 | Policy refused before the device was touched. |
 | `approval_denied` | 4 | The approval id was wrong, used or expired. |

@@ -125,6 +125,7 @@ for (const needle of [
   "~/.agents/skills",
   "uitest-phone hold",
   "resume",
+  "handoff --reason",
   "正在运行的 MCP 会话",
   "lease_held</code></td><td>2",
 ]) {
@@ -135,7 +136,7 @@ for (const needle of [
 for (const name of [
   "observe", "tap", "type", "swipe", "double-click", "drag", "fling", "pinch",
   "key", "wait-for", "read-list", "scroll-until", "launch", "apps", "window",
-  "doctor", "screenshot", "report", "status",
+  "doctor", "screenshot", "report", "status", "handoff",
 ]) {
   if (!cli.includes(name)) fail(`#cli 没有列出命令 ${name}`);
 }
@@ -307,6 +308,8 @@ for (const needle of [
   "resume",
   "held by a person",
   "抢走正在运行的任务",
+  "uitest_handoff",
+  "handoff --reason",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -334,6 +337,8 @@ for (const needle of [
   "~/.agents/skills",
   "A person is using the phone",
   "抢走正在运行的任务",
+  "Agent 可以请人接手",
+  "uitest_handoff",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

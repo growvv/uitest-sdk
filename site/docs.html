@@ -214,7 +214,7 @@ uitest-phone tap --ref 12 --task "check WLAN"
 uitest-phone read-list --ref 20
 uitest-phone report --title "WLAN check"</code></pre>
       <p>全局 flag 对所有命令生效：<code>--task</code>、<code>--state-dir</code>、<code>--device</code>、<code>--read-only</code>、<code>--apps</code>、<code>--confirm</code>、<code>--settle-ms</code>、<code>--trace-shots</code>、<code>--approval-id</code>、<code>--json</code>。完整命令与参数见 <code>--help</code> 与随包 Skill 的 <code>REFERENCE.md</code>。</p>
-      <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
+      <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code>/<code>handoff</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
 
       <h3>MCP 与 Skill</h3>
       <pre><code>uitest-phone mcp               # stdio 上以 JSON-RPC 2.0 暴露 uitest_&lt;command&gt;
@@ -238,9 +238,11 @@ uitest-phone connect --agent codex</code></pre>
 
       <h3>接管：人要用手机</h3>
       <pre><code>uitest-phone hold       # 设备归人；Agent 命令 2 秒内以 lease_held（退出码 2）停下
+uitest-phone handoff --reason "请登录后继续"   # Agent 主动请人接手，停在 handoff
 uitest-phone resume     # 交还给 Agent</code></pre>
       <p><code>hold</code> 把租约写成 <code>"held by a person"</code> 后立即退出。它不按进程存活判断，所以不会自己过期，也没有 Agent 命令能把它抢回去；<code>resume</code> 只释放 hold，别的任务自己的租约不碰——只有取走设备的那个任务能干净地结束。</p>
       <p>它可以抢走正在运行的任务，包括整个进程只持一次租约的 <code>uitest-phone mcp</code> 会话。任务不会在动作中途被打断，而是在下一条命令前发现租约没了，返回 <code>lease_held</code>；<code>hold</code> 会打印它从哪个任务手里接过了设备。<code>resume</code> 之后同一个 Agent 会话在下一条命令自动重新取得设备，不需要重启。</p>
+      <p>Agent 也能反向发起：<code>handoff --reason "请登录后继续"</code> 把手机交给人，立即返回 <code>handoff</code>（退出码 2）。原因写在租约里，之后每个拿到 <code>lease_held</code> 的命令都会重复它；人做完后 <code>resume</code>，同一个 Agent 会话下一条命令继续。MCP 里对应工具是 <code>uitest_handoff</code>，参数 <code>reason</code> 必填——没有原因，人打开手机时只能猜 Agent 要什么。</p>
       <p>设备侧没有「人在用手机」的可靠信号：UI 事件流会关掉会话、能把 agent daemon 卡死，而且合成点击也会被当成手指，分不出真假。所以接管是人的明确声明，这也正好是 Agent 唯一能遵守的形式。</p>
 
       <h2 id="cast">7. 投流与录制</h2>

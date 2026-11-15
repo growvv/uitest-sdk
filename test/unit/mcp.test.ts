@@ -42,6 +42,14 @@ describe("toolDefinitions", () => {
     const type = toolDefinitions().find((t) => t.name === "uitest_type")!;
     expect(type.inputSchema.required).toEqual(["text"]);
   });
+
+  it("gives the agent a handoff tool that requires a reason", () => {
+    // The reason is what the person reads when they pick up the phone; a
+    // handoff without one asks them to guess what the agent needs.
+    const handoff = toolDefinitions().find((t) => t.name === "uitest_handoff")!;
+    expect(handoff.inputSchema.required).toEqual(["reason"]);
+    expect(handoff.description).toMatch(/person/i);
+  });
 });
 
 describe("McpServer", () => {

@@ -16,7 +16,8 @@ export type ActionStatus =
   | "approval_pending"
   | "approval_denied"
   | "stale"
-  | "lease_held";
+  | "lease_held"
+  | "handoff";
 
 interface Base {
   /** Screen after the step; null only when the step could not observe one. */
@@ -41,7 +42,9 @@ export type ActionResult =
   /** The screen changed while an approval was pending. */
   | (Base & { status: "stale"; reason: string })
   /** Another task holds this device. */
-  | (Base & { status: "lease_held"; task: string });
+  | (Base & { status: "lease_held"; task: string })
+  /** The agent handed the device to a person for a step only they can do. */
+  | (Base & { status: "handoff"; task: string; reason: string });
 
 /** Process exit code for a status; shared by the CLI and any other wrapper. */
 export const EXIT_CODE: Record<ActionStatus, number> = {
@@ -53,6 +56,9 @@ export const EXIT_CODE: Record<ActionStatus, number> = {
   blocked: 4,
   approval_denied: 4,
   stale: 4,
+  // The device is not the caller's until the person runs `resume`, which is
+  // the same situation as `lease_held`: stop, do not retry.
+  handoff: 2,
 };
 
 export function statusOf(result: ActionResult): number {
@@ -82,5 +88,7 @@ export function actionText(result: ActionResult): string {
       return `stale · ${result.reason}`;
     case "lease_held":
       return `lease_held · this device already runs task "${result.task}"`;
+    case "handoff":
+      return `handoff · the phone is with the person: ${result.reason}`;
   }
 }

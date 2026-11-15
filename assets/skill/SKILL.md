@@ -162,9 +162,27 @@ declared entry ability.
 | `blocked` | Credentials, read-only, or the app allow-list refused. | Report the rule; do not work around it. |
 | `stale` | The screen changed while an approval waited. | Observe and, if still needed, ask again. |
 | `lease_held` | Another task — or the person — holds the phone. | Stop. Do not retry in a loop. |
+| `handoff` | You handed the phone to a person. | Stop and tell them; continue after `resume`. |
 
-CLI exit codes: `0` settled, `1` uncertain/not_found, `2` lease held,
-`3` approval pending, `4` blocked/denied/stale.
+CLI exit codes: `0` settled, `1` uncertain/not_found, `2` lease held or handed
+off, `3` approval pending, `4` blocked/denied/stale.
+
+## When a person must do a step
+
+Some steps only a person can do: signing in, entering a one-time code,
+unlocking the phone, or a screen the policy blocks. Do not type a credential
+and do not look for another way to reach the phone. Call:
+
+```bash
+npx uitest-sdk handoff --reason "Sign in to Dinely"
+```
+
+Or the MCP tool `uitest_handoff` with `reason`. It returns `handoff` at once
+(exit code 2; an error result in MCP): the phone is the person's now. Stop
+calling tools, tell them exactly what you need, and end your turn. They run
+`uitest-phone resume` when done; your next command takes the device again —
+observe before continuing. Any call before that returns `lease_held` with the
+same reason repeated; do not retry in a loop.
 
 When `lease_held` names `"held by a person"`, a person is using the phone.
 Stop and tell them; they will run `uitest-phone resume` when they are done.
@@ -194,8 +212,8 @@ When you get `approval_pending`:
 
 Credential fields (password, OTP, PIN, verification code) are always blocked.
 Do not ask the person for a password or OTP, and do not type one even into a
-field the policy did not label as a credential field; ask the person to take
-the phone.
+field the policy did not label as a credential field; call `uitest_handoff` and
+let the person take the phone.
 
 `--confirm all` adds deleting, sending and confirming actions to the approval
 set. `--confirm none` removes approvals only on the person's explicit
