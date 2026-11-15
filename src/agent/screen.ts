@@ -56,6 +56,11 @@ export interface Screen {
   /** The raw tree, for callers that need attributes the screen model hides. */
   tree: UiNode;
   at: number;
+  /**
+   * The system lock screen. Set only when the screen is a lock screen; a
+   * command then returns `device_locked` instead of treating it as content.
+   */
+  locked?: boolean;
 }
 
 export interface ScreenContext {
@@ -391,6 +396,11 @@ export class ScreenBuilder {
 
     const focus = kept.find((c) => c.focused);
     const bundle = attr(tree, "bundleName") || findBundle(tree) || "unknown";
+    // The lock screen is an ordinary window to the layout API. Its bundle
+    // carries the name on both MagicOS (`SCBScreenLock13`) and HarmonyOS
+    // (`com.huawei.hmos.screenlock`); the widget label is a second signal for
+    // builds that report a generic bundle.
+    const locked = /screen\s*lock/i.test(bundle) || kept.some((e) => /ScreenLockWidget/i.test(e.label));
     const displayKey = `${ctx.display.width}x${ctx.display.height}@${ctx.rotation}`;
     const header = `screen ${displayKey.split("@")[0]} · app: ${bundle} · rotation ${ctx.rotation * 90}°${
       focus ? ` · focus [${focus.ref}]` : ""
@@ -409,6 +419,7 @@ export class ScreenBuilder {
       signatures,
       tree,
       at: Date.now(),
+      ...(locked ? { locked: true } : {}),
     };
   }
 }

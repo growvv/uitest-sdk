@@ -17,7 +17,10 @@ export type ActionStatus =
   | "approval_denied"
   | "stale"
   | "lease_held"
-  | "handoff";
+  | "handoff"
+  | "device_locked"
+  | "device_needs_setup"
+  | "device_offline";
 
 interface Base {
   /** Screen after the step; null only when the step could not observe one. */
@@ -44,7 +47,13 @@ export type ActionResult =
   /** Another task holds this device. */
   | (Base & { status: "lease_held"; task: string })
   /** The agent handed the device to a person for a step only they can do. */
-  | (Base & { status: "handoff"; task: string; reason: string });
+  | (Base & { status: "handoff"; task: string; reason: string })
+  /** The screen is the system lock screen; only a person can unlock it. */
+  | (Base & { status: "device_locked" })
+  /** The phone is attached but has not authorized this computer for debugging. */
+  | (Base & { status: "device_needs_setup" })
+  /** No usable hdc target: unplugged, switched off, or still connecting. */
+  | (Base & { status: "device_offline" });
 
 /** Process exit code for a status; shared by the CLI and any other wrapper. */
 export const EXIT_CODE: Record<ActionStatus, number> = {
@@ -59,6 +68,11 @@ export const EXIT_CODE: Record<ActionStatus, number> = {
   // The device is not the caller's until the person runs `resume`, which is
   // the same situation as `lease_held`: stop, do not retry.
   handoff: 2,
+  // A person has to unlock, authorize or plug in the phone. Retrying the same
+  // command cannot change any of these, so they share the "stop" code.
+  device_locked: 2,
+  device_needs_setup: 2,
+  device_offline: 2,
 };
 
 export function statusOf(result: ActionResult): number {
@@ -90,5 +104,20 @@ export function actionText(result: ActionResult): string {
       return `lease_held · this device already runs task "${result.task}"`;
     case "handoff":
       return `handoff · the phone is with the person: ${result.reason}`;
+    case "device_locked":
+      return (
+        "device_locked · the phone is on its lock screen. Ask the person to unlock it; " +
+        "do not try a PIN, pattern or password."
+      );
+    case "device_needs_setup":
+      return (
+        "device_needs_setup · the phone has not authorized this computer for debugging. " +
+        'Ask the person to unlock it and tap "Allow" on the USB debugging prompt.'
+      );
+    case "device_offline":
+      return (
+        "device_offline · no usable phone is attached. Ask the person to connect it by USB, " +
+        "unlock it, and check that USB debugging is on."
+      );
   }
 }

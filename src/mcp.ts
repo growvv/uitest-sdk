@@ -1,6 +1,8 @@
 import { createInterface } from "node:readline";
+import { EXIT_CODE } from "./agent/result.js";
 import { COMMANDS } from "./commands.js";
 import type { RunResult } from "./commands.js";
+import { DeviceStateError } from "./errors.js";
 import { VERSION } from "./version.js";
 
 /** The subset of CommandRunner the server uses; keeps the tests device-free. */
@@ -118,7 +120,24 @@ export class McpServer {
       return error(id, -32602, `unknown tool "${name}"; tools are named uitest_<command>`);
     }
     const args = (params["arguments"] ?? {}) as Record<string, unknown>;
-    const result = await this.runner.run(command, args);
+    let result;
+    try {
+      result = await this.runner.run(command, args);
+    } catch (e) {
+      // A phone that is locked, unauthorized or unplugged is a task outcome,
+      // not a protocol failure: the agent must see the status word and stop.
+      if (e instanceof DeviceStateError) {
+        const state = { status: e.state, code: EXIT_CODE[e.state] };
+        return reply(id, {
+          content: [
+            { type: "text", text: e.message },
+            { type: "text", text: JSON.stringify(state) },
+          ],
+          isError: true,
+        });
+      }
+      throw e;
+    }
     const payload = {
       status: result.status,
       code: result.code,

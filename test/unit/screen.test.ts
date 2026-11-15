@@ -43,6 +43,22 @@ function exampleTree(): UiNode {
 const display = { width: 400, height: 1200 };
 
 describe("ScreenBuilder", () => {
+  it("marks the system lock screen", () => {
+    // The lock screen is an app like any other as far as the layout is
+    // concerned; without this marker the agent would read it as a page of
+    // content and try to tap things on it.
+    const tree = node({ bundleName: "SCBScreenLock13", bounds: "[0,0][400,1200]" }, [
+      node({ type: "Button", text: "ScreenLockWidgetView 9:41", clickable: "true", bounds: "[100,200][300,300]" }),
+    ]);
+    const screen = new ScreenBuilder().build(tree, { display, rotation: 0 });
+    expect(screen.locked).toBe(true);
+  });
+
+  it("does not mark an ordinary app as locked", () => {
+    const screen = new ScreenBuilder().build(exampleTree(), { display, rotation: 0 });
+    expect(screen.locked).toBeUndefined();
+  });
+
   it("filters bars and structural noise, keeps meaningful elements", () => {
     const screen = new ScreenBuilder().build(exampleTree(), { display, rotation: 0 });
     const labels = screen.elements.map((e) => e.label);

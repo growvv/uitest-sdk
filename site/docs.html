@@ -214,7 +214,8 @@ uitest-phone tap --ref 12 --task "check WLAN"
 uitest-phone read-list --ref 20
 uitest-phone report --title "WLAN check"</code></pre>
       <p>全局 flag 对所有命令生效：<code>--task</code>、<code>--state-dir</code>、<code>--device</code>、<code>--read-only</code>、<code>--apps</code>、<code>--confirm</code>、<code>--settle-ms</code>、<code>--trace-shots</code>、<code>--approval-id</code>、<code>--json</code>。完整命令与参数见 <code>--help</code> 与随包 Skill 的 <code>REFERENCE.md</code>。</p>
-      <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code>/<code>handoff</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
+      <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code>/<code>handoff</code>/<code>device_locked</code>/<code>device_needs_setup</code>/<code>device_offline</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
+      <p>设备本身不可用时也有名字：锁屏是 <code>device_locked</code>（不把锁屏当成页面去点），连上但没授权调试是 <code>device_needs_setup</code>，没插/关机/Offline 是 <code>device_offline</code>。三者都以退出码 2 停下，Agent 应请人解锁、点「允许」或插线，而不是重试。</p>
 
       <h3>凭据脱敏</h3>
       <p><code>observe</code>、动作后的 diff、<code>read-list</code>、<code>screenshot</code>、<code>--trace-shots</code> 与 <code>report</code> 共用一份屏幕模型：密码框的值显示为 <code>••••••</code>；凭据语境里的 3–8 位验证码显示为等长圆点，前后的词保留，策略仍能分类。被遮住的元素不能再按原文找到（<code>tap --text 482913</code> 返回 <code>not_found</code>），截图里的对应区域盖成灰色。低层 <code>agent.captureLayout()</code> / <code>captureScreen()</code> 返回设备原样数据，不脱敏。</p>

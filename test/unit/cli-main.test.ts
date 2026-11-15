@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseArgv, formatHelp, formatResult, exitCodeForError } from "../../src/cli-main.js";
 import { COMMANDS } from "../../src/commands.js";
-import { LeaseHeldError, UitestError } from "../../src/errors.js";
+import { DeviceStateError, LeaseHeldError, UitestError } from "../../src/errors.js";
 import { runCommand } from "../../src/cli-main.js";
 import { Lease } from "../../src/lease.js";
 import { tagOf } from "../../src/session.js";
@@ -80,6 +80,14 @@ describe("exitCodeForError", () => {
     // any command runs, so this mapping is the only thing that can produce it;
     // a blanket `return 1` made the documented code unreachable.
     expect(exitCodeForError(new LeaseHeldError("lease_held · busy", "ELEASE"))).toBe(2);
+  });
+
+  it("uses exit code 2 for a device that is not usable", () => {
+    // Locked, unauthorized or unplugged: the caller must involve a person,
+    // and retrying the same command cannot help. Same code as lease_held.
+    for (const state of ["device_locked", "device_needs_setup", "device_offline"] as const) {
+      expect(exitCodeForError(new DeviceStateError(state, `x · ${state}`, "ESTATE"))).toBe(2);
+    }
   });
 
   it("keeps 1 for everything else", () => {

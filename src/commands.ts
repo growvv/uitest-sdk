@@ -245,6 +245,12 @@ function resultDetails(r: ActionResult): Record<string, unknown> {
       return { reason: r.reason };
     case "lease_held":
       return { task: r.task };
+    case "handoff":
+      return { task: r.task, reason: r.reason };
+    case "device_locked":
+    case "device_needs_setup":
+    case "device_offline":
+      return {};
     default:
       return {};
   }
@@ -466,9 +472,12 @@ export class CommandRunner {
     const out = asString(raw.out);
     const r = await this.session.observe({ out });
     const screen = r.screen;
-    const text = screen
+    const body = screen
       ? `${screen.header}\n${screen.lines.join("\n")}${out ? `\nsaved: ${out}` : ""}`
       : "not_found: no screen";
+    // On the lock screen the status is the answer; the elements below are
+    // context, not a page to choose from. Keep the instruction above them.
+    const text = r.status === "settled" ? body : `${actionText(r)}\n${body}`;
     return {
       status: r.status,
       code: statusOf(r),

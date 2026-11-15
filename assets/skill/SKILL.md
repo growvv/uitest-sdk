@@ -168,9 +168,13 @@ declared entry ability.
 | `stale` | The screen changed while an approval waited. | Observe and, if still needed, ask again. |
 | `lease_held` | Another task — or the person — holds the phone. | Stop. Do not retry in a loop. |
 | `handoff` | You handed the phone to a person. | Stop and tell them; continue after `resume`. |
+| `device_locked` | The phone is on its lock screen. | Ask the person to unlock it; never guess a PIN. |
+| `device_needs_setup` | The phone has not authorized this computer. | Ask the person to tap Allow on the debugging prompt. |
+| `device_offline` | No usable target: unplugged, off, or connecting. | Ask the person to connect it; do not retry in a loop. |
 
-CLI exit codes: `0` settled, `1` uncertain/not_found, `2` lease held or handed
-off, `3` approval pending, `4` blocked/denied/stale.
+CLI exit codes: `0` settled, `1` uncertain/not_found, `2` lease held, handed
+off, or the phone is locked/unauthorized/offline, `3` approval pending,
+`4` blocked/denied/stale.
 
 ## When a person must do a step
 

@@ -33,6 +33,8 @@ const hdcState = {
   stuck: false,
   /** `cat /proc/<pid>/cmdline` output for each pid `pidof uitest` reports. */
   cmdlines: {} as Record<string, string>,
+  /** Per-target hdc state; an id without an entry is Connected. */
+  states: {} as Record<string, string>,
 };
 
 /** Fake agent server that answers the connect-time health check. */
@@ -121,6 +123,9 @@ vi.mock("../../src/hdc.js", () => {
     async fportAdd(port: number) { return hdcState.agentPort || port; }
     async fportRemove(port: number) { hdcState.removedPorts.push(port); }
     async listTargets() { return hdcState.targets; }
+    async listTargetDetails() {
+      return hdcState.targets.map((id) => ({ id, state: hdcState.states[id] ?? "connected" }));
+    }
   }
   return { HdcRunner: FakeHdc };
 });
@@ -143,6 +148,7 @@ beforeEach(() => {
   hdcState.stuck = false;
   hdcState.killed = [];
   hdcState.cmdlines = { "1000": "/system/bin/uitest\u0000start-daemon\u0000singleness\u0000--extension-name\u0000agent.so\u0000" };
+  hdcState.states = {};
 });
 
 // --------------------------------------------------------------------- tests
@@ -164,6 +170,26 @@ describe("Device.connect", () => {
   it("throws DeviceNotConnectedError when no target is attached", async () => {
     hdcState.targets = [];
     await expect(Device.connect()).rejects.toThrow(DeviceNotConnectedError);
+  });
+
+  it("names device_offline when no target is attached", async () => {
+    hdcState.targets = [];
+    await expect(Device.connect()).rejects.toMatchObject({ state: "device_offline" });
+  });
+
+  it("names device_needs_setup when the phone has not authorized this computer", async () => {
+    // The target is attached, but `hdc shell` cannot run anything on it until
+    // the person unlocks the phone and allows USB debugging. Reporting this
+    // as a generic shell failure tells the agent to retry instead of asking.
+    hdcState.targets = ["fake-device"];
+    hdcState.states = { "fake-device": "unauthorized" };
+    await expect(Device.connect()).rejects.toMatchObject({ state: "device_needs_setup" });
+  });
+
+  it("names device_offline when the only target is offline", async () => {
+    hdcState.targets = ["fake-device"];
+    hdcState.states = { "fake-device": "offline" };
+    await expect(Device.connect()).rejects.toMatchObject({ state: "device_offline" });
   });
 
   it("reuses an already-listening daemon instead of starting one", async () => {

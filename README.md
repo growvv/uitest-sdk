@@ -130,8 +130,12 @@ npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两�
 - **窗口与多指**：`window` 报告焦点窗口（或某个 bundle 的窗口）的 bundle、焦点与 bounds，可 `--focus`/`--close`；
   `pinch` 走设备 `PointerMatrix` 做双指缩放，单指通道表达不了两条同时的轨迹。
 - **状态即结果**：`settled` / `uncertain` / `not_found` / `blocked` / `approval_pending` /
-  `approval_denied` / `stale` / `lease_held`，退出码 0/1/1/4/3/4/4/2，非 `settled` 时把
-  `approvalId`、`rule`、`reason` 放进 `--json` 的 `data`。
+  `approval_denied` / `stale` / `lease_held` / `device_locked` / `device_needs_setup` /
+  `device_offline`，退出码 0/1/1/4/3/4/4/2/2/2/2，非 `settled` 时把 `approvalId`、`rule`、
+  `reason` 放进 `--json` 的 `data`。
+- **设备状态有名字**：锁屏返回 `device_locked`（不把锁屏当成一个页面去点）；连上了但没授权调试
+  返回 `device_needs_setup`；没插/关机/Offline 返回 `device_offline`。三者都以退出码 2 停下，
+  Agent 应请人解锁、点「允许」或插线，而不是重试同一条命令。
 - **默认审批集**：支付、金融、删除、发送——四类人收不回来的动作。`commits`（确认 / 保存）不默认，
   因为手机上半数普通表单按钮都叫这个，每次都问会把人训练成不看就点同意。
 - **凭据不外泄**：密码框的值、凭据语境里的 3–8 位验证码，在 `observe`、diff、`read-list`、报告与

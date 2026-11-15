@@ -144,6 +144,33 @@ describe("CommandRunner", () => {
     });
   });
 
+  it("puts the device_locked instruction above the lock-screen elements", async () => {
+    // The elements are context; a bare screen dump with no instruction reads
+    // like a page the agent is supposed to work on.
+    const screen = {
+      header: "screen 1000x2000 · app: com.ohos.sceneboard · rotation 0°",
+      lines: ['[1] button "ScreenLockWidgetView RelativeContainer" @600,1300'],
+      bundle: "com.ohos.sceneboard",
+      locked: true,
+      elements: [],
+      hash: "0",
+    };
+    const session = {
+      steps: 0,
+      async assertLease() {},
+      record() {},
+      async observe() {
+        return { status: "device_locked", screen, step: 1, shot: null };
+      },
+    } as unknown as Session;
+    const runner = new CommandRunner(session, { stateDir: tmpdir() });
+    const r = await runner.run("observe", {});
+    expect(r.status).toBe("device_locked");
+    expect(r.code).toBe(2);
+    expect(r.text).toContain("Ask the person to unlock it");
+    expect(r.text).toContain("ScreenLockWidgetView");
+  });
+
   it("stops a live session when a person takes the device, and continues after resume", async () => {
     // This is the MCP shape: one session, many commands. A hold must reach it
     // mid-session, or "take over at any time" only holds between one-shot CLI

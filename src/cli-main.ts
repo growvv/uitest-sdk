@@ -2,7 +2,7 @@ import { COMMANDS, CommandRunner } from "./commands.js";
 import type { RunResult } from "./commands.js";
 import { Device } from "./device.js";
 import { Session } from "./session.js";
-import { LeaseHeldError, UitestError } from "./errors.js";
+import { DeviceStateError, LeaseHeldError, UitestError } from "./errors.js";
 import { EXIT_CODE } from "./agent/result.js";
 import type { DeviceOptions } from "./device.js";
 
@@ -120,7 +120,11 @@ function str(value: unknown): string | undefined {
  * 1, the code for "something went wrong, read the message".
  */
 export function exitCodeForError(e: unknown): number {
-  return e instanceof LeaseHeldError ? EXIT_CODE.lease_held : 1;
+  if (e instanceof LeaseHeldError) return EXIT_CODE.lease_held;
+  // Locked, unauthorized or offline: the person has to act, and retrying the
+  // same command is futile. 2 is the documented "device is not yours" code.
+  if (e instanceof DeviceStateError) return EXIT_CODE[e.state];
+  return 1;
 }
 
 export function formatHelp(): string {
@@ -236,7 +240,12 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const code = exitCodeForError(e);
-    const status = e instanceof LeaseHeldError ? "lease_held" : "error";
+    const status =
+      e instanceof LeaseHeldError
+        ? "lease_held"
+        : e instanceof DeviceStateError
+          ? e.state
+          : "error";
     if (parsed.json) {
       process.stdout.write(`${JSON.stringify({ status, code, text: message })}\n`);
     } else {

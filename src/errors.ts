@@ -10,6 +10,22 @@ export class UitestError extends Error {
 }
 
 export class DeviceNotConnectedError extends UitestError {}
+/**
+ * The device is attached (or expected) but not usable without a person:
+ * locked, not yet authorized for debugging, or offline. `state` is the
+ * agent-facing word for it, the same one a command result carries.
+ */
+export type DeviceState = "device_locked" | "device_needs_setup" | "device_offline";
+export class DeviceStateError extends DeviceNotConnectedError {
+  constructor(
+    readonly state: DeviceState,
+    message: string,
+    code: string,
+    cause?: unknown,
+  ) {
+    super(message, code, cause);
+  }
+}
 export class DaemonStartError extends UitestError {}
 export class AgentProtocolError extends UitestError {}
 export class AgentBusyError extends UitestError {}

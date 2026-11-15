@@ -475,6 +475,9 @@ which is also the only version an agent can obey.
 | `not_found` | 1 | The ref, label or list is not on screen. |
 | `lease_held` | 2 | Another task, or a person, holds this device. |
 | `handoff` | 2 | You asked the person to take the phone; wait for `resume`. |
+| `device_locked` | 2 | The screen is the system lock screen; only the person can unlock it. |
+| `device_needs_setup` | 2 | The phone has not authorized this computer for debugging. |
+| `device_offline` | 2 | No usable target: unplugged, off, or still connecting. |
 | `approval_pending` | 3 | A person must approve this exact step. |
 | `blocked` | 4 | Policy refused before the device was touched. |
 | `approval_denied` | 4 | The approval id was wrong, used or expired. |
@@ -534,7 +537,9 @@ paste it into a document.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `no hdc target attached` | Device not visible to `hdc` | `hdc list targets`; enable USB debugging. |
+| `device_offline` | No usable target: unplugged, off, or still connecting | Reconnect the cable, unlock the phone; `hdc list targets -v` shows the state. |
+| `device_needs_setup` | The phone has not authorized this computer | Unlock it and tap Allow on the USB debugging prompt. |
+| `device_locked` | The phone is on its lock screen | Ask the person to unlock it, or `handoff`; never guess a PIN. |
 | `agent daemon never listened on 8012` | `uitest` could not start | Check `pidof uitest`; reboot the device if the daemon is wedged. |
 | `lease_held` | Another task, or a person, holds the device | If it names `"held by a person"`, stop and wait: they will run `uitest-phone resume`. Otherwise wait for the heartbeat to expire, or remove the lock file if that task is gone. |
 | `Disallow concurrent use` | Two processes drive one device, or a killed one still holds it | Use one task per device. A client killed mid-command leaves a `CLOSE_WAIT` socket on the daemon that holds the lock indefinitely; `connect` restarts the agent daemon when no live client is connected, and tells you the exact command when it cannot. |

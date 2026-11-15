@@ -59,4 +59,25 @@ describe("HdcRunner", () => {
     const r = new HdcRunner({ hdcPath: "C:/fake/hdc.exe" });
     expect(await r.listTargets()).toEqual(["dev1", "dev2"]);
   });
+
+  it("keeps each target's connection state", async () => {
+    // `hdc list targets -v` is the only form that says whether a listed
+    // target is actually usable: an unauthorized phone is attached but cannot
+    // run anything until the person taps Allow, and an offline one is gone.
+    fakeHdc(() => ({
+      stdout: [
+        "dev1\t\tUSB\tConnected\tlocalhost\thdc",
+        "dev2\t\tUSB\tUnauthorized\tlocalhost\thdc",
+        "dev3\t\tUSB\tOffline\tlocalhost\thdc",
+        "[Empty]",
+      ].join("\n"),
+    }));
+    const r = new HdcRunner({ hdcPath: "C:/fake/hdc.exe" });
+    expect(await r.listTargetDetails()).toEqual([
+      { id: "dev1", state: "connected" },
+      { id: "dev2", state: "unauthorized" },
+      { id: "dev3", state: "offline" },
+    ]);
+    expect(await r.listTargets()).toEqual(["dev1", "dev2", "dev3"]);
+  });
 });

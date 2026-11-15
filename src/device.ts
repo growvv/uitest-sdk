@@ -14,6 +14,7 @@ import {
   AgentConnectionError,
   DaemonStartError,
   DeviceNotConnectedError,
+  DeviceStateError,
   ExtensionMissingError,
 } from "./errors.js";
 
@@ -101,11 +102,50 @@ export class Device {
   static async connect(opts: DeviceOptions = {}): Promise<Device> {
     const hdc = new HdcRunner(opts);
 
-    const targets = await hdc.listTargets();
+    const targets = await hdc.listTargetDetails();
     if (targets.length === 0) {
-      throw new DeviceNotConnectedError("no hdc target attached", "ENODEVICE");
+      throw new DeviceStateError(
+        "device_offline",
+        "device_offline · no hdc target is attached. Connect the phone by USB, unlock it, " +
+          "and check that Developer options / USB debugging are on.",
+        "ENODEVICE",
+      );
     }
-
+    // Prefer a target that can actually run: hdc lists unauthorized and
+    // offline entries too, and starting a daemon on one fails obscurely.
+    const offline = () =>
+      new DeviceStateError(
+        "device_offline",
+        "device_offline · the phone is not reachable. Reconnect the cable, unlock it, " +
+          "and retry; if it stays offline run `hdc kill -r` and plug it in again.",
+        "EOFFLINE",
+      );
+    const needsSetup = () =>
+      new DeviceStateError(
+        "device_needs_setup",
+        "device_needs_setup · the phone has not authorized this computer. Unlock the phone " +
+          'and tap "Allow" on the USB debugging prompt; if no prompt appears, revoke the ' +
+          "USB debugging authorizations in Developer options and reconnect.",
+        "EUNAUTHORIZED",
+      );
+    const wanted = opts.deviceId ?? process.env.HDC_TARGET;
+    const target = wanted ? targets.find((t) => t.id === wanted) : targets.find((t) => t.state === "connected");
+    if (!target) {
+      // Nothing usable was selected. If any attached target is waiting for
+      // authorization, that is the one fact the person can act on.
+      if (targets.some((t) => t.state === "unauthorized")) throw needsSetup();
+      if (wanted) {
+        throw new DeviceStateError(
+          "device_offline",
+          "device_offline · the device named by --device is not attached. " +
+            "Run `hdc list targets -v` to see what is; serials never appear in this SDK's output.",
+          "EOFFLINE",
+        );
+      }
+      throw offline();
+    }
+    if (target.state === "unauthorized") throw needsSetup();
+    if (target.state !== "connected") throw offline();
     const abiList = await hdc.shell("param get const.product.cpu.abilist");
     const abi: "arm64" | "x86_64" =
       abiList.includes("x86_64") && !abiList.includes("arm64") ? "x86_64" : "arm64";
@@ -200,8 +240,8 @@ export class Device {
     }
 
     // The target actually in use: an explicit id, the environment's, or the
-    // only attached target. A trace and a lease are keyed by it.
-    const deviceId = opts.deviceId ?? process.env.HDC_TARGET ?? targets[0]!;
+    // first attached one that is connected. A trace and a lease are keyed by it.
+    const deviceId = target.id;
     return new Device(hdc, opts, deviceId, abi, extDir, agent!, localPort, ownPid);
   }
 

@@ -469,6 +469,9 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 | `not_found` | 1 | ref、标签或列表不在当前屏幕 |
 | `lease_held` | 2 | 另一个任务（或人）占着设备 |
 | `handoff` | 2 | Agent 主动把手机交给了人，等 `resume` |
+| `device_locked` | 2 | 屏幕是系统锁屏；只有人能解锁 |
+| `device_needs_setup` | 2 | 手机尚未授权这台电脑调试 |
+| `device_offline` | 2 | 没有可用目标：没插、关机或正在连接 |
 | `approval_pending` | 3 | 需要人确认这一步 |
 | `blocked` | 4 | 策略在碰设备前拒绝 |
 | `approval_denied` | 4 | 审批 id 错误、用过或过期 |

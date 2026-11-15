@@ -16,6 +16,7 @@ import { FileRefStore } from "./refs.js";
 import { Lease } from "./lease.js";
 import { TraceRecorder } from "./trace.js";
 import { ElementNotFoundError, UitestError } from "./errors.js";
+import { actionText } from "./agent/result.js";
 import type { ActionResult } from "./agent/result.js";
 import type { Point } from "./agent/gestures.js";
 import type { Rect } from "./model.js";
@@ -240,6 +241,13 @@ export class Session {
   async observe(opts: { out?: string } = {}): Promise<ActionResult> {
     const screen = await this.reader.read();
     this.lastScreen = screen;
+    if (screen.locked) {
+      // The lock screen is not content. Returning it as `settled` invites the
+      // agent to act on the clock and the camera shortcut.
+      return this.finish("observe", opts, "device_locked", actionText({ status: "device_locked", screen }), {
+        screen,
+      });
+    }
     let shot: string | null = null;
     if (opts.out) {
       shot = await this.saveShot(opts.out, screen);
@@ -788,6 +796,11 @@ ${renderFull(screen)}`, {
     node?: UiNode | null,
     approvalId?: string,
   ): Promise<GateOutcome | null> {
+    if (screen?.locked) {
+      // Acting on a locked phone reaches nothing but the lock screen, and the
+      // policy below is written for apps. Stop before touching the device.
+      return { status: "device_locked", text: actionText({ status: "device_locked", screen }), extra: {} };
+    }
     if (screen) {
       const scope = this.policy.scope(screen.bundle);
       if (scope.kind === "block") {
@@ -1040,7 +1053,7 @@ type ResolvedTarget =
 interface GateOutcome {
   status: Extract<
     ActionResult["status"],
-    "blocked" | "approval_pending" | "approval_denied" | "stale"
+    "blocked" | "approval_pending" | "approval_denied" | "stale" | "device_locked"
   >;
   text: string;
   extra: Record<string, unknown>;

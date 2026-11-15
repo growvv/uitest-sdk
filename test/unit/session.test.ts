@@ -18,6 +18,11 @@ const page = (text: string, extra: UiNode[] = [], bundle = "com.demo"): UiNode =
     ...extra,
   ]);
 
+const lockPage = (): UiNode =>
+  node("Root", { bounds: "[0,0][1000,2000]", bundleName: "SCBScreenLock13" }, [
+    node("Button", { text: "ScreenLockWidgetView 9:41", bounds: "[100,200][900,400]", clickable: "true" }),
+  ]);
+
 const solidJpeg = () =>
   jpeg.encode({ data: Buffer.alloc(20 * 40 * 4, 0x11), width: 20, height: 40 }, 80).data;
 
@@ -152,6 +157,23 @@ describe("Session: observe", () => {
       expect(r.status).toBe("settled");
       const { stat } = await import("node:fs/promises");
       expect((await stat(file)).size).toBeGreaterThan(0);
+      await s.release();
+    });
+  });
+});
+
+describe("Session: device state", () => {
+  it("reports device_locked for the lock screen and refuses to act on it", async () => {
+    await withDir(async (dir) => {
+      const fake = fakeDevice([lockPage()]);
+      const s = await open(fake, dir);
+      const observed = await s.observe();
+      expect(observed.status).toBe("device_locked");
+      expect(observed.screen?.locked).toBe(true);
+
+      const tapped = await s.tap(1);
+      expect(tapped.status).toBe("device_locked");
+      expect(fake.actions).toHaveLength(0);
       await s.release();
     });
   });

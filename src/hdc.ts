@@ -9,6 +9,22 @@ export interface HdcOptions {
   timeoutMs?: number;
 }
 
+/** What `hdc list targets -v` says about one attached target. */
+export interface HdcTarget {
+  id: string;
+  state: "connected" | "offline" | "unauthorized" | "connecting" | "unknown";
+}
+
+const TARGET_STATES = new Set(["connected", "offline", "unauthorized", "connecting", "unknown"]);
+
+/** `serial \t\t USB \t Connected \t localhost \t hdc` (or just the serial). */
+function parseTargetLine(line: string): HdcTarget {
+  const parts = line.split(/\s+/).filter(Boolean);
+  const id = parts[0]!;
+  const raw = parts.find((part) => TARGET_STATES.has(part.toLowerCase()));
+  return { id, state: (raw?.toLowerCase() as HdcTarget["state"]) ?? "connected" };
+}
+
 const DEVECO_HINTS = [
   "D:/Application/DevEco Studio/sdk/default/openharmony/toolchains/hdc.exe",
   "C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/toolchains/hdc.exe",
@@ -144,11 +160,24 @@ export class HdcRunner {
     this.forwards.delete(localPort);
   }
 
-  async listTargets(): Promise<string[]> {
-    const { stdout } = await this.exec(["list", "targets"], "list targets");
+  /**
+   * Attached targets with their state.
+   *
+   * `-v` is the only form that distinguishes a usable phone from one that is
+   * merely plugged in: an unauthorized target answers no shell command, and an
+   * offline one is halfway through connecting. Both used to surface as a
+   * generic shell failure, which reads as "retry" instead of "ask the person".
+   */
+  async listTargetDetails(): Promise<HdcTarget[]> {
+    const { stdout } = await this.exec(["list", "targets", "-v"], "list targets");
     return stdout
       .split(/\r?\n/)
       .map((l) => l.trim())
-      .filter((l) => l.length > 0 && !l.startsWith("[Empty]"));
+      .filter((l) => l.length > 0 && !l.startsWith("[Empty]"))
+      .map(parseTargetLine);
+  }
+
+  async listTargets(): Promise<string[]> {
+    return (await this.listTargetDetails()).map((target) => target.id);
   }
 }

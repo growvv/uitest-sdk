@@ -315,6 +315,9 @@ for (const needle of [
   "handoff --reason",
   "凭据脱敏",
   "••••••",
+  "device_locked",
+  "device_needs_setup",
+  "device_offline",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -348,6 +351,8 @@ for (const needle of [
   "凭据在屏幕上也会被遮住",
   "更多 Agent 一步接好",
   "~/.copilot/mcp-config.json",
+  "设备状态也有名字",
+  "hdc list targets -v",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

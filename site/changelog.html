@@ -49,6 +49,13 @@
           <li>策略与脱敏使用同一套凭据词表；低层 <code>agent.captureLayout()</code> / <code>captureScreen()</code> 仍返回设备原样数据。</li>
         </ul>
 
+        <h3>设备状态也有名字</h3>
+        <ul>
+          <li>新增 <code>device_locked</code>、<code>device_needs_setup</code>、<code>device_offline</code> 三个状态，退出码统一为 2：Agent 一看就知道该请人解锁、点「允许 USB 调试」，还是插线，而不是重试同一条命令。</li>
+          <li>锁屏识别放在屏幕模型里（锁屏 bundle / <code>ScreenLockWidget</code>）：<code>observe</code> 不再把锁屏当成一个可点的页面，动作命令在碰设备之前就以 <code>device_locked</code> 停下。</li>
+          <li>连接阶段改读 <code>hdc list targets -v</code>：<code>Unauthorized</code> 报 <code>device_needs_setup</code>，<code>Offline</code> 或没有目标报 <code>device_offline</code>；多目标时优先选 Connected 的那台。</li>
+        </ul>
+
         <h3>更多 Agent 一步接好</h3>
         <ul>
           <li><code>connect --agent gemini</code> 写 <code>~/.gemini/settings.json</code> 的 <code>mcpServers</code>；<code>--agent copilot</code> 写 <code>~/.copilot/mcp-config.json</code>，条目按 Copilot CLI 自己的 schema 带 <code>type: "local"</code> 与 <code>tools: ["*"]</code>。</li>
