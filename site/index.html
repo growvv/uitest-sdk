@@ -14,7 +14,7 @@
       <a href="#features">能力</a>
       <a href="#bench">实测</a>
       <a href="#video">视频</a>
-      <a href="https://github.com/growvv/uitest-sdk#readme">文档</a>
+      <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/api.md">文档</a>
       <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
     </div>
   </nav>
@@ -53,7 +53,37 @@
     </section>
     <section id="bench" class="section bench reveal">
       <h2>真机实测</h2>
-      <p class="section-lede">数字来自自动化验收的 8 次采样（<code>docs/acceptance/report.md</code> 与日志），不是估算。</p>
+      <p class="section-lede">同一台真机、同一个脚本跑出来的对比（<code>scripts/bench-compare.ts</code>）。hdc CLI 的数字包含 hdc 进程启动、shell 往返与 uitest 启动——也就是手敲命令时真正付出的时间。</p>
+      <div class="table-wrap">
+        <table class="table-compare">
+          <thead>
+            <tr><th>操作</th><th>本 SDK</th><th>hdc CLI</th><th>CLI / SDK</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>点击</td><td>8–30 ms（中位 9 ms）</td><td>497–561 ms（中位 531 ms）</td><td>59.0×</td></tr>
+            <tr><td>滑动（300 ms 手势 / 600 速度）</td><td>389–395 ms（中位 391 ms）</td><td>2630–2787 ms（中位 2695 ms）</td><td>6.9×</td></tr>
+            <tr><td>整屏截图（含回传）</td><td>109–222 ms（中位 184 ms）</td><td>741–890 ms（中位 828 ms）</td><td>4.5×</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>其他截图方式</h3>
+          <ul>
+            <li><code>snapshot_display</code> + 回传：592–694 ms（中位 651 ms），约 194 KB。</li>
+            <li><code>uitest screenCap</code> + 回传：中位 828 ms，1216×2688 PNG 约 701 KB。</li>
+            <li>本 SDK：中位 184 ms，608×1344 JPEG 约 124 KB，直接拿到字节。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>连续画面</h3>
+          <ul>
+            <li><code>screenCap</code> 轮询：约 1.4 fps，每帧都要重新起进程并回传。</li>
+            <li>MJPEG 采集流：10–16 fps，静止画面只出 1 帧。</li>
+            <li>H.264 投流：15–89 fps，一条 gRPC 通道连续出帧。</li>
+          </ul>
+        </article>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -68,7 +98,7 @@
           </tbody>
         </table>
       </div>
-      <p class="table-note">真机 BRA-AL00，1216×2688，uitest 7.0.0.1</p>
+      <p class="table-note">真机 BRA-AL00，1216×2688，uitest 7.0.0.1。对比表是点击 10 次、其余各 5 次的采样；第二张表来自验收阶段的 8 次采样，两轮的绝对值会随设备负载浮动。原始样本见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md">docs/benchmarks.md</a>。</p>
     </section>
 
     <section id="features" class="section features reveal">
@@ -168,7 +198,7 @@
       <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
       <div class="footer-links">
         <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
-        <a href="https://github.com/growvv/uitest-sdk#readme">文档</a>
+        <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/api.md">文档</a>
       </div>
     </div>
   </footer>

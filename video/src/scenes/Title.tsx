@@ -1,7 +1,7 @@
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { theme } from "../theme";
 
-/** 0–120: name, promise, stack — the first three seconds. */
+/** 0–75 (2.5 s): name, promise, stack — faster than the first cut. */
 export const Title = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -38,13 +38,13 @@ export const Title = () => {
 
       <div
         style={{
-          marginTop: 34,
-          fontSize: 108,
+          marginTop: 30,
+          fontSize: 112,
           fontWeight: 700,
-          lineHeight: 1.16,
+          lineHeight: 1.14,
           letterSpacing: "-0.02em",
-          opacity: enter(10),
-          transform: `translateY(${rise(10, 50)}px)`,
+          opacity: enter(5),
+          transform: `translateY(${rise(5, 50)}px)`,
         }}
       >
         用一条长连接，
@@ -54,15 +54,29 @@ export const Title = () => {
 
       <div
         style={{
-          marginTop: 46,
-          fontFamily: theme.mono,
-          fontSize: 38,
-          color: theme.muted,
-          opacity: enter(24),
-          transform: `translateY(${rise(24, 30)}px)`,
+          display: "flex",
+          gap: 18,
+          marginTop: 42,
+          opacity: enter(14),
+          transform: `translateY(${rise(14, 24)}px)`,
         }}
       >
-        Node.js · TypeScript · HarmonyOS
+        {["Node.js + TypeScript", "点击 9 ms", "零 hdc 轮询"].map((chip) => (
+          <div
+            key={chip}
+            style={{
+              padding: "12px 24px",
+              border: `1px solid ${theme.border}`,
+              borderRadius: 999,
+              backgroundColor: theme.card,
+              fontFamily: theme.mono,
+              fontSize: 26,
+              color: theme.muted,
+            }}
+          >
+            {chip}
+          </div>
+        ))}
       </div>
     </AbsoluteFill>
   );

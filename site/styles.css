@@ -315,6 +315,64 @@ td:nth-child(3) {
   color: var(--muted);
 }
 
+.table-note a {
+  color: var(--fg);
+}
+
+/* The SDK-vs-CLI table leads with the SDK column and ends on the ratio, so
+   the accent moves there: green-ish SDK, muted CLI, loud multiple. */
+.table-compare td:nth-child(2) {
+  font-family: var(--mono);
+  color: #7ee787;
+}
+
+.table-compare td:nth-child(3) {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+.table-compare td:nth-child(4) {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.bench-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.bench-card {
+  padding: 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.bench-card h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.bench-card ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.bench-card li + li {
+  margin-top: 8px;
+}
+
+.bench-card code {
+  font-size: 0.92em;
+  color: var(--fg);
+}
+
 /* ------------------------------------------------------------ card grid */
 
 .cards {

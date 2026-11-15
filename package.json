@@ -17,13 +17,16 @@
   },
   "files": [
     "dist",
-    "assets"
+    "assets",
+    "docs/api.md",
+    "examples/quickstart.mjs"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc && node -e \"require('fs').copyFileSync('src/cast/scrcpy.proto','dist/cast/scrcpy.proto')\"",
+    "prepublishOnly": "npm run build && npm test",
     "test": "vitest run test/unit",
     "test:device": "vitest run test/device",
     "typecheck": "tsc --noEmit"

@@ -93,6 +93,12 @@ const bench = sectionHtml("bench");
 for (const needle of ["107–193 ms", "21–50 ms", "386–640 ms", "15–89 fps", "10–16 fps"]) {
   if (!bench.includes(needle)) fail(`#bench 缺少实测数字「${needle}」`);
 }
+// The comparison with the hdc CLI and with the other capture methods is the
+// section's whole point: the SDK's speed only means something next to what a
+// caller would otherwise pay. The ratios come from scripts/bench-compare.ts.
+for (const needle of ["hdc CLI", "CLI / SDK", "59.0×", "6.9×", "4.5×", "snapshot_display", "1.4 fps"]) {
+  if (!bench.includes(needle)) fail(`#bench 缺少对比项「${needle}」`);
+}
 
 const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
@@ -146,13 +152,20 @@ if (!(seconds > 0 && seconds < 3600)) fail("demo.mp4 has an unparsable mvhd dura
 if (seconds < 29 || seconds > 31) fail(`demo.mp4 is ${seconds.toFixed(1)}s, expected 29–31s`);
 console.log(`video ${seconds.toFixed(1)}s`);
 
-// The spec wants 1920×1080 and no sound, so the track handlers must say so.
+// The spec wants 1920×1080 plus exactly one audio track carrying the BGM.
+// No track means the generated soundtrack was dropped; two means something
+// got mixed in twice. Either way the browser plays something other than the
+// video that was reviewed.
 let hasVideo = false;
+let audioTracks = 0;
 for (const trak of [...boxes(mp4, moov.start, moov.end)].filter((b) => b.type === "trak")) {
   const mdia = findBox(mp4, trak.start, trak.end, "mdia");
   const hdlr = mdia && findBox(mp4, mdia.start, mdia.end, "hdlr");
   const handler = hdlr ? mp4.toString("latin1", hdlr.start + 8, hdlr.start + 12) : "????";
-  if (handler === "soun") fail("demo.mp4 has an audio track; the promo video must be silent");
+  if (handler === "soun") {
+    audioTracks++;
+    continue;
+  }
   if (handler !== "vide") continue;
   const tkhd = findBox(mp4, trak.start, trak.end, "tkhd");
   if (!tkhd) fail("demo.mp4 video track has no tkhd box");
@@ -162,6 +175,9 @@ for (const trak of [...boxes(mp4, moov.start, moov.end)].filter((b) => b.type ==
   hasVideo = true;
 }
 if (!hasVideo) fail("demo.mp4 has no video track");
+if (audioTracks !== 1) {
+  fail(`demo.mp4 has ${audioTracks} audio tracks, expected exactly 1 (the BGM)`);
+}
 
 // ------------------------------------- task 7: architecture, limits, video
 const arch = sectionHtml("arch");

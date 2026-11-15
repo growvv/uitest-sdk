@@ -12,4 +12,4 @@ export const theme = {
 };
 
 /** Characters typed per millisecond in the terminal scene. */
-export const TYPE_MS = 18;
+export const TYPE_MS = 10;

@@ -1,6 +1,6 @@
 # uitest-sdk
 
-[官网](https://growvv.github.io/uitest-sdk/) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
+[官网](https://growvv.github.io/uitest-sdk/) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [完整 API 文档](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
 
 把鸿蒙 `uitest` 的设备侧扩展（`agent.so` / `libscreen_casting.z.so`）封装成 TypeScript SDK：
 一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。
@@ -26,6 +26,9 @@ try {
 `Device.connect()` 会按设备 ABI 推送对应的 `agent.so`、必要时拉起 daemon、建立 fport 隧道，
 并做一次 `getDisplaySize()` 健康检查。任何业务失败直接抛 `UitestError` 子类，不做静默兜底。
 
+可运行的 JavaScript 版本：[`examples/quickstart.mjs`](https://github.com/growvv/uitest-sdk/blob/master/examples/quickstart.mjs)（本仓库先 `npm run build`，
+之后 `node examples/quickstart.mjs`）。完整 API 与示例见 [`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md)。
+
 ## 能力与实测延迟（真机 BRA-AL00 / 1216×2688 / uitest 7.0.0.1）
 
 | 能力 | API | 实测 |
@@ -43,6 +46,22 @@ try {
 | H.264 投流 | `dev.createCast({ mode: "stream" })` | 15~89 fps（随 `frameRate`） |
 | MP4 录制 | `dev.createCast({ mode: "record", outputPath })` | 见下 |
 | 窗口级 UI 树 | `dev.cli.dumpLayout({ windowId })` | 一次 shell + pull |
+
+### 和 hdc CLI 的对比
+
+同一台真机、同一个脚本（`scripts/bench-compare.ts`）测出的对比。CLI 数字包含 hdc 进程启动、
+shell 往返与 uitest 启动——也就是手敲命令时真正付出的时间。
+
+| 操作 | 本 SDK | hdc CLI | CLI / SDK |
+|---|---|---|---|
+| 点击 | 8~30 ms（中位 9 ms） | 497~561 ms（中位 531 ms） | **59.0×** |
+| 滑动（300 ms 手势 / 600 速度） | 389~395 ms（中位 391 ms） | 2630~2787 ms（中位 2695 ms） | **6.9×** |
+| 整屏截图（含回传） | 109~222 ms（中位 184 ms） | 741~890 ms（中位 828 ms） | **4.5×** |
+
+其他方式：`snapshot_display` + 回传中位 651 ms（约 194 KB）；`uitest screenCap` + 回传中位 828 ms
+（1216×2688 PNG，约 701 KB）；本 SDK 的截图是 608×1344 JPEG，约 124 KB，直接拿到字节。
+连续取帧没有 CLI 等价物：`screenCap` 轮询约 1.4 fps，而 MJPEG 流 10~16 fps、H.264 投流 15~89 fps。
+完整原始样本见 [`docs/benchmarks.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md)。
 
 **投流路径是显式选择的**：有 `libscreen_casting` 构建（arm64）走 H.264，没有（x86_64 模拟器）
 走 MJPEG。用 `cast.castKind`（`"h264"` / `"mjpeg"`）读出实际路径 —— 这是同一能力的两种实现，
@@ -67,7 +86,7 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 - `connect()` 探测 8012 已监听就**复用**现有 daemon，绝不无条件 `kill -9`。
 - 每个实例用自己的本地端口，冲突时自动向上找空闲端口。
 - 设备侧是全局锁，SDK 内部串行化请求，并对 `Disallow concurrent use` 做指数退避
-  （0.5 ms 起、翻倍、20 ms 封顶、±50% 抖动、最多 40 次）。实测两进程各并发 40 次全部成功。
+  （0.5 s 起、翻倍、20 s 封顶、±50% 抖动、最多 40 次）。实测两进程各并发 40 次全部成功。
 - **同一时刻只能有一个 capture 会话**：另一个进程会收到 `AgentBusyError`。
 - `dispose()` 默认不杀 daemon。要连带杀掉自己起的那个，用 `{ ownDaemon: true }`。
 - 掉线后下一次调用自动重连（`{ autoRestart: true }`）；**失败的请求不重放** —— 写操作重放不安全。
@@ -113,7 +132,7 @@ UITEST_TARGET=127.0.0.1:5555 npm run test:device   # 指定目标
 npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 ```
 
-最新一次真机验收：**16/16 PASS**，报告在 [`docs/acceptance/report.md`](docs/acceptance/report.md)，
+最新一次真机验收：**16/16 PASS**，报告在 [`docs/acceptance/report.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/acceptance/report.md)，
 含每个能力的截图、日志与可独立运行的最小复现脚本。
 
 ## 文档
@@ -122,12 +141,14 @@ npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 
 | 文档 | 内容 |
 |---|---|
-| [01](docs/01-extension-abi.md) | uitest 扩展 ABI 与加载器 |
-| [02](docs/02-agent-so.md) | agent.so 的完整 RPC 方法表 |
-| [03](docs/03-libscreen-casting.md) | 6.8 gRPC 投流协议与四个坑 |
-| [04](docs/04-perfmonitor.md) | perfmonitor.so HTTP 服务 |
-| [06](docs/06-signing-xpm.md) | XPM 校验与签名机制 |
-| [09](docs/09-capability-gaps-roadmap.md) | 版本矩阵、7.0 来源、能力路线图 |
-| [11](docs/11-deveco-capability-inventory.md) | 118 个 hypium 方法与覆盖规划 |
-| [12](docs/12-findings-classified.md) | 结论分类汇总 |
-| [设计](docs/superpowers/specs/2026-11-15-uitest-sdk-design.md) | SDK 设计文档 |
+| [api](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md) | **完整 API 文档**：Device / AgentClient / 投流录制 / 错误码 / 并发与生命周期 |
+| [benchmarks](https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md) | 与 hdc CLI、`snapshot_display` 的可复现实测对比 |
+| [01](https://github.com/growvv/uitest-sdk/blob/master/docs/01-extension-abi.md) | uitest 扩展 ABI 与加载器 |
+| [02](https://github.com/growvv/uitest-sdk/blob/master/docs/02-agent-so.md) | agent.so 的完整 RPC 方法表 |
+| [03](https://github.com/growvv/uitest-sdk/blob/master/docs/03-libscreen-casting.md) | 6.8 gRPC 投流协议与四个坑 |
+| [04](https://github.com/growvv/uitest-sdk/blob/master/docs/04-perfmonitor.md) | perfmonitor.so HTTP 服务 |
+| [06](https://github.com/growvv/uitest-sdk/blob/master/docs/06-signing-xpm.md) | XPM 校验与签名机制 |
+| [09](https://github.com/growvv/uitest-sdk/blob/master/docs/09-capability-gaps-roadmap.md) | 版本矩阵、7.0 来源、能力路线图 |
+| [11](https://github.com/growvv/uitest-sdk/blob/master/docs/11-deveco-capability-inventory.md) | 118 个 hypium 方法与覆盖规划 |
+| [12](https://github.com/growvv/uitest-sdk/blob/master/docs/12-findings-classified.md) | 结论分类汇总 |
+| [设计](https://github.com/growvv/uitest-sdk/blob/master/docs/superpowers/specs/2026-11-15-uitest-sdk-design.md) | SDK 设计文档 |

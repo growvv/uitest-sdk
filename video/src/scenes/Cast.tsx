@@ -1,19 +1,19 @@
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { theme } from "../theme";
 
-/** 540–780: the casting numbers, the loudest thing in the video. */
+/** 440–560: the casting numbers, the loudest thing in the video. */
 export const Cast = () => {
   const frame = useCurrentFrame();
 
   const fps = Math.round(
-    interpolate(frame, [10, 130], [15, 89], {
+    interpolate(frame, [4, 92], [15, 89], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
       easing: Easing.out(Easing.cubic),
     }),
   );
-  const label = interpolate(frame, [20, 50], [0, 1], { extrapolateRight: "clamp" });
-  const second = interpolate(frame, [90, 130], [0, 1], { extrapolateRight: "clamp" });
+  const label = interpolate(frame, [12, 34], [0, 1], { extrapolateRight: "clamp" });
+  const chips = interpolate(frame, [56, 74], [0, 1], { extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill
@@ -28,7 +28,7 @@ export const Cast = () => {
       <div
         style={{
           fontFamily: theme.mono,
-          fontSize: 460,
+          fontSize: 430,
           fontWeight: 700,
           lineHeight: 1,
           letterSpacing: "-0.04em",
@@ -39,7 +39,7 @@ export const Cast = () => {
       </div>
       <div
         style={{
-          marginTop: 10,
+          marginTop: 6,
           fontFamily: theme.mono,
           fontSize: 44,
           color: theme.fg,
@@ -50,14 +50,29 @@ export const Cast = () => {
       </div>
       <div
         style={{
-          marginTop: 26,
-          fontFamily: theme.sans,
-          fontSize: 32,
-          color: theme.muted,
-          opacity: second,
+          display: "flex",
+          gap: 16,
+          marginTop: 34,
+          opacity: chips,
+          transform: `translateY(${interpolate(chips, [0, 1], [18, 0])}px)`,
         }}
       >
-        gRPC · 15–89 fps 随 frameRate · 同一特性也能直接录制 MP4
+        {["gRPC over abstract socket", "stream · 15–89 fps", "record · MP4"].map((chip) => (
+          <div
+            key={chip}
+            style={{
+              padding: "12px 24px",
+              border: `1px solid ${theme.border}`,
+              borderRadius: 999,
+              backgroundColor: theme.card,
+              fontFamily: theme.mono,
+              fontSize: 24,
+              color: theme.muted,
+            }}
+          >
+            {chip}
+          </div>
+        ))}
       </div>
     </AbsoluteFill>
   );

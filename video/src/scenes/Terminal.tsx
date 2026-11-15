@@ -5,14 +5,15 @@ const LINES: { text: string; kind: "cmd" | "ok" }[] = [
   { text: "$ npm install uitest-sdk", kind: "cmd" },
   { text: "$ node quickstart.mjs", kind: "cmd" },
   { text: "✓ connected  BRA-AL00 · 1216×2688", kind: "ok" },
-  { text: "✓ click(608, 1344)                 32 ms", kind: "ok" },
+  { text: "✓ click(608, 1344)                 9 ms", kind: "ok" },
   { text: "✓ captureScreen() → 608×1344 JPEG  118 ms", kind: "ok" },
+  { text: "✓ createCast() → H.264 · 60 fps", kind: "ok" },
 ];
 
-const START_MS = 300;
-const LINE_GAP_MS = 200;
+const START_MS = 100;
+const LINE_GAP_MS = 90;
 
-/** 120–300: the install-to-screenshot loop, typed out. */
+/** 75–200: the install-to-cast loop, typed out twice as fast. */
 export const Terminal = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -27,7 +28,7 @@ export const Terminal = () => {
     return line.text.slice(0, chars);
   });
   const activeLine = typed.findIndex((text, i) => text.length < LINES[i].text.length);
-  const cursorOn = activeLine >= 0 && Math.floor(elapsedMs / 500) % 2 === 0;
+  const cursorOn = activeLine >= 0 && Math.floor(elapsedMs / 400) % 2 === 0;
 
   return (
     <AbsoluteFill
@@ -41,7 +42,7 @@ export const Terminal = () => {
     >
       <div
         style={{
-          width: 1280,
+          width: 1320,
           border: `1px solid ${theme.border}`,
           borderRadius: 20,
           backgroundColor: theme.card,
@@ -52,8 +53,9 @@ export const Terminal = () => {
         <div
           style={{
             display: "flex",
+            alignItems: "center",
             gap: 10,
-            padding: "20px 26px",
+            padding: "18px 26px",
             borderBottom: `1px solid ${theme.border}`,
           }}
         >
@@ -63,13 +65,23 @@ export const Terminal = () => {
               style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: theme.border }}
             />
           ))}
+          <div
+            style={{
+              marginLeft: "auto",
+              fontFamily: theme.mono,
+              fontSize: 22,
+              color: theme.muted,
+            }}
+          >
+            quickstart.mjs
+          </div>
         </div>
         <div
           style={{
-            padding: "40px 44px 48px",
+            padding: "34px 44px 42px",
             fontFamily: theme.mono,
-            fontSize: 34,
-            lineHeight: 1.95,
+            fontSize: 32,
+            lineHeight: 1.85,
           }}
         >
           {LINES.map((line, i) => (
@@ -78,7 +90,7 @@ export const Terminal = () => {
               style={{
                 whiteSpace: "pre",
                 color: line.kind === "ok" ? theme.ok : theme.fg,
-                minHeight: 66,
+                minHeight: 59,
               }}
             >
               {typed[i]}
