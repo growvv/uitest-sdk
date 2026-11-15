@@ -296,6 +296,7 @@ for (const needle of [
   "captureScreen",
   "UitestError",
   "0.2.0",
+  "0.4.0",
   // The CLI half of the package is documented here, not only on the home page.
   "Session.open",
   "TraceRecorder",
@@ -327,6 +328,7 @@ if (docsHtml.length < 8000) fail(`docs.html is only ${docsHtml.length} bytes; ex
 
 for (const needle of [
   "0.3.0",
+  "0.4.0",
   "0.2.0",
   "0.1.0",
   "2026-11-15",
