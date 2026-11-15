@@ -1,6 +1,7 @@
 import net from "node:net";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AgentClient } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
 import { HdcRunner } from "./hdc.js";
@@ -24,6 +25,16 @@ export interface DeviceOptions {
   requestTimeoutMs?: number;
   ownDaemon?: boolean;
   retryOnBusy?: boolean;
+}
+
+/**
+ * The assets directory that ships with the package. Resolved from the module
+ * itself — an installed package lives in node_modules, where a cwd-relative
+ * default would be the consumer's own assets/ or nothing at all. Both `src/`
+ * (tsx) and `dist/` (published) sit one level below the package root.
+ */
+export function defaultExtensionDir(): string {
+  return fileURLToPath(new URL("../assets", import.meta.url));
 }
 
 const AGENT_REMOTE = "/data/local/tmp/agent.so";
@@ -88,7 +99,7 @@ export class Device {
     const abi: "arm64" | "x86_64" =
       abiList.includes("x86_64") && !abiList.includes("arm64") ? "x86_64" : "arm64";
 
-    const extDir = opts.extensionDir ?? join(process.cwd(), "assets");
+    const extDir = opts.extensionDir ?? defaultExtensionDir();
     const agentLocal = join(extDir, abi, "agent.so");
     if (!existsSync(agentLocal)) {
       throw new ExtensionMissingError(

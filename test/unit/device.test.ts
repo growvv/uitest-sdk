@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import net from "node:net";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentClient } from "../../src/agent/client.js";
@@ -99,7 +99,8 @@ vi.mock("../../src/hdc.js", () => {
   return { HdcRunner: FakeHdc };
 });
 
-const { Device } = await import("../../src/device.js");
+const { Device, defaultExtensionDir } = await import("../../src/device.js");
+const ROOT = join(import.meta.dirname, "../..");
 
 beforeEach(() => {
   hdcState.targets = ["fake-device"];
@@ -155,6 +156,14 @@ describe("Device.connect", () => {
     expect(hdcState.shellCalls.some((c) => c.includes("kill"))).toBe(false);
     expect(dev.state).toBe("disconnected");
     await agent.close();
+  });
+
+  it("resolves the default extension dir from the module, not the cwd", () => {
+    // An installed package lives in node_modules/<pkg>/dist: a cwd-relative
+    // default would look for <cwd>/assets and throw. The default must hang off
+    // the module's own location, which is the repository's assets/ here.
+    expect(defaultExtensionDir()).toBe(join(ROOT, "assets"));
+    expect(existsSync(join(defaultExtensionDir(), "arm64", "agent.so"))).toBe(true);
   });
 
   it("throws ExtensionMissingError when agent.so is not on disk for the ABI", async () => {
