@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>更新日志 · uitest-sdk</title>
+  <meta name="description" content="uitest-sdk 发布记录：每个版本的主要迭代、实测数字与已知限制。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#features">能力</a>
+      <a href="index.html#compare">对比</a>
+      <a href="index.html#bench">实测</a>
+      <a href="docs.html">文档</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-1-0">0.1.0 · 首个公开版本</a>
+      <a href="#v0-0-0-stage">0.0.0-stage · npm 占位</a>
+      <a href="#roadmap">计划中</a>
+    </aside>
+
+    <article class="doc-body">
+      <h1>更新日志</h1>
+      <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-1-0">
+        <div class="release-head">
+          <h2>0.1.0</h2>
+          <span class="release-date">2026-11-15</span>
+          <span class="release-tag">首个公开版本</span>
+        </div>
+        <p>把鸿蒙 <code>uitest</code> 扩展封装成 Node.js SDK：一条长连接做 UI 自动化，一条 gRPC 通道做投流与录制。发布到 npm，官网与文档同步上线。</p>
+
+        <h3>传输与生命周期</h3>
+        <ul>
+          <li>一条 TCP 长连接（<code>agent.so</code>，8012）承载全部 UI 请求，串行队列 + 指数退避。</li>
+          <li>自动按 ABI 推送 <code>agent.so</code> 与 <code>libscreen_casting.z.so</code>；缺失时才推送。</li>
+          <li>多实例安全：复用已监听的 daemon，只杀自己拉起的那个；<code>ownDaemon</code> 显式控制。</li>
+          <li>断线后下一次调用自动重连，失败中的请求不重放；超时即断连。</li>
+        </ul>
+
+        <h3>UI 自动化</h3>
+        <ul>
+          <li>点击、原子触摸、三段式滑动、文本输入、按键、UI 事件流。</li>
+          <li>实测：点击 8–30 ms（中位 9 ms），滑动 389–395 ms，整屏截图 109–222 ms。</li>
+          <li>对比 hdc CLI：点击 <strong>59.0×</strong>、滑动 <strong>6.9×</strong>、截图 <strong>4.5×</strong>。</li>
+        </ul>
+
+        <h3>截图与 UI 树</h3>
+        <ul>
+          <li><code>captureScreen()</code>：起停采集流取首帧，608×1344 JPEG 直接是字节。</li>
+          <li><code>cropToWindow()</code>：整屏采集 + 按节点 bounds 裁剪，弥补设备没有窗口级截图。</li>
+          <li><code>captureLayout()</code> 整屏树快于 <code>dumpLayout + pull</code>；后者保留用于窗口过滤。</li>
+          <li>对比 <code>snapshot_display</code>：agent MJPEG 178–212 ms vs 675–684 ms，快 <strong>3.2–3.8×</strong>。</li>
+        </ul>
+
+        <h3>投流与录制</h3>
+        <ul>
+          <li>H.264 over gRPC（6.8 casting），实测 15–89 fps，支持 15/30/60/120 目标帧率。</li>
+          <li>x86_64 模拟器显式走 MJPEG（10–16 fps），不假装支持 H.264。</li>
+          <li>MP4 录制：设备侧编码器直接写文件，<code>dispose()</code> 关闭 muxer 并拉回；使用 <code>casting -m 1</code> 路径。</li>
+        </ul>
+
+        <h3>工程</h3>
+        <ul>
+          <li>npm 包 840.8 kB / 38 个文件，含三个签名扩展、<code>docs/api.md</code> 与可运行示例。</li>
+          <li><code>prepublishOnly</code> 强制 build + 85 个单元测试；<code>npm test</code> 不碰设备。</li>
+          <li>真机验收 16/16 PASS；官网零外部请求，视频 1920×1080 / 30 s。</li>
+          <li>Node.js ≥ 20，ESM，TypeScript 类型随包发布。</li>
+        </ul>
+      </section>
+
+      <section class="release" id="v0-0-0-stage">
+        <div class="release-head">
+          <h2>0.0.0-stage</h2>
+          <span class="release-date">2026-11-15</span>
+          <span class="release-tag">npm 占位</span>
+        </div>
+        <p>npm 分阶段发布（staged publishing）为新包名预留的占位版本，描述为 “Temporary package placeholder for staged publishing”。它不包含代码，也不是可安装的功能版本；安装 <code>uitest-sdk</code> 时 <code>latest</code> 指向 0.1.0。</p>
+      </section>
+
+      <section class="release" id="roadmap">
+        <div class="release-head">
+          <h2>计划中</h2>
+          <span class="release-tag">未发布 · 不是承诺</span>
+        </div>
+        <ul>
+          <li>7.0 casting（WebSocket 分支）实验支持：与 6.8 能力对等，作为可选传输。</li>
+          <li><code>perfmonitor.so</code>（HTTP 9999）性能指标接入。</li>
+          <li>录制参数在设备侧可配置（目前文件路径写死在扩展里）。</li>
+          <li>更多 hypium 方法的一等封装（当前可用 <code>agent.hypium()</code> 直调）。</li>
+        </ul>
+        <p class="note">版本节奏以实测为准：每个版本都会更新本页、README 与 npm 包内文档。</p>
+      </section>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-row">
+      <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
+      <div class="footer-links">
+        <a href="index.html">首页</a>
+        <a href="docs.html">使用文档</a>
+        <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>

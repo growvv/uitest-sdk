@@ -22,31 +22,40 @@ function fail(msg) {
 }
 
 // ---------------------------------------------------------------- the files
-const files = ["index.html", "styles.css", "main.js"];
+const files = ["index.html", "docs.html", "changelog.html", "styles.css", "main.js"];
 for (const f of files) {
   const p = join(SITE, f);
   if (!existsSync(p) || !statSync(p).isFile()) fail(`missing site/${f}`);
 }
 const html = readFileSync(join(SITE, "index.html"), "utf8");
+const docsHtml = readFileSync(join(SITE, "docs.html"), "utf8");
+const logHtml = readFileSync(join(SITE, "changelog.html"), "utf8");
 const css = readFileSync(join(SITE, "styles.css"), "utf8");
 const js = readFileSync(join(SITE, "main.js"), "utf8");
+const pages = [
+  ["index.html", html],
+  ["docs.html", docsHtml],
+  ["changelog.html", logHtml],
+];
 
 // ------------------------------------------------------------------- anchors
-const sections = ["hero", "terminal", "bench", "features", "arch", "video", "limits"];
+const sections = ["hero", "terminal", "bench", "compare", "features", "arch", "video", "limits"];
 for (const id of sections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(html)) fail(`index.html is missing id="${id}"`);
 }
 
 // ------------------------------------------- local references must exist
-for (const [, value] of html.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/g)) {
-  if (value.startsWith("//")) fail(`index.html has a protocol-relative reference: ${value}`);
-  // A leading slash resolves against the server root, so it 404s on file://.
-  if (value.startsWith("/")) fail(`index.html has an absolute local reference: ${value}`);
-  if (!value || value.startsWith("http") || value.startsWith("#") || value.startsWith("mailto:")) continue;
-  const clean = value.split("#")[0].split("?")[0];
-  if (!clean) continue;
-  const target = join(SITE, clean);
-  if (!existsSync(target)) fail(`index.html references a missing file: ${value}`);
+for (const [name, text] of pages) {
+  for (const [, value] of text.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/g)) {
+    if (value.startsWith("//")) fail(`${name} has a protocol-relative reference: ${value}`);
+    // A leading slash resolves against the server root, so it 404s on file://.
+    if (value.startsWith("/")) fail(`${name} has an absolute local reference: ${value}`);
+    if (!value || value.startsWith("http") || value.startsWith("#") || value.startsWith("mailto:")) continue;
+    const clean = value.split("#")[0].split("?")[0];
+    if (!clean) continue;
+    const target = join(SITE, clean);
+    if (!existsSync(target)) fail(`${name} references a missing file: ${value}`);
+  }
 }
 
 // --------------------------------------------------- zero external requests
@@ -61,7 +70,7 @@ const forbidden = [
   [/\bnew\s+WebSocket\(\s*['"]wss?:/i, "an external WebSocket in JS"],
 ];
 for (const [re, what] of forbidden) {
-  for (const [name, text] of [["index.html", html], ["styles.css", css], ["main.js", js]]) {
+  for (const [name, text] of [...pages, ["styles.css", css], ["main.js", js]]) {
     if (re.test(text)) fail(`${name} contains ${what}`);
   }
 }
@@ -98,6 +107,27 @@ for (const needle of ["107–193 ms", "21–50 ms", "386–640 ms", "15–89 fps
 // caller would otherwise pay. The ratios come from scripts/bench-compare.ts.
 for (const needle of ["hdc CLI", "CLI / SDK", "59.0×", "6.9×", "4.5×", "snapshot_display", "1.4 fps"]) {
   if (!bench.includes(needle)) fail(`#bench 缺少对比项「${needle}」`);
+}
+
+// The head-to-head section is the one the README and the video both promise:
+// official capture path 675 ms vs agent MJPEG 178 ms, dumpLayout vs
+// captureLayout, the equal-RPC row, and recording on 6.8 where 7.0 broke.
+const compare = sectionHtml("compare");
+for (const needle of [
+  "snapshot_display",
+  "675 ms",
+  "178 ms",
+  "3.8×",
+  "dumpLayout",
+  "captureLayout",
+  "快 2 倍以上",
+  "持平",
+  "6.8 casting",
+  "7.0.0.1",
+  "完整功能矩阵",
+  "UitestError",
+]) {
+  if (!compare.includes(needle)) fail(`#compare 缺少「${needle}」`);
 }
 
 const features = sectionHtml("features");
@@ -201,6 +231,21 @@ if (!footer.includes("MIT") || !footer.includes("https://github.com/growvv/uites
   fail("<footer> 缺少 MIT 或 GitHub 链接");
 }
 
+// ------------------------------------------------- docs and release pages
+// The usage documentation must be a real page on this site, not a link to a
+// markdown file in the repository (the site has to work on its own).
+for (const needle of ["Device.connect", "AgentClient", "createCast", "captureScreen", "UitestError", "0.1.0"]) {
+  if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
+}
+if (docsHtml.length < 8000) fail(`docs.html is only ${docsHtml.length} bytes; expected the full usage guide`);
+
+for (const needle of ["0.1.0", "2026-11-15", "0.0.0-stage", "计划中", "59.0×", "3.8×"]) {
+  if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
+}
+for (const href of ['href="docs.html"', 'href="changelog.html"']) {
+  if (!html.includes(href)) fail(`index.html 没有链接到 ${href}`);
+}
+
 // ----------------------------------------------- task 10: the script runs
 // main.js is loaded as a classic script. A top-level `export` is a syntax
 // error there and kills every behaviour on the page; ES modules would fix
@@ -221,19 +266,21 @@ const chromePath = [
 if (!chromePath) {
   console.log("runtime skipped (no Chrome found)");
 } else {
-  const dom = execFileSync(
-    chromePath,
-    [
-      "--headless=new",
-      "--disable-gpu",
-      "--virtual-time-budget=2000",
-      "--dump-dom",
-      pathToFileURL(join(SITE, "index.html")).href,
-    ],
-    { encoding: "utf8", maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] },
-  );
-  if (!/<html[^>]*class="[^"]*\bjs-ready\b/.test(dom)) {
-    fail("main.js did not run in the browser (no js-ready class on <html>)");
+  for (const [name] of pages) {
+    const dom = execFileSync(
+      chromePath,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--virtual-time-budget=2000",
+        "--dump-dom",
+        pathToFileURL(join(SITE, name)).href,
+      ],
+      { encoding: "utf8", maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    if (!/<html[^>]*class="[^"]*\bjs-ready\b/.test(dom)) {
+      fail(`main.js did not run in the browser on ${name} (no js-ready class on <html>)`);
+    }
   }
   console.log("runtime ok");
 }

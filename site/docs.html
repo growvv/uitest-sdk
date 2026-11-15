@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>使用文档 · uitest-sdk</title>
+  <meta name="description" content="uitest-sdk 完整使用文档：安装、快速开始、Device / AgentClient API、投流与录制、错误码与并发模型。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#features">能力</a>
+      <a href="index.html#compare">对比</a>
+      <a href="index.html#bench">实测</a>
+      <a href="docs.html">文档</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="目录">
+      <a href="#install">安装与前提</a>
+      <a href="#quickstart">快速开始</a>
+      <a href="#concepts">核心概念</a>
+      <a href="#device">Device</a>
+      <a href="#agent">AgentClient</a>
+      <a href="#cast">投流与录制</a>
+      <a href="#uitree">UI 树与窗口</a>
+      <a href="#tools">工具类</a>
+      <a href="#errors">错误码</a>
+      <a href="#concurrency">并发与生命周期</a>
+      <a href="#examples">完整示例</a>
+    </aside>
+
+    <article class="doc-body">
+      <h1>使用文档</h1>
+      <p class="doc-meta">uitest-sdk <strong>0.1.0</strong> · Node.js ≥ 20 · MIT</p>
+      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。</p>
+
+      <h2 id="install">1. 安装与前提</h2>
+      <pre><code>npm install uitest-sdk</code></pre>
+      <ul>
+        <li><strong>Node.js ≥ 20</strong>，ESM（<code>import</code>）。</li>
+        <li><strong>hdc</strong>：DevEco Studio 自带的 <code>hdc</code> 在 <code>PATH</code> 上，或设置 <code>HDC_PATH</code>，或传 <code>Device.connect({ hdcPath })</code>。</li>
+        <li><strong>一台设备</strong>：真机或模拟器，<code>hdc list targets</code> 能看到。</li>
+        <li><strong>扩展文件</strong>：已随 npm 包发布在 <code>assets/</code> 下（<code>arm64/agent.so</code>、<code>arm64/libscreen_casting.z.so</code>、<code>x86_64/agent.so</code>），<code>Device.connect()</code> 会自动推送缺失的那份。</li>
+        <li><strong>H.264 与录制需要 arm64</strong>：x86_64 模拟器只有 MJPEG。</li>
+      </ul>
+      <p class="note">扩展必须由华为签名才能在真机加载（XPM 校验拒绝未签名 <code>.so</code>）。本包内置的是实测可用的签名版本。</p>
+
+      <h2 id="quickstart">2. 快速开始</h2>
+      <pre><code>import { Device } from "uitest-sdk";
+
+const dev = await Device.connect(); // 只有一台设备时可省略参数
+try {
+  const { width, height } = await dev.agent.getDisplaySize();
+
+  await dev.agent.click(width / 2, height / 2);
+  await dev.agent.swipe(width / 2, height * 0.7, width / 2, height * 0.3);
+
+  const jpeg = await dev.agent.captureScreen(); // 608×1344 JPEG
+  console.log(`captured ${jpeg.length} bytes`);
+} finally {
+  await dev.dispose();
+}</code></pre>
+      <p>可运行的版本在包里：<code>node_modules/uitest-sdk/examples/quickstart.mjs</code>。</p>
+
+      <h2 id="concepts">3. 核心概念</h2>
+      <h3>坐标</h3>
+      <p>所有触摸坐标都是<strong>逻辑显示坐标</strong>，即 <code>getDisplaySize()</code> 返回的那套（例如 1216×2688）。<code>captureScreen()</code> 默认按 <code>scale: 0.5</code> 出图（608×1344）；把截图上的点换回显示坐标，乘以 <code>display.width / 608</code>。</p>
+      <h3>扩展与 daemon</h3>
+      <p><code>Device.connect()</code> 依次完成：读 ABI → 推送对应 <code>agent.so</code>（必要时也推 casting 扩展）→ 如果没有 daemon 在监听 8012 就拉起一个 → 建 <code>hdc fport</code> 隧道 → 连上 TCP → 用一次 <code>getDisplaySize()</code> 做健康检查。任何一步失败都会清掉自己建立的隧道与 daemon，然后抛错。</p>
+      <h3>失败即报错</h3>
+      <p>每个失败都是 <code>UitestError</code> 的子类，带稳定的 <code>code</code>。SDK 不做静默降级：能走 H.264 就走 H.264，走不了会通过 <code>cast.castKind</code> 明确告诉你走的是 MJPEG。</p>
+
+      <h2 id="device">4. Device</h2>
+      <pre><code>import { Device } from "uitest-sdk";
+const dev = await Device.connect(options?);</code></pre>
+      <h3>DeviceOptions</h3>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>字段</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>hdcPath</code></td><td>string</td><td>自动查找</td><td>查找顺序：<code>HDC_PATH</code> → <code>PATH</code> → 常见 DevEco 安装位置</td></tr>
+            <tr><td><code>deviceId</code></td><td>string</td><td>唯一设备</td><td>多设备时必须指定（或设 <code>HDC_TARGET</code>）</td></tr>
+            <tr><td><code>agentPort</code></td><td>number</td><td>8012</td><td>本地隧道起始端口，被占用时向后找空位</td></tr>
+            <tr><td><code>autoRestart</code></td><td>boolean</td><td>true</td><td>断开后下一次调用自动重连；进行中的请求不会重放</td></tr>
+            <tr><td><code>extensionDir</code></td><td>string</td><td>包内 assets/</td><td>按 <code>&lt;dir&gt;/&lt;abi&gt;/agent.so</code> 查找</td></tr>
+            <tr><td><code>requestTimeoutMs</code></td><td>number</td><td>30000</td><td>单次请求超时；超时后连接被丢弃</td></tr>
+            <tr><td><code>ownDaemon</code></td><td>boolean</td><td>false</td><td>为 true 时 <code>dispose()</code> 杀掉本实例拉起的那个 daemon</td></tr>
+            <tr><td><code>retryOnBusy</code></td><td>boolean</td><td>true</td><td>设备全局锁冲突时按抖动退避重试</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>属性与方法</h3>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>成员</th><th>类型</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>dev.agent</code></td><td>AgentClient</td><td>长连接客户端</td></tr>
+            <tr><td><code>dev.cli</code></td><td>CliRunner</td><td>走 <code>uitest dumpLayout</code> 的窗口级工具</td></tr>
+            <tr><td><code>dev.state</code></td><td>connected / disconnected</td><td><code>dispose()</code> 后变为 disconnected，再调用抛 <code>EDISPOSED</code></td></tr>
+            <tr><td><code>dev.ownsDaemon</code></td><td>boolean</td><td>本次连接是否由自己拉起 daemon</td></tr>
+            <tr><td><code>dev.resolveCastExtension()</code></td><td>string / null</td><td>该 ABI 的 casting 扩展路径</td></tr>
+            <tr><td><code>dev.createCast(opts)</code></td><td>Promise&lt;CastClient&gt;</td><td>创建投流或录制</td></tr>
+            <tr><td><code>dev.dispose()</code></td><td>Promise&lt;void&gt;</td><td>关连接、撤销自己的 fport；<code>ownDaemon: true</code> 时再杀掉自己的 daemon</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="agent">5. AgentClient：UI 自动化</h2>
+      <p>所有方法都返回 Promise，失败抛 <code>UitestError</code>。</p>
+      <h3>显示</h3>
+      <pre><code>await dev.agent.getDisplaySize();     // { width: 1216, height: 2688 }
+await dev.agent.getDisplayRotation(); // 0 / 1 / 2 / 3</code></pre>
+      <h3>触摸</h3>
+      <pre><code>await dev.agent.click(x, y);
+await dev.agent.touchDown(x, y);
+await dev.agent.touchMove(x, y);
+await dev.agent.touchUp(x, y);
+await dev.agent.swipe(x1, y1, x2, y2, { steps?: number; durationMs?: number });</code></pre>
+      <ul>
+        <li><code>click</code> = <code>touchDown</code> + <code>touchUp</code>，实测 8–30 ms。</li>
+        <li><code>swipe</code> 默认 <code>steps: 8</code>、<code>durationMs: 300</code>，是 touchDown + N 次 touchMove + touchUp 的三段式；中途失败会先 <code>touchUp</code> 再抛错。</li>
+        <li>坐标四舍五入为整数。</li>
+      </ul>
+      <h3>文本与按键</h3>
+      <pre><code>await dev.agent.inputText(x, y, "hello"); // hypium Driver.inputText
+await dev.agent.triggerKey(keyCode);</code></pre>
+      <h3>截图</h3>
+      <pre><code>const jpeg = await dev.agent.captureScreen();               // 608×1344 JPEG Buffer
+const jpeg2 = await dev.agent.captureScreen({ scale: 1 });  // 1.1.10 上 scale 无效</code></pre>
+      <p>实现是「起一次采集流 → 取第一帧 → 停止」，这是设备上最快的整屏路径。</p>
+      <h3>连续取帧（MJPEG）</h3>
+      <pre><code>for await (const jpeg of dev.agent.streamScreen({ scale: 0.5 })) {
+  // jpeg 是完整的 JPEG Buffer
+  if (done) break;
+}</code></pre>
+      <p class="note">采集是脏区驱动的：静止画面只出 1 帧然后不再出帧，这不是卡死。断开循环会自动 <code>stopStream()</code>。</p>
+      <h3>UI 事件流</h3>
+      <pre><code>for await (const ev of dev.agent.streamUiActions()) {
+  console.log(ev.type, ev);
+}</code></pre>
+      <p>只上报真实用户输入；通过 agent 注入的合成触摸不会回传。<code>stopCaptureUiAction</code> 会关闭会话。</p>
+      <h3>事件与低层接口</h3>
+      <pre><code>const off = dev.agent.onFrame((jpeg) =&gt; void 0);
+const offClose = dev.agent.onClose((err) =&gt; void 0);
+dev.agent.connected; // boolean
+dev.agent.close();   // 主动关闭，之后不再重连
+
+await dev.agent.call("CtrlCmd", { api: "getDisplaySize", args: [] });
+await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);</code></pre>
+      <p><code>call</code> 的 method 只能是 <code>"Captures"</code> / <code>"CtrlCmd"</code> / <code>"Gestures"</code> / <code>"callHypiumApi"</code>。</p>
+
+      <h2 id="cast">6. 投流与录制</h2>
+      <pre><code>const cast = await dev.createCast({
+  mode: "stream",   // "stream" | "record"
+  frameRate: 60,    // 15 | 30 | 60 | 120，默认 30
+  scale: 2,         // 1..5 整数缩小因子，默认 1
+});
+for await (const chunk of cast.stream()) {
+  // H.264: { data, pts, flags, isKeyFrame }；MJPEG: { data, pts }
+  if (chunk.isKeyFrame) { /* 从这里开始解码 */ }
+}
+await cast.requestIDRFrame(); // H.264 专用；MJPEG 上是 no-op
+await cast.dispose();</code></pre>
+      <h3>CastOptions</h3>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>字段</th><th>类型</th><th>默认</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>mode</code></td><td>stream / record</td><td>必填</td><td>record 只支持 arm64（需要 casting 扩展）</td></tr>
+            <tr><td><code>frameRate</code></td><td>15|30|60|120</td><td>30</td><td>扩展只认这四个值，其它值会被设备侧静默重置</td></tr>
+            <tr><td><code>scale</code></td><td>1..5</td><td>1</td><td>整数缩小因子；越界抛 <code>EBADARG</code></td></tr>
+            <tr><td><code>outputPath</code></td><td>string</td><td>—</td><td>record 必填，<code>dispose()</code> 时把 MP4 拉到这里</td></tr>
+            <tr><td><code>bitRate</code></td><td>number</td><td>8_000_000</td><td>编码码率</td></tr>
+            <tr><td><code>iFrameInterval</code></td><td>number</td><td>2000</td><td>关键帧间隔</td></tr>
+            <tr><td><code>screenId</code></td><td>number</td><td>0</td><td>屏幕编号</td></tr>
+            <tr><td><code>socketName</code></td><td>string</td><td>内部常量</td><td>覆盖抽象 socket 名；同机跑多个投流的唯一方式</td></tr>
+            <tr><td><code>durationMs</code></td><td>number</td><td>—</td><td>record：录制时长</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>CastClient</h3>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>成员</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>castKind</code></td><td><code>"h264"</code> 或 <code>"mjpeg"</code>，显式选择的结果</td></tr>
+            <tr><td><code>stream()</code></td><td>AsyncIterable，逐块给出 H.264 / JPEG</td></tr>
+            <tr><td><code>requestIDRFrame()</code></td><td>请求一个关键帧（H.264）；MJPEG 无操作</td></tr>
+            <tr><td><code>dispose()</code></td><td>结束投流；录制模式下关闭 muxer 并拉回文件</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>选择规则</h3>
+      <ul>
+        <li><code>resolveCastExtension()</code> 非空 → H.264（gRPC over abstract socket，实测 15–89 fps）。</li>
+        <li>为空（x86_64 模拟器）→ MJPEG（<code>castKind === "mjpeg"</code>，10–16 fps）。</li>
+        <li>x86_64 上请求 <code>mode: "record"</code> 直接抛 <code>ExtensionMissingError</code>，不会返回一个「录不到东西」的客户端。</li>
+      </ul>
+      <h3>录制</h3>
+      <pre><code>const cast = await dev.createCast({ mode: "record", frameRate: 30, outputPath: "out.mp4" });
+// 让画面动起来：静止画面不会产生新帧
+await cast.dispose(); // 关闭 muxer → 等待设备写完 → 拉回 out.mp4</code></pre>
+      <p>设备侧文件路径写死在扩展里（<code>/data/local/tmp/mytest.mp4</code>），不可改。编码器是起停驱动的：<code>createCast</code> 返回时已经在录，<code>dispose()</code> 后才完成。</p>
+
+      <h2 id="uitree">7. UI 树与窗口</h2>
+      <h3>整屏 UI 树</h3>
+      <pre><code>const tree = await dev.agent.captureLayout(); // { attributes, children }
+console.log(tree.attributes.bundleName, tree.children.length);</code></pre>
+      <h3>窗口截图</h3>
+      <p>设备不提供窗口级截图，SDK 的做法是「整屏采集 + 按节点 bounds 裁剪」：</p>
+      <pre><code>const jpeg = await dev.agent.cropToWindow({ bundleName: "com.huawei.hmos.settings" });
+const jpeg2 = await dev.agent.cropToWindow({ windowId: 12, scale: 1 });</code></pre>
+      <p>找不到窗口抛 <code>ENOWINDOW</code>，节点没有可解析的 bounds 抛 <code>ENOBOUNDS</code>。</p>
+      <h3>窗口级 UI 树</h3>
+      <p><code>agent.captureLayout()</code> 永远返回整屏；要按窗口过滤，用 <code>cli.dumpLayout</code>（一次 shell + pull）：</p>
+      <pre><code>const tree = await dev.cli.dumpLayout({ windowId: 12 });
+const tree2 = await dev.cli.dumpLayout({ bundleName: "com.huawei.hmos.settings", withFontAttrs: true });</code></pre>
+      <h3>找节点并点击</h3>
+      <pre><code>import { parseBounds } from "uitest-sdk";
+
+const tree = await dev.agent.captureLayout();
+const target = find(tree, (n) =&gt; n.attributes.text === "设置");
+const bounds = target &amp;&amp; parseBounds(target.attributes.bounds ?? "");
+if (bounds) {
+  await dev.agent.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+}</code></pre>
+
+      <h2 id="tools">8. 工具类与导出</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>导出</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>parseBounds("[x1,y1][x2,y2]")</code></td><td>解析成 <code>{ x, y, width, height }</code>，格式不对返回 null</td></tr>
+            <tr><td><code>cropRect(inner, outer)</code></td><td>求交集矩形；无交集返回零矩形</td></tr>
+            <tr><td><code>FrameDemux</code></td><td>把「一行 JSON + 裸 JPEG」的混合流拆开</td></tr>
+            <tr><td><code>SerialQueue</code></td><td>串行队列，<code>run(fn)</code> 保证同一时刻只有一个请求在途</td></tr>
+            <tr><td><code>HdcRunner</code></td><td>hdc 封装：shell、push、pull、fportAdd/Remove、listTargets</td></tr>
+            <tr><td><code>CliRunner</code></td><td>窗口级 <code>dumpLayout</code></td></tr>
+            <tr><td><code>isBusyException(msg)</code></td><td>判断是不是「全局锁被占用」</td></tr>
+            <tr><td><code>MODULE_ID</code></td><td><code>com.ohos.devicetest.hypiumApiHelper</code></td></tr>
+            <tr><td><code>CASTING_EXTENSION</code></td><td><code>libscreen_casting.z.so</code></td></tr>
+            <tr><td><code>resolveCastingExtension(abi, dir)</code></td><td>该 ABI 的 casting 扩展路径，没有返回 null</td></tr>
+            <tr><td><code>loadScrcpyService()</code></td><td>加载 <code>scrcpy.proto</code> 的 gRPC service 构造器</td></tr>
+            <tr><td><code>H264CastClient</code> / <code>MjpegCastClient</code></td><td>低层客户端；正常用 <code>dev.createCast()</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="errors">9. 错误码</h2>
+      <p>所有错误继承 <code>UitestError</code>，带 <code>code</code> 与可选 <code>cause</code>。</p>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>类</th><th>典型 code</th><th>触发条件</th></tr></thead>
+          <tbody>
+            <tr><td><code>DeviceNotConnectedError</code></td><td>ENODEVICE / ENOHDC / EHDC / EDISPOSED</td><td>没有设备、找不到 hdc、hdc 命令失败、Device 已 dispose</td></tr>
+            <tr><td><code>ExtensionMissingError</code></td><td>ENOEXT / ENOCAST</td><td>本地没有对应 ABI 的 agent.so；x86_64 上请求录制</td></tr>
+            <tr><td><code>DaemonStartError</code></td><td>ENODAEMON / EPORT / ENOSOCKET / ENORECORD</td><td>daemon 拉不起来、端口耗尽、投流 socket 没出现、录制文件没出现</td></tr>
+            <tr><td><code>AgentProtocolError</code></td><td>EPROTO / ETIMEDOUT / EBADJSON / ENOWINDOW / ENOBOUNDS / EBADARG</td><td>设备返回异常、请求超时、输出不是 JSON、找不到窗口/边界、参数非法</td></tr>
+            <tr><td><code>AgentBusyError</code></td><td>EBUSY</td><td>全局锁被其它进程占着且重试耗尽；或该设备已有采集流（立即失败）</td></tr>
+            <tr><td><code>AgentConnectionError</code></td><td>ECONN</td><td>连接不可用、请求超时后连接被丢弃、关闭后继续调用</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="concurrency">10. 并发与生命周期</h2>
+      <ul>
+        <li><strong>一条连接一个在途请求</strong>：<code>SerialQueue</code> 串行化；断开后 <code>autoRestart</code> 用新 socket 重连，不重放失败中的请求。</li>
+        <li><strong>全局锁冲突</strong>：只有 <code>Disallow concurrent use</code> 会退避重试（0.5 s 起，抖动后翻倍，最多 40 次，20 s 封顶）。</li>
+        <li><strong>采集冲突</strong>：设备同一时刻只允许一条采集流。<code>Capture already running</code> 立刻抛 <code>AgentBusyError</code>，不会等、不会抢占。</li>
+        <li><strong>daemon 归属</strong>：只认本次连接前后新增的、且只有一个的 pid；<code>ownDaemon: true</code> 时才会在 <code>dispose()</code> 杀掉它。</li>
+        <li><strong>超时即断连</strong>：请求超时后连接被丢弃，下一次调用走重连。</li>
+        <li><strong>退出前 <code>dispose()</code></strong>：撤销 fport，否则本地会留下隧道。</li>
+      </ul>
+
+      <h2 id="examples">11. 完整示例</h2>
+      <h3>点击、滑动与输入</h3>
+      <pre><code>const { width, height } = await dev.agent.getDisplaySize();
+await dev.agent.click(width / 2, height / 2);
+await dev.agent.swipe(width / 2, height * 0.8, width / 2, height * 0.2, { durationMs: 200 });
+await dev.agent.inputText(width / 2, height * 0.5, "hello");</code></pre>
+      <h3>只截一个应用窗口</h3>
+      <pre><code>const jpeg = await dev.agent.cropToWindow({ bundleName: "com.huawei.hmos.settings" });</code></pre>
+      <h3>投流并解码</h3>
+      <pre><code>const cast = await dev.createCast({ mode: "stream", frameRate: 30 });
+try {
+  for await (const chunk of cast.stream()) {
+    if ("isKeyFrame" in chunk &amp;&amp; chunk.isKeyFrame) {
+      // H.264 Annex-B：从这里开始送解码器
+    }
+  }
+} finally {
+  await cast.dispose();
+}</code></pre>
+      <h3>录制 10 秒</h3>
+      <pre><code>const cast = await dev.createCast({ mode: "record", frameRate: 30, outputPath: "demo.mp4" });
+await new Promise((r) =&gt; setTimeout(r, 10_000));
+await cast.dispose();</code></pre>
+      <h3>多设备并行</h3>
+      <pre><code>const ids = ["&lt;device-a&gt;", "&lt;device-b&gt;"];
+const devices = await Promise.all(ids.map((deviceId) =&gt; Device.connect({ deviceId })));
+try {
+  await Promise.all(devices.map((d) =&gt; d.agent.click(100, 100)));
+} finally {
+  await Promise.all(devices.map((d) =&gt; d.dispose()));
+}</code></pre>
+
+      <p class="doc-meta">文档对应 uitest-sdk 0.1.0（2026-11-15）。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告。</p>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-row">
+      <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
+      <div class="footer-links">
+        <a href="index.html">首页</a>
+        <a href="changelog.html">更新日志</a>
+        <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>

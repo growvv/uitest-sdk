@@ -12,9 +12,11 @@
     <a class="nav-brand" href="#hero">uitest-sdk</a>
     <div class="nav-links">
       <a href="#features">能力</a>
+      <a href="#compare">对比</a>
       <a href="#bench">实测</a>
       <a href="#video">视频</a>
-      <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/api.md">文档</a>
+      <a href="docs.html">文档</a>
+      <a href="changelog.html">更新</a>
       <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
     </div>
   </nav>
@@ -98,7 +100,48 @@
           </tbody>
         </table>
       </div>
-      <p class="table-note">真机 BRA-AL00，1216×2688，uitest 7.0.0.1。对比表是点击 10 次、其余各 5 次的采样；第二张表来自验收阶段的 8 次采样，两轮的绝对值会随设备负载浮动。原始样本见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md">docs/benchmarks.md</a>。</p>
+      <p class="table-note">真机 BRA-AL00，1216×2688，uitest 7.0.0.1。对比表是点击 10 次、其余各 5 次的采样，取代表性一轮；多轮之间 CLI 点击中位 390–561 ms（44.9–59.0×），滑动 6.1–6.9×、截图 3.8–4.5×。第二张表来自验收阶段的 8 次采样。原始样本见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md">docs/benchmarks.md</a>。</p>
+    </section>
+
+    <section id="compare" class="section compare reveal">
+      <h2>和现有方案比</h2>
+      <p class="section-lede">不是把所有路径都重写一遍：同一个 agent RPC 上我们持平；官方走慢路径的地方我们换路；7.0 上失效的录屏，我们直连 6.8 casting。</p>
+      <div class="table-wrap">
+        <table class="table-compare">
+          <thead>
+            <tr><th>能力</th><th>其他方式</th><th>uitest-sdk</th><th>结果</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>整屏截图</td><td><code>snapshot_display</code> + 回传：675 ms</td><td>agent MJPEG：178 ms</td><td>快 3.8×</td></tr>
+            <tr><td>UI 树</td><td><code>dumpLayout</code> + pull：中位 1125 ms</td><td><code>captureLayout</code>：中位 414 ms</td><td>快 2 倍以上</td></tr>
+            <tr><td>单次动作</td><td>官方工具内部同样走 agent RPC</td><td>同一个 agent RPC</td><td>持平</td></tr>
+            <tr><td>录屏</td><td>官方 26.x 的 7.0 unix 录屏路径在 7.0.0.1 上失效</td><td>直连 6.8 casting <code>-m 1</code></td><td>我们能跑</td></tr>
+            <tr><td>连续画面</td><td><code>screenCap</code> 轮询约 1.4 fps</td><td>H.264 投流 15–89 fps</td><td>最高约 60×</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">截图与 UI 树的「其他方式」是官方工具链在同一台真机上的路径；单次动作两边都走 agent RPC，所以不宣称优势。多轮采样范围：截图 3.2–3.8×、UI 树 2.6–2.7×，表中取代表性一轮；完整样本见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md">docs/benchmarks.md</a>。</p>
+
+      <h3 class="compare-sub">完整功能矩阵</h3>
+      <div class="table-wrap">
+        <table class="table-matrix">
+          <thead>
+            <tr><th>能力</th><th>hdc CLI</th><th>官方快照 / 布局</th><th>官方 26.x 套件</th><th>uitest-sdk</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>点击 / 滑动 / 输入</td><td>每步起进程</td><td>—</td><td>内部同样走 agent RPC</td><td>同一 RPC，类型化</td></tr>
+            <tr><td>整屏截图</td><td>中位 828 ms</td><td>675 ms</td><td><code>snapshot_display</code></td><td>178 ms</td></tr>
+            <tr><td>窗口级 UI 树</td><td><code>dumpLayout</code></td><td><code>dumpLayout</code></td><td>支持</td><td><code>captureLayout</code> + <code>dumpLayout</code></td></tr>
+            <tr><td>窗口截图</td><td>不支持</td><td>不支持</td><td>未见公开能力</td><td>整屏 + 按 bounds 裁剪</td></tr>
+            <tr><td>连续 H.264 投流</td><td>不支持</td><td>不支持</td><td>内置投屏，未公开 API</td><td>15–89 fps</td></tr>
+            <tr><td>MP4 录制</td><td>不支持</td><td>不支持</td><td>7.0 上失效</td><td>6.8 casting</td></tr>
+            <tr><td>多实例并发</td><td>命令无状态，受设备锁限制</td><td>命令无状态，受设备锁限制</td><td>单设备会话为主</td><td>复用 daemon + 退避</td></tr>
+            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，22 个导出</td></tr>
+            <tr><td>结构化错误</td><td>文本输出</td><td>文本输出</td><td>文本 / 异常为主</td><td><code>UitestError</code> + code</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">对比基于我们复现过的公开工具路径，不是对厂商产品的完整评测；官方 26.x 指我们测试的 26.0.1.100 套件。</p>
     </section>
 
     <section id="features" class="section features reveal">
@@ -198,7 +241,8 @@
       <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
       <div class="footer-links">
         <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
-        <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/api.md">文档</a>
+        <a href="docs.html">使用文档</a>
+        <a href="changelog.html">更新日志</a>
       </div>
     </div>
   </footer>

@@ -64,6 +64,10 @@ async function main(): Promise<void> {
         }),
       ),
     );
+    // The two official paths the site compares against: a whole-screen tree
+    // through the agent, and a window-scoped tree through uitest + pull.
+    results.push(await timeIt("layout", 5, () => dev.agent.captureLayout()));
+    results.push(await timeIt("dump", 5, () => dev.cli.dumpLayout({})));
     const captures: Buffer[] = [];
     results.push(
       await timeIt("capture", 5, async () => {
@@ -123,6 +127,8 @@ async function main(): Promise<void> {
 
 > 由 \`scripts/bench-compare.ts\` 生成，请勿手改。生成时间：${new Date().toISOString()}
 > 设备：BRA-AL00 / 1216×2688。CLI 数字包含 hdc 进程启动、shell 往返、uitest 启动与设备侧工作。
+> 绝对值随设备负载浮动：多轮之间 CLI 点击中位 390–561 ms、截图 632–890 ms；
+> 本文件是其中一轮，官网取另一轮的代表值。
 
 | 操作 | 本 SDK | hdc CLI | CLI / SDK |
 |---|---|---|---|
@@ -135,6 +141,20 @@ ${row("整屏截图（含回传）", by("capture"), by("cli-capture"))}
 - \`snapshot_display\` + \`file recv\`：${range(by("snapshot").ms)}（中位 ${median(
     by("snapshot").ms,
   )} ms），约 ${kb(by("snapshot").bytes)} KB。
+
+### 官方路径对比
+
+| 能力 | 本 SDK | 官方路径 | 倍率 |
+|---|---|---|---|
+| 整屏截图 | agent MJPEG 中位 ${median(by("capture").ms)} ms | \`snapshot_display\` + pull 中位 ${median(
+    by("snapshot").ms,
+  )} ms | ${(median(by("snapshot").ms) / median(by("capture").ms)).toFixed(1)}× |
+| UI 树 | \`captureLayout\` 中位 ${median(by("layout").ms)} ms | \`dumpLayout\` + pull 中位 ${median(
+    by("dump").ms,
+  )} ms | ${(median(by("dump").ms) / median(by("layout").ms)).toFixed(1)}× |
+
+单次动作两边走同一个 agent RPC，时延持平；截图与 UI 树的差别来自官方路径的
+「起进程 / 写文件 / 回传」，不是 RPC 本身。
 
 连续取帧没有 CLI 等价物：\`screenCap\` 轮询约 1.4 fps（每次约 700 ms），
 而 H.264 投流实测 15–89 fps（见 \`docs/03-libscreen-casting.md\`）。

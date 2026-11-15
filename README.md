@@ -1,6 +1,6 @@
 # uitest-sdk
 
-[官网](https://growvv.github.io/uitest-sdk/) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [完整 API 文档](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
+[官网](https://growvv.github.io/uitest-sdk/) · [使用文档](https://growvv.github.io/uitest-sdk/docs.html) · [更新日志](https://growvv.github.io/uitest-sdk/changelog.html) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
 
 把鸿蒙 `uitest` 的设备侧扩展（`agent.so` / `libscreen_casting.z.so`）封装成 TypeScript SDK：
 一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。
@@ -54,12 +54,14 @@ shell 往返与 uitest 启动——也就是手敲命令时真正付出的时间
 
 | 操作 | 本 SDK | hdc CLI | CLI / SDK |
 |---|---|---|---|
-| 点击 | 8~30 ms（中位 9 ms） | 497~561 ms（中位 531 ms） | **59.0×** |
-| 滑动（300 ms 手势 / 600 速度） | 389~395 ms（中位 391 ms） | 2630~2787 ms（中位 2695 ms） | **6.9×** |
-| 整屏截图（含回传） | 109~222 ms（中位 184 ms） | 741~890 ms（中位 828 ms） | **4.5×** |
+| 点击 | 7~36 ms | 390~561 ms | **44.9~59.0×** |
+| 滑动（300 ms 手势 / 600 速度） | 389~499 ms | 2630~2808 ms | **6.1~6.9×** |
+| 整屏截图（含回传） | 109~294 ms | 741~988 ms | **3.8~4.5×** |
 
-其他方式：`snapshot_display` + 回传中位 651 ms（约 194 KB）；`uitest screenCap` + 回传中位 828 ms
-（1216×2688 PNG，约 701 KB）；本 SDK 的截图是 608×1344 JPEG，约 124 KB，直接拿到字节。
+其他方式：`snapshot_display` + 回传中位 651~684 ms（约 158~194 KB）；`uitest screenCap` + 回传
+中位 813~828 ms（1216×2688 PNG，约 644~701 KB）；本 SDK 的截图是 608×1344 JPEG，直接拿到字节。
+对比 `snapshot_display` 的截图，SDK 快 **3.2~3.8×**；对比 `dumpLayout + pull` 的 UI 树，
+`captureLayout` 快 **2.6~2.7×**；单次动作两边走同一个 agent RPC，时延持平。
 连续取帧没有 CLI 等价物：`screenCap` 轮询约 1.4 fps，而 MJPEG 流 10~16 fps、H.264 投流 15~89 fps。
 完整原始样本见 [`docs/benchmarks.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md)。
 
