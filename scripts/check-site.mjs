@@ -128,6 +128,7 @@ for (const needle of [
   "handoff --reason",
   "正在运行的 MCP 会话",
   "凭据不外泄",
+  "宿主侧不常驻",
   "lease_held</code></td><td>2",
 ]) {
   if (!cli.includes(needle)) fail(`#cli 缺少「${needle}」`);

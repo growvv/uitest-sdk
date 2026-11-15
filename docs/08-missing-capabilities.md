@@ -367,6 +367,12 @@ uitest uiRecord read                # 读回
 
 `uiRecord` 走的是 uitest 自己的 `UIEventObserver`，不经过无障碍服务。
 
+> 2026-11-16 实测：`uiRecord` 与 agent daemon **互斥**（daemon 监听时启动报
+> `Can not connect to AAMS, RET_ERR_CONNECTION_EXIST`；反向顺序则 agent 连接被关），且它本身是
+> hdc shell 拉起的常驻设备进程。扩展侧的 `recordUiAction` / `Captures.startCaptureUiAction` 是同一套
+> observer，停止会关会话、能卡死 daemon。接管记录若要做，只能走 `captureLayout` 轮询；
+> 详见 [13](13-stage-log.md) §C2–C4。
+
 ### 4.4 虚拟屏
 
 casting 内部确实在用虚拟屏 —— `libscrcpy_server2/3/4` 里都有 `CreateVirtualScreen` / `SetVirtualScreenSurface` / `MakeMirror` 符号。但：

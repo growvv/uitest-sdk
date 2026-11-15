@@ -18,6 +18,7 @@
 | [10-deveco-testing-analysis.md](10-deveco-testing-analysis.md) | **DevEco Testing 6.1.0.210 vs 26.0.1.100 对比、13 个 SO 清单、7.0 录屏实测** |
 | [11-deveco-capability-inventory.md](11-deveco-capability-inventory.md) | **hypium 118 个公开方法的逐项对账与 SDK 支持规划（P0~P3）** |
 | [12-findings-classified.md](12-findings-classified.md) | **本轮全部结论的分类汇总（版本/签名/投流/录屏/能力/性能/踩坑）** |
+| [13-stage-log.md](13-stage-log.md) | **阶段记录：0.3.0 → 0.4.0 的交付、发布、架构实测与待办** |
 
 ## 一句话结论
 

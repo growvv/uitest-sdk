@@ -266,4 +266,5 @@ npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 | [09](https://github.com/growvv/uitest-sdk/blob/master/docs/09-capability-gaps-roadmap.md) | 版本矩阵、7.0 来源、能力路线图 |
 | [11](https://github.com/growvv/uitest-sdk/blob/master/docs/11-deveco-capability-inventory.md) | 118 个 hypium 方法与覆盖规划 |
 | [12](https://github.com/growvv/uitest-sdk/blob/master/docs/12-findings-classified.md) | 结论分类汇总 |
+| [13](https://github.com/growvv/uitest-sdk/blob/master/docs/13-stage-log.md) | 阶段记录：0.3.0 → 0.4.0 的交付、发布与架构实测 |
 | [设计](https://github.com/growvv/uitest-sdk/blob/master/docs/superpowers/specs/2026-11-15-uitest-sdk-design.md) | SDK 设计文档 |
