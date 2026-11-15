@@ -60,7 +60,7 @@
 
 ### 4.3 素材
 
-- 截图从 `docs/acceptance/screenshots/` 复制并改名为 `.jpg`（这些文件实际是 JPEG 字节，扩展名此前是 `.png`）。
+- 验收截图全部拍到了同一个系统弹窗，不能用作宣传图。改为用 SDK 自己现场拍摄：先用 `uitest uiInput keyEvent Back` 回到桌面，再 `captureScreen()` 得到 608×1344 JPEG（桌面一张、上滑后一张）。
 - 所有数字来自验收报告，不编造；页面语言中文。
 
 ## 5. 视频
