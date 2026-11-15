@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Rect, UiNode } from "../model.js";
 import type { FileRefStore, RefTable } from "../refs.js";
+import { isSecretContext, redactLabel } from "./redact.js";
 
 /** Upper bound on remembered signatures; the current screen is never evicted. */
 const MAX_REFS = 4000;
@@ -34,6 +35,11 @@ export interface ScreenElement {
   /** Internal identity, also used for approval binding. */
   signature: string;
   node: UiNode;
+  /**
+   * The rendered label hides a secret (a code, a password value). Screenshot
+   * writers cover this element's box so the pixels say the same thing.
+   */
+  masked?: boolean;
 }
 
 export interface Screen {
@@ -284,6 +290,15 @@ export class ScreenBuilder {
       if (rect && rect.width > 0 && rect.height > 0) {
         const role = roleOf(node);
         const label = labelOf(node, role);
+        const state = stateOf(node);
+        // Redaction happens here, once, so every surface built from the screen
+        // (observe text, diffs, read-list, traces and reports) agrees. The raw
+        // label still feeds the signature and the policy gate.
+        const password = state.includes("password");
+        const credentialContext =
+          password || isSecretContext(label) || ancestors.some((a) => isSecretContext(a.label));
+        const shownLabel = redactLabel(label, { password, context: credentialContext });
+        const masked = shownLabel !== label;
         const clickable = isTrue(node, "clickable") || isTrue(node, "longClickable");
         const input = role === "input";
         const scrollable = isTrue(node, "scrollable");
@@ -329,16 +344,17 @@ export class ScreenBuilder {
             candidates.push({
               ref,
               role,
-              label,
+              label: shownLabel,
               rect,
               center: { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) },
-              state: stateOf(node),
+              state,
               clickable,
               input,
               scrollable,
               focused,
               signature,
               node,
+              ...(masked ? { masked: true } : {}),
             });
           }
           nextAncestors = [...ancestors, { clickable, label }];

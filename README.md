@@ -133,6 +133,9 @@ npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两�
   `approvalId`、`rule`、`reason` 放进 `--json` 的 `data`。
 - **默认审批集**：支付、金融、删除、发送——四类人收不回来的动作。`commits`（确认 / 保存）不默认，
   因为手机上半数普通表单按钮都叫这个，每次都问会把人训练成不看就点同意。
+- **凭据不外泄**：密码框的值、凭据语境里的 3–8 位验证码，在 `observe`、diff、`read-list`、报告与
+  截图里统一脱敏（`••••••` / 灰块）；被遮住的元素也不能再用原文搜索。设备侧动作仍然照常执行，
+  Agent 只是读不到秘密。低层 `captureLayout()` / `captureScreen()` 保持原样。
 - **人可以随时接管**：`uitest-phone hold` 把设备交给此刻拿着手机的人，连正在运行的 MCP 会话也一并让出——
   Agent 命令随即以 `lease_held`（退出码 2）停下，不重试、不抢回；`uitest-phone resume` 交还后，
   同一个会话下一条命令自动继续。反过来，Agent 遇到只有人能做的一步（登录、验证码、解锁）可以

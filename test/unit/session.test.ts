@@ -512,3 +512,33 @@ describe("Session: trace and lease", () => {
     });
   });
 });
+
+describe("Session: credential redaction", () => {
+  it("keeps codes out of the result and the screenshot", async () => {
+    await withDir(async (dir) => {
+      const fake = fakeDevice([
+        page("Your code is 482913", [
+          node("TextInput", { text: "hunter2", password: "true", bounds: "[100,700][300,800]" }),
+        ]),
+      ]);
+      const s = await open(fake, dir);
+      const file = join(dir, "shots", "code.jpg");
+      const r = await s.observe({ out: file });
+      const text = r.screen!.lines.join("\n");
+      expect(text).not.toContain("482913");
+      expect(text).toContain("••••••");
+
+      // The screenshot must not show what the text does not say. The button
+      // occupies display [100,200]-[300,400]; the frame is 20x40 for a
+      // 1000x2000 display, so its center is frame (4,6).
+      const decoded = jpeg.decode(await (await import("node:fs/promises")).readFile(file));
+      const i = (6 * decoded.width + 4) * 4;
+      const channels = [decoded.data[i], decoded.data[i + 1], decoded.data[i + 2]];
+      for (const c of channels) {
+        expect(c).toBeGreaterThan(110);
+        expect(c).toBeLessThan(150);
+      }
+      await s.release();
+    });
+  });
+});

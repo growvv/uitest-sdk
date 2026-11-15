@@ -134,6 +134,14 @@
           </ul>
         </article>
         <article class="bench-card">
+          <h3>凭据不外泄</h3>
+          <ul>
+            <li>密码框的值、凭据语境的 3–8 位验证码在 <code>observe</code> 与 diff 里显示为 <code>••••••</code>。</li>
+            <li>截图与报告里的对应区域盖灰；被遮住的元素无法再按原文搜索。</li>
+            <li>策略与脱敏共用同一套凭据词表；低层 <code>captureLayout()</code> 保持原样。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
           <h3>报告跨进程聚合</h3>
           <ul>
             <li>每条命令各写一个 trace 文件；<code>report</code> 按 task 从磁盘读回来、跨文件重新编号。</li>

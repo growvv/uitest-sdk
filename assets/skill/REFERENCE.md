@@ -131,6 +131,13 @@ screen <width>x<height> · app: <bundle> · rotation <degrees>° · focus [ref]
   `slider`, `tabs`, `nav`, and raw component names.
 - States: `focused`, `disabled`, `checked`, `selected`, `scrollable`,
   `password`.
+- Credentials are masked before the screen reaches the agent. A password
+  field's value is `••••••`; in a credential context, digit runs of 3–8
+  (one-time codes, PINs) become bullets of the same length. The words around
+  them stay, so the policy still classifies the step. A masked element cannot
+  be found by its secret text (`tap --text 482913` is `not_found`), and its
+  box is covered with gray in screenshots and report shots. The low-level
+  `agent.captureLayout()` / `captureScreen()` are untouched.
 
 After an action, a diff is printed:
 
@@ -371,7 +378,8 @@ screenshot [--out shot.jpg]
 Saves the device JPEG and reports `frame`, `display` and `factor`. The device
 ignores the requested scale and returns a fixed frame (measured 608x1344 for a
 1216x2688 display), so the factor comes from the frame itself. Double any pixel
-measured in the image before using it as a tap coordinate.
+measured in the image before using it as a tap coordinate. Credential elements
+are covered with gray in the saved image, matching the masked labels.
 
 ### report
 

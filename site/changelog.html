@@ -23,6 +23,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#unreleased">未发布 · 凭据脱敏</a>
       <a href="#v0-3-0">0.3.0 · 默认值、接管与交接</a>
       <a href="#v0-2-0">0.2.0 · 命令行与 Agent</a>
       <a href="#v0-1-0">0.1.0 · 首个公开版本</a>
@@ -33,6 +34,21 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="unreleased">
+        <div class="release-head">
+          <h2>未发布</h2>
+          <span class="release-tag">master · 尚未发包</span>
+        </div>
+
+        <h3>凭据在屏幕上也会被遮住</h3>
+        <ul>
+          <li>密码框的值显示为 <code>••••••</code>；凭据语境中的 3–8 位数字（验证码、PIN、CVV）显示为等长圆点，前后的词保留，策略仍能分类。</li>
+          <li><code>observe</code>、动作后的 diff、<code>read-list</code>、<code>screenshot</code>、<code>--trace-shots</code> 与 <code>report</code> 共用同一份脱敏后的屏幕；截图的对应区域盖成灰色。</li>
+          <li>被遮住的元素无法再按原文找到：<code>tap --text 482913</code> 返回 <code>not_found</code>，Agent 只能请人接手。</li>
+          <li>策略与脱敏使用同一套凭据词表；低层 <code>agent.captureLayout()</code> / <code>captureScreen()</code> 仍返回设备原样数据。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-3-0">
         <div class="release-head">

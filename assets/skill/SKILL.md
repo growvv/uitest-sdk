@@ -33,7 +33,7 @@ call:
 | `--apps a.b,c.d` | Allow-list; other apps are blocked. |
 | `--confirm <rules>` | `payments,finance,deletes,sends,commits`, `all`, or `none`. |
 | `--settle-ms <n>` | How long to wait for the UI to go quiet. |
-| `--trace-shots` | Save a screenshot with every step (~180 ms each). |
+| `--trace-shots` | Save a redacted screenshot with every step (adds a capture and a layout read). |
 | `--approval-id <id>` | Run one step a person approved. |
 | `--json` | Print one JSON document instead of text. |
 
@@ -88,6 +88,11 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
   size or rotation changed, or when too much changed.
 - `uncertain` means the UI never stopped changing. Observe before deciding the
   action worked.
+- Codes and passwords are masked. A one-time code reads `••••••` in the screen
+  output, and a password field never shows its value; screenshots cover the
+  same regions with a gray box. That is deliberate: you cannot read codes.
+  When a task needs one, use [handoff](#when-a-person-must-do-a-step) and let
+  the person enter it.
 
 ## Acting
 

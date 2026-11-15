@@ -76,6 +76,43 @@ export class Screenshot {
     );
   }
 
+  /**
+   * Covers display rectangles with opaque gray and re-encodes the frame.
+   *
+   * Used for credential elements: the text render already replaces a code or a
+   * password value with bullets, and the screenshot must not say it back. The
+   * rectangles are in display coordinates; the scale comes from the frame that
+   * was actually received, not from the requested `scale`.
+   */
+  redact(rects: Rect[]): Screenshot {
+    if (rects.length === 0) return this;
+    const decoded = jpeg.decode(this.data, { useTArray: true });
+    const { data, width, height } = decoded;
+    for (const rect of rects) {
+      const box = this.toImageRect(rect);
+      const x0 = Math.max(0, box.x);
+      const y0 = Math.max(0, box.y);
+      const x1 = Math.min(width, box.x + box.width);
+      const y1 = Math.min(height, box.y + box.height);
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * width + x) * 4;
+          data[i] = 128;
+          data[i + 1] = 128;
+          data[i + 2] = 128;
+          data[i + 3] = 255;
+        }
+      }
+    }
+    const encoded = jpeg.encode({ data, width, height }, 90).data;
+    return new Screenshot(
+      Buffer.from(encoded),
+      { display: this.display, rotation: this.rotation },
+      width,
+      height,
+    );
+  }
+
   async save(path: string): Promise<string> {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, this.data);

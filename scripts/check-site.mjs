@@ -127,6 +127,7 @@ for (const needle of [
   "resume",
   "handoff --reason",
   "正在运行的 MCP 会话",
+  "凭据不外泄",
   "lease_held</code></td><td>2",
 ]) {
   if (!cli.includes(needle)) fail(`#cli 缺少「${needle}」`);
@@ -310,6 +311,8 @@ for (const needle of [
   "抢走正在运行的任务",
   "uitest_handoff",
   "handoff --reason",
+  "凭据脱敏",
+  "••••••",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -340,6 +343,7 @@ for (const needle of [
   "抢走正在运行的任务",
   "Agent 可以请人接手",
   "uitest_handoff",
+  "凭据在屏幕上也会被遮住",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }

@@ -223,4 +223,4 @@ function looksLikeSearch(labels: string[]): boolean {
   return SEARCH_WORDS.some((word) => matches(text, word));
 }
 
-export { RULES as POLICY_WORDS, SYSTEM_CHROME };
+export { RULES as POLICY_WORDS, SYSTEM_CHROME, matches as matchesWord };

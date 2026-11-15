@@ -474,6 +474,18 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 | `approval_denied` | 4 | 审批 id 错误、用过或过期 |
 | `stale` | 4 | 等待审批期间页面变了 |
 
+### 凭据脱敏
+
+`observe`、动作后的 diff、`read-list`、`screenshot`、`--trace-shots` 与 `report` 共用同一份屏幕模型：
+
+- 密码框的值显示为 `••••••`，`state` 里仍保留 `password`，策略照常拦截输入。
+- 凭据语境中的 3–8 位数字（验证码、PIN、CVV）显示为同样长度的 `•`；前后的词保留，策略仍能分类。
+- 被遮住的元素不能再按原文找到：`tap --text <验证码>` 返回 `not_found`。
+- 截图里对应元素的矩形盖成灰色；坐标换算用实际收到的帧尺寸，不用请求的 `scale`。
+
+脱敏在 `Session` 的渲染与存图路径上。低层 API `agent.captureLayout()` / `agent.captureScreen()`
+返回设备原样数据，不脱敏；直接使用低层 API 的调用方需要自己处理。
+
 ### 跨进程状态
 
 - ref 表在 `<state-dir>/refs-<hash>.json`：`observe` 打印的 ref 在下一条命令里仍指向同一个元素。

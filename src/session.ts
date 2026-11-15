@@ -242,7 +242,7 @@ export class Session {
     this.lastScreen = screen;
     let shot: string | null = null;
     if (opts.out) {
-      shot = await this.saveShot(opts.out);
+      shot = await this.saveShot(opts.out, screen);
     }
     const text = renderFull(screen) + (shot ? `\nsaved: ${shot}` : "");
     return this.finish("observe", opts, "settled", text, { screen, shot });
@@ -880,11 +880,25 @@ ${renderFull(screen)}`, {
     return Object.assign(base, { items, complete, screens }) as unknown as ReadListResult;
   }
 
-  private async saveShot(path: string): Promise<string> {
+  private async saveShot(path: string, screen?: Screen): Promise<string> {
     const frame = await this.device.agent.captureScreen();
     const ctx = await this.reader.context();
     const shot = await Screenshot.from(frame, ctx);
-    return shot.save(path);
+    // A code the text render masks must not be readable in the pixels either.
+    // The layout is read again after the frame: if a code appeared between the
+    // screen text and the capture, its box is still in the union. Over-masking
+    // is harmless; under-masking is the leak.
+    let fresh: Screen | null = null;
+    try {
+      fresh = await this.reader.read();
+    } catch {
+      // A device hiccup here must not cost the screenshot; the passed screen
+      // still covers everything it saw.
+    }
+    const rects = [...(screen?.elements ?? []), ...(fresh?.elements ?? [])]
+      .filter((e) => e.masked)
+      .map((e) => e.rect);
+    return shot.redact(rects).save(path);
   }
 
   /** How many steps this session has recorded. */
@@ -913,7 +927,7 @@ ${renderFull(screen)}`, {
   ): Promise<ActionResult> {
     this.stepCount += 1;
     const screen = (extra.screen as Screen | null | undefined) ?? this.lastScreen;
-    const shot = this.traceShots && screen ? await this.autoShot(command) : null;
+    const shot = this.traceShots && screen ? await this.autoShot(command, screen) : null;
     const { screen: _s, ...rest } = extra;
     const result = {
       status,
@@ -932,13 +946,13 @@ ${renderFull(screen)}`, {
     return result;
   }
 
-  private async autoShot(label: string): Promise<string | null> {
+  private async autoShot(label: string, screen: Screen): Promise<string | null> {
     try {
       const file = join(
         this.shotsDir,
         `${String(this.stepCount).padStart(3, "0")}-${label}.jpg`,
       );
-      return await this.saveShot(file);
+      return await this.saveShot(file, screen);
     } catch {
       return null;
     }

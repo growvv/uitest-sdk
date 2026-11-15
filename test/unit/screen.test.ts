@@ -104,4 +104,36 @@ describe("ScreenBuilder", () => {
     expect(findText(screen, "item two")?.label).toBe("Item two");
     expect(nodesUnder(screen, 200, 650).map((e) => e.label)).toContain("Item one");
   });
+
+  it("masks one-time codes and password values in the rendered screen", () => {
+    const tree = node({ bundleName: "com.example.app" }, [
+      node({ type: "Text", text: "Your code is 482913", bounds: "[0,100][400,160]" }),
+      node({ type: "TextInput", text: "hunter2", password: "true", bounds: "[0,200][400,260]" }),
+      // A credential-worded control keeps its words: the policy still has to
+      // classify it, and the word itself is not the secret.
+      node({ type: "Button", text: "发送验证码", clickable: "true", bounds: "[0,300][400,360]" }),
+    ]);
+    const screen = new ScreenBuilder().build(tree, { display, rotation: 0 });
+    const text = renderFull(screen);
+    expect(text).not.toContain("482913");
+    expect(text).not.toContain("hunter2");
+    expect(text).toContain("Your code is ••••••");
+    expect(text).toContain("发送验证码");
+    expect(screen.elements.find((e) => e.label.startsWith("Your code"))?.masked).toBe(true);
+    expect(screen.elements.find((e) => e.label === "发送验证码")?.masked).toBeUndefined();
+    // A masked label cannot be used as a text target: `tap --text 482913` must
+    // not find the code it is not allowed to read.
+    expect(findText(screen, "482913")).toBeNull();
+  });
+
+  it("masks a bare code under a credential-labelled container", () => {
+    const tree = node({ bundleName: "com.example.app" }, [
+      node({ type: "Column", text: "Your verification code", bounds: "[0,100][400,400]" }, [
+        node({ type: "Text", text: "482913", bounds: "[0,200][400,260]" }),
+      ]),
+    ]);
+    const screen = new ScreenBuilder().build(tree, { display, rotation: 0 });
+    expect(renderFull(screen)).not.toContain("482913");
+    expect(renderFull(screen)).toContain("••••••");
+  });
 });
