@@ -13,6 +13,7 @@
     <div class="nav-links">
       <a href="#features">能力</a>
       <a href="#cli">命令行</a>
+      <a href="#control">接管</a>
       <a href="#showcase">实拍</a>
       <a href="#bench">实测</a>
       <a href="#compare">对比</a>
@@ -263,6 +264,39 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
             <tr><td><code>stale</code></td><td>4</td><td>等待审批期间页面变了</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="control" class="section control reveal">
+      <h2>在浏览器里接管手机</h2>
+      <p class="section-lede">点「接管」之后，画布就是设备：点击、长按、拖动、滚动、双指缩放、键盘输入都走一条独立的输入通道，读布局的那条通道不受影响。下面的画面来自真机上的知乎，不是重绘。</p>
+      <div class="control-demo" data-control-demo>
+        <div class="control-phone">
+          <div class="control-screen">
+            <img class="control-frame is-on" src="assets/control/1-feed.jpg" alt="知乎推荐流">
+            <img class="control-frame" src="assets/control/3-search.jpg" alt="知乎搜索「鸿蒙」的结果">
+            <img class="control-frame" src="assets/control/2-article.jpg" alt="知乎文章页">
+            <img class="control-frame" src="assets/control/4-image.jpg" alt="知乎图片查看器">
+            <img class="control-frame" src="assets/control/5-zoomed.jpg" alt="双指放大后的图片查看器">
+          </div>
+          <div class="control-overlay" aria-hidden="true">
+            <span class="control-cursor"></span>
+            <span class="control-ripple"></span>
+            <span class="control-finger control-finger-a"></span>
+            <span class="control-finger control-finger-b"></span>
+          </div>
+          <span class="control-badge">接管中</span>
+          <p class="control-keys"><span class="control-keys-label">键盘通道</span><span class="control-keys-text">待输入</span><i class="control-caret"></i></p>
+        </div>
+        <div class="control-copy">
+          <ol class="control-steps">
+            <li class="is-on"><strong>输入「鸿蒙」</strong><span>键盘走写通道，不阻塞布局读取</span></li>
+            <li><strong>点开一条结果</strong><span>点击直接落在设备上，实测 p50 3.2 ms</span></li>
+            <li><strong>滑动阅读</strong><span>按住拖动，惯性与回弹都由设备自己处理</span></li>
+            <li><strong>点开图片，双指放大</strong><span>两指捏合，查看器里的画面真的变大了</span></li>
+          </ol>
+          <p class="control-note">默认只读；点「接管」才注入。另一个人正在操作时，第二个页面会被明确拒绝，不会出现两边同时点的画面。</p>
+        </div>
       </div>
     </section>
 
