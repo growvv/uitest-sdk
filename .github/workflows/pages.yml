@@ -2,16 +2,41 @@ name: pages
 on:
   push:
     branches: [master]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
   pages: write
   id-token: write
 concurrency:
-  group: pages
+  # Keyed by ref, not a single `pages` group: a pull request's test run must not
+  # cancel a deploy that is already publishing master.
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # The unit suite is the only automated check the package has, and until now
+  # it ran only from prepublishOnly — so a broken commit could reach master and
+  # a green deploy said nothing about whether the code worked. Run it first and
+  # make the deploy depend on it.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # typecheck is a subset of build, but it is the step that fails fastest
+      # and names the offending file, so keep it visible on its own.
+      - run: npm run typecheck
+      - run: npm test
   deploy:
+    needs: test
+    # A pull request should be tested, never published: deploying a PR branch
+    # would replace the live site with unmerged work.
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
