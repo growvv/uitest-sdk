@@ -210,6 +210,11 @@ npx uitest-sdk live --no-layout           # 只投屏，不读布局
 - **镜像**：H.264 走浏览器自带的 WebCodecs `VideoDecoder`，MJPEG（x86_64）走 `createImageBitmap`；
   服务端把设备侧的 Annex-B 转成 AVCC，并把 SPS/PPS 拼成 `avcC` 作为 `description`，
   所以页面上没有 MSE、没有 fMP4 重封装、没有额外缓冲层。
+  解码器交给浏览器挑：**不传 `hardwareAcceleration`**，有 GPU 就走硬解，没有就自动软解。
+  显式写 `prefer-hardware` 反而有害——实测在 `--disable-gpu` 的 Chrome 上
+  `isConfigSupported()` 返回 false、`configure()` 抛 `OperationError`，30 帧一帧都出不来（黑屏）。
+  默认配置被拒时，页面会再用 `prefer-software` 重试一次，并在提示条上写「no hardware decoder, using software」。
+  解码中途出错（例如收到损坏的帧）也会重开一个解码器并请求关键帧，画面能自己恢复。
 - **取值**：右侧是当前屏的节点表，点节点（或点画面上的框）就复制它的 `ref` / `role` / `label` / 中心坐标；
   `JSON` 按钮复制整条节点。框上的编号与 `observe` / `tap --ref` 用的是同一套 ref。
 - **隐私开关**：默认打开，密码框与验证码在**节点表和画面上都被遮住**。关掉后服务端会用

@@ -159,6 +159,9 @@ export const PLAYER_HTML = `<!doctype html>
   var decoder = null;
   var mode = 'none';
   var needKey = true;
+  // The last hello, kept so a decoder that dies mid-stream can be replaced
+  // without waiting for the server to announce the format again.
+  var lastHello = null;
   var nodes = [];
   var display = { width: 0, height: 0 };
   var selected = null;
@@ -202,11 +205,14 @@ export const PLAYER_HTML = `<!doctype html>
   }
 
   function onDecodeError(err) {
+    // A decoder that errors is closed and cannot be reused, so put a fresh one
+    // in its place before asking for a keyframe — otherwise the request lands
+    // on a page that will silently drop every frame that follows.
     resetDecoder();
+    if (lastHello) startDecoder(lastHello);
     requestKey();
     noticeEl.textContent = 'decoder: ' + (err && err.message ? err.message : 'error');
   }
-
   function onFrame(frame) {
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
       canvas.width = frame.displayWidth;
@@ -218,6 +224,48 @@ export const PLAYER_HTML = `<!doctype html>
     lastFrameAt = performance.now();
   }
 
+  // Try to open a decoder. The browser picks hardware when it can; asking for
+  // it outright is worse than useless, because on a machine without a GPU
+  // decoder that request fails the configuration instead of falling back, and
+  // the page sits on a black canvas. If even the unhinted decoder refuses, one
+  // software retry is the last resort — slower, but a picture.
+  function openDecoder(hello, acceleration) {
+    var next = new VideoDecoder({ output: onFrame, error: onDecodeError });
+    var config = {
+      codec: hello.codec,
+      description: b64(hello.description),
+      optimizeForLatency: true
+    };
+    if (acceleration) config.hardwareAcceleration = acceleration;
+    try {
+      next.configure(config);
+    } catch (e) {
+      try { next.close(); } catch (e2) {}
+      throw e;
+    }
+    decoder = next;
+    return true;
+  }
+
+  // Open the best decoder this browser will give us: its own choice first,
+  // then software as a last resort. Returns true when a decoder is in place.
+  function startDecoder(hello) {
+    try {
+      openDecoder(hello);
+      return true;
+    } catch (e) {
+      try {
+        openDecoder(hello, 'prefer-software');
+        noticeEl.textContent = 'no hardware decoder, using software';
+        return true;
+      } catch (e2) {
+        decoder = null;
+        noticeEl.textContent = 'cannot decode ' + hello.codec + ': ' + e2.message;
+        return false;
+      }
+    }
+  }
+
   function configure(hello) {
     resetDecoder();
     mode = 'none';
@@ -225,26 +273,21 @@ export const PLAYER_HTML = `<!doctype html>
       display = { width: hello.width, height: hello.height };
       sizeEl.textContent = hello.width + '×' + hello.height;
     }
-    if (!hello.codec) return;
+    if (!hello.codec) {
+      lastHello = null;
+      return;
+    }
     // MJPEG is what an x86_64 device has instead of an encoder: whole pictures,
     // drawn with createImageBitmap. There is nothing to configure or resync.
     if (hello.codec === 'mjpeg') {
       decoder = null;
+      lastHello = null;
       mode = 'mjpeg';
       return;
     }
     mode = 'h264';
-    try {
-      decoder = new VideoDecoder({ output: onFrame, error: onDecodeError });
-      decoder.configure({
-        codec: hello.codec,
-        description: b64(hello.description),
-        optimizeForLatency: true,
-        hardwareAcceleration: 'prefer-hardware'
-      });
-    } catch (e) {
-      noticeEl.textContent = 'cannot decode ' + hello.codec + ': ' + e.message;
-    }
+    lastHello = hello;
+    startDecoder(hello);
   }
 
   // JPEG frames are decoded one at a time and never overtake each other: a

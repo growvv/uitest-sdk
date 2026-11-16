@@ -73,6 +73,29 @@ describe("PLAYER_HTML", () => {
     expect(PLAYER_HTML).toContain("mjpeg");
   });
 
+  it("does not require hardware decode, which fails outright without a GPU", () => {
+    // Measured in Chrome 157 with --disable-gpu: asking for prefer-hardware
+    // makes isConfigSupported() false and configure() throw, so zero frames
+    // decode. Leaving the choice to the browser decodes fine on the same
+    // machine. A hard requirement here is a black screen on GPU-less boxes.
+    expect(PLAYER_HTML).not.toContain("hardwareAcceleration: 'prefer-hardware'");
+  });
+
+  it("retries in software when the browser's first decoder will not configure", () => {
+    // The hint is gone, but a driver can still refuse the default decoder.
+    // One software retry turns a black screen into a slower picture.
+    expect(PLAYER_HTML).toContain("prefer-software");
+  });
+
+  it("opens a fresh decoder after a decode error", () => {
+    // Measured in Chrome: one corrupt chunk fires the error callback, which
+    // used to only null the decoder and ask for a keyframe. With no decoder
+    // left, onVideo returns early forever and the picture never comes back.
+    // Recovery means re-opening from the last hello, then asking for the IDR.
+    expect(PLAYER_HTML).toContain("lastHello");
+    expect(PLAYER_HTML).toMatch(/function onDecodeError[\s\S]{0,400}startDecoder/);
+  });
+
   it("has no external dependency", () => {
     // A page that needs a CDN cannot be used on an offline bench, which is
     // where a phone is usually plugged in.
