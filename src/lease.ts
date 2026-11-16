@@ -158,7 +158,16 @@ export class Lease {
       // same name: every `live` page calls its task "live", and matching on the
       // name alone let two processes both hold the device. The name is a label
       // for `lease_held`; the pid is the identity.
-      if (current.task === info.task && current.pid === pid && current.host === host) {
+      //
+      // A hold is the exception, because it has no owning process: `hold` and
+      // `resume` are separate commands run from separate shells, so the pid
+      // that wrote it is gone by the time it is released. Requiring a pid
+      // match there made `resume` refuse the very lease it exists to release.
+      const reentry =
+        current.task === info.task &&
+        current.host === host &&
+        (current.hold ? info.hold === true : current.pid === pid);
+      if (reentry) {
         // A handoff that asks again is the exception: the person may now need
         // a different step, and the reason is the message they are acting on.
         if (info.reason && current.hold && current.reason !== info.reason) {

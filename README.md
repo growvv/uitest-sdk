@@ -335,6 +335,13 @@ UITEST_TARGET=127.0.0.1:5555 npm run test:device   # 指定目标
 npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 ```
 
+`acceptance.ts` 跑之前把手机**解锁并让屏幕常亮**（设置里把休眠调长）。它中途会连续推流
+十几分钟，屏幕自动锁上后 `streamScreen` 收不到帧、会一直等下去——实测卡在 `cropToWindow`
+之后不动，`hidumper -s 3308 -a -a` 显示 `State=0`。这不是超时 bug，是没画面可推。
+
+它会把每个能力的截图写进 `docs/acceptance/screenshots/`，这些图是要公开发布的：
+**先清空通知栏**，再停在一个中性页面（设置首页）。通知栏里是真实的短信、到账与聊天摘要。
+
 最新一次真机验收：**16/16 PASS**（BRA-AL00，API 26，2026-11-14），报告在
 [`docs/acceptance/report.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/acceptance/report.md)，
 含每个能力的截图、日志与可独立运行的最小复现脚本。报告覆盖的是投流、录制、布局与输入这些

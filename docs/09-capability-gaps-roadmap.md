@@ -425,7 +425,21 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 下一个版本号是 **0.8.0**。已进这一版的：`live` 页的截图与录屏按钮、`test/` 与 `scripts/` 纳入类型检查、`type --paste`、验收报告去掉明文设备序列号、多实例归因与租约修复。发版前要做的三件事：
 
 1. `npm version 0.8.0`，并把 `docs/13-stage-log.md` 里所有 `（未发版）` 改成 `（0.8.0）`。
-2. 在真机上跑一遍 `npm run acceptance:handoff`，确认验收报告与 `docs/acceptance/report.md` 一致。
+2. 在真机上跑一遍验收，两个脚本都要过：
+   - `npm run acceptance:handoff` —— 接管闭环（handoff → `lease_held` → `resume` → 续跑）。
+   - `npx tsx scripts/acceptance.ts --targets <id>` —— 全部能力表，重写 `docs/acceptance/`。
+     它会覆盖 51 个已入库的证据文件（截图、日志、`report.md`），这是有意的：报告是生成物，
+     不是手写的，版本之间必须能复现。
+
+   **跑之前先把设备收拾干净**，截图是会公开发布的：
+   - 解锁、屏幕常亮（否则 `streamScreen` 收不到帧，卡在 `cropToWindow` 之后）。
+   - **下拉通知栏清空通知**，再收起来。通知栏里是真实的短信、银行到账、快递与聊天摘要——
+     2026-11-16 那次没清，16 张截图全是账户变动和个人消息，只能整个目录 `git checkout` 掉。
+   - 打开一个中性页面（设置首页即可），别停在桌面或聊天界面。
+
+   跑完 `git diff --stat docs/acceptance/`：`scripts/` 下的 `.ts` 只应有行尾差异
+   （`--ignore-cr-at-eol` 后为空），`report.md` 的差异应只有耗时与节点数。截图要逐张看过
+   再提交——这一步不能省。
 3. `npm publish`（用 bypass 2FA 的 granular token，npmrc 放仓库外，用完删）。
 
 ---

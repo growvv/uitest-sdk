@@ -73,6 +73,21 @@ describe("resumeDevice", () => {
     });
   });
 
+  it("releases a hold written by another process", async () => {
+    // `hold` and `resume` are two separate commands: the person takes the
+    // phone now and hands it back later, usually from another shell. A hold
+    // has no owning process to check — it lives until `resume` — so the pid
+    // that wrote it being gone must not make `resume` look like a competing
+    // task and refuse the release.
+    await withDir(async (dir) => {
+      const path = join(dir, "leases", "abc12345.lock");
+      await mkdir(join(dir, "leases"), { recursive: true });
+      await Lease.acquire({ path, task: HOLD_TASK, hold: true, pid: 999_999_999 });
+      expect(await resumeDevice({ stateDir: dir, tag: "abc12345" })).toBe(true);
+      expect(await readLease(path)).toBeNull();
+    });
+  });
+
   it("does not release a lease held by someone else", async () => {
     await withDir(async (dir) => {
       const path = join(dir, "leases", "abc12345.lock");

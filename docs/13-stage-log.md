@@ -717,3 +717,48 @@ npm test                              669/669（新增 5 个用例）
 ```
 
 官网 changelog 也补了 0.8.0 一节，并修掉「计划中」里把 0.7.0 已发的东西写成「待发布」的旧文案。
+
+---
+
+## 2026-11-16 · 发版验收抓到的回归：`resume` 放不掉 hold（0.8.0）
+
+跑 `npm run acceptance:handoff` 时前 13 项全绿，卡在 `resume hands the phone back`：
+`resume` 退出码 1，报 `lease_held · this device already runs task "held by a person"`。
+脚本把 stderr 丢掉了（`stdio: [..., "ignore"]`），只看到一个 `Command failed`。
+
+### A. 原因
+
+上一节多实例修复里，租约重入从「task 名相同」改成了「task 名 + pid + host 都相同」——
+这是对的，否则两个 `live` 页会互相抢设备。但 **hold 没有所属进程**：`hold` 写租约后进程就
+退出，人在另一个 shell 里过一会儿才 `resume`。`resume` 拿新 pid 去重入，必然对不上，
+于是把要释放的那张租约当成了别人的。
+
+`hold` 一侧一直是 `force: true`，所以单元测试里「先 hold 再 resume」是同一进程、又能强制
+拿到，一路都是绿的——真机上 `resume` 是独立进程，才暴露出来。
+
+### B. 修法
+
+`Lease.acquire` 的重入判断按租约类型分开：hold 认的是「有没有人持机」（`info.hold`），
+普通任务认的是 pid。hold 本来就不该被 pid 判定，`processGone` / `abandonedHere` 两处
+早就这么写了，只有重入这一处漏了。
+
+先红后绿：`hold.test.ts`「releases a hold written by another process」用 `pid: 999999999`
+模拟已退出的 `hold` 进程，改前抛 `ELEASE`，改后 `true`。
+多实例那条守卫（`lease.test.ts`「refuses the same task name from a second process」）仍绿。
+
+### C. 验收
+
+```
+npm test                              670/670
+真机 npm run acceptance:handoff       handoff acceptance ok（15 项全绿，含 resume 与续跑）
+```
+
+### D. 验收时的两个坑
+
+1. **屏幕自动锁会卡死 `streamScreen`。** 第一次跑在 `cropToWindow` 之后就停住了：屏幕休眠
+   （`hidumper -s 3308 -a -a` 显示 `State=0`），`streamScreen` 的帧循环没有超时，一直等。
+   跑之前 `power-shell wakeup` 并把休眠调长。
+2. **截图会把通知栏里的个人信息发出去。** 第二次跑 16/16 PASS，但截图全停在通知栏：
+   账户变动、提额提醒、快递、聊天摘要。这些图是随报告提交到公开仓库的。整目录
+   `git checkout -- docs/acceptance` 回滚，重新验收时先清空通知栏、停在设置首页。
+   README 与路线图的发版步骤都补了这条。
