@@ -20,6 +20,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Device } from "../src/device.js";
+import { HdcRunner } from "../src/hdc.js";
 import { startLive, liveOptions } from "../src/live/cli.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../src/cast/ws.js";
 import { deviceTag } from "../src/trace.js";
@@ -175,6 +176,21 @@ class LiveClient {
     return this.latestStats()!;
   }
 
+  /**
+   * Waits for a stats broadcast that covers at least `n` injections.
+   *
+   * Stats go out once a second, so the first message after a gesture can be
+   * from before it: measuring that one reports one op's latency as the tap's.
+   */
+  async waitForStatsAtLeast(n: number, ms = 6000): Promise<Stats> {
+    await this.until(
+      () => (this.latestStats()?.n ?? 0) >= n,
+      ms,
+      `stats covering ${n} injections`,
+    );
+    return this.latestStats()!;
+  }
+
   latestStats(): Stats | null {
     for (let i = this.texts.length - 1; i >= 0; i--) {
       const t = this.texts[i]!;
@@ -249,29 +265,45 @@ const SAFE_TABS = ["最新", "最热", "精华", "知识", "圈子", "首页"];
 // so a stray tap on 消息 would publish someone's chats.
 const UNSAFE = /消息|我的|关注|赞同|喜欢|收藏|评论|分享|举报|邀请|写回答|登录|退出|删除|发布|私信|通知|设置|账号|充值|会员|订单|购物|支付/;
 
-function pickTabTarget(nodes: NodeInfo[]): NodeInfo | null {
-  for (const label of SAFE_TABS) {
-    const hit = nodes.find(
+/**
+ * Every safe tab on screen, not just the first: the app restores its last
+ * category across a restart, and tapping an already-selected tab changes
+ * nothing, so the caller needs the rest of the list.
+ */
+function pickTabTargets(nodes: NodeInfo[]): NodeInfo[] {
+  return SAFE_TABS.flatMap((label) =>
+    nodes.filter(
       (n) => n.clickable && !n.masked && n.label.trim() === label && area(n) >= 1200,
-    );
-    if (hit) return hit;
-  }
-  return null;
+    ),
+  );
 }
 
-function pickPressTarget(nodes: NodeInfo[]): NodeInfo | null {
-  const candidates = nodes
-    .filter(
-      (n) =>
-        n.clickable &&
-        !n.masked &&
-        !UNSAFE.test(n.label) &&
-        area(n) >= 15_000 &&
-        n.label.trim().length >= 8,
-    )
-    .sort((a, b) => b.label.length - a.label.length);
-  return candidates[0] ?? null;
+/**
+ * The search entry in the top bar: the only wide, clickable node between the
+ * menu button and the search button. Its label is whatever trend it rotates
+ * through, so it is found by geometry, not by text.
+ */
+function isSearchEntry(n: NodeInfo): boolean {
+  return (
+    n.clickable &&
+    !n.masked &&
+    n.cy > 80 &&
+    n.cy < 400 &&
+    n.cx > 300 &&
+    n.cx < 900 &&
+    n.w >= 300
+  );
 }
+
+function pickSearchEntry(nodes: NodeInfo[]): NodeInfo | null {
+  // The top bar also has a wide background container lower in the row; the
+  // input itself sits highest, so the top-most match is the field.
+  const hits = nodes.filter(isSearchEntry).sort((a, b) => a.cy - b.cy);
+  return hits[0] ?? null;
+}
+
+/** Labels only the system input assistant puts on screen after a hold. */
+const ASSISTANT = /自动填充|拍摄输入|小艺帮写/;
 
 async function tap(c: LiveClient, x: number, y: number): Promise<void> {
   c.sendInput({ action: "down", x, y });
@@ -281,7 +313,9 @@ async function tap(c: LiveClient, x: number, y: number): Promise<void> {
 
 async function longPress(c: LiveClient, x: number, y: number): Promise<void> {
   c.sendInput({ action: "down", x, y });
-  await sleep(750);
+  // The device's own long-press path takes two seconds (the reference
+  // implementation holds `longClick` that long); 750 ms only focuses a field.
+  await sleep(2000);
   c.sendInput({ action: "up", x, y });
 }
 
@@ -315,30 +349,62 @@ async function labelsChanged(c: LiveClient, before: string, ms = 6000): Promise<
   return false;
 }
 
+/**
+ * Waits until the node table has been unchanged for a while.
+ *
+ * A page that has just opened ignores a hold for a second or two — the field
+ * is still attaching its input method — and the gesture is swallowed. Settling
+ * first is what makes the long press land on a ready field.
+ */
+async function settle(c: LiveClient, quietMs = 1200, ms = 12_000): Promise<void> {
+  const deadline = Date.now() + ms;
+  let last = JSON.stringify(c.nodes().nodes);
+  let since = Date.now();
+  while (Date.now() < deadline) {
+    await sleep(150);
+    const now = JSON.stringify(c.nodes().nodes);
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    } else if (Date.now() - since >= quietMs) {
+      return;
+    }
+  }
+}
+
 /** Tab bar plus system navigation: the account avatar and unread count live here. */
 const BOTTOM_CROP_PX = 200;
 
 /**
- * Strips the bottom strip from an evidence screenshot.
+ * Keeps the top strip of the screen and drops the rest.
+ *
+ * The long-press evidence is the input assistant above the keyboard; below it
+ * sits the search page's history, which is the person's own.
+ */
+const TOP_CROP_PX = 280;
+
+/**
+ * Cuts a screenshot to its top `height` pixels (default: everything but the
+ * bottom strip).
  *
  * The screenshots are committed, and the bottom of the screen holds the
  * signed-in account's avatar and unread badge. Neither is evidence for
  * anything this run measures, so both are cut rather than published.
  */
-async function cropBottom(file: string): Promise<void> {
+async function cropJpeg(file: string, height?: number): Promise<void> {
   const image = jpeg.decode(await readFile(file), { useTArray: true });
-  const height = Math.max(1, image.height - BOTTOM_CROP_PX);
-  const data = Buffer.alloc(image.width * height * 4);
+  const keep = height === undefined ? Math.max(1, image.height - BOTTOM_CROP_PX) : Math.min(image.height, height);
+  const data = Buffer.alloc(image.width * keep * 4);
   Buffer.from(image.data.buffer, image.data.byteOffset, image.data.byteLength).copy(
     data,
     0,
     0,
     data.length,
   );
-  await writeFile(file, jpeg.encode({ data, width: image.width, height }, 85).data);
+  await writeFile(file, jpeg.encode({ data, width: image.width, height: keep }, 85).data);
 }
 
-async function shot(c: LiveClient, name: string): Promise<string> {
+async function shot(c: LiveClient, name: string, keepTop?: number): Promise<string> {
   await mkdir(SHOT_DIR, { recursive: true });
   const from = c.texts.length;
   c.send({ type: "shot" });
@@ -351,7 +417,7 @@ async function shot(c: LiveClient, name: string): Promise<string> {
   if (saved.error || !saved.path) throw new Error(`screenshot failed: ${String(saved.error)}`);
   const out = join(SHOT_DIR, `${name}.jpg`);
   await copyFile(String(saved.path), out);
-  await cropBottom(out);
+  await cropJpeg(out, keepTop);
   return relative(ROOT, out).replace(/\\/g, "/");
 }
 
@@ -380,9 +446,19 @@ async function preflight(target: string): Promise<Env> {
   const dev = await Device.connect({ deviceId: target });
   try {
     await assertCapturable(dev.hypium);
+    // The screen sleeps on its own schedule. A touch on a dark screen wakes
+    // it and never reaches the app — measured as a long press that focuses
+    // nothing and a tap that lands 20 ms late. Holding the timeout open for
+    // the run is the difference between measuring input and measuring the
+    // power manager. The original timeout is restored when the run ends.
+    await dev.hdc.shell("power-shell timeout -o 1800000").catch(() => undefined);
     const size = await dev.agent.getDisplaySize();
     const model = (await dev.hdc.shell("param get const.product.model")).trim();
     const osVersion = (await dev.hdc.shell("param get const.product.software.version")).trim();
+    // A known start: the app otherwise keeps the last tab, category and
+    // scroll position, and the scenarios below pick targets from what is up.
+    await dev.hdc.shell(`aa force-stop ${ZHIHU_BUNDLE}`).catch(() => undefined);
+    await sleep(500);
     const launched = await dev.hdc.shell(`aa start -b ${ZHIHU_BUNDLE} -a ${ZHIHU_ABILITY}`);
     if (/error/i.test(launched)) {
       throw new Error(`cannot launch Zhihu: ${launched.trim()}`);
@@ -423,7 +499,7 @@ ${inputStats ? `- 本次注入延迟：p50 ${inputStats.p50.toFixed(1)} ms · p9
 ${rows}
 
 > 本报告由 \`npx tsx scripts/acceptance-live.ts --target <id>\` 生成；设备只以 8 位标签出现。
-> 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标），其余保持原始分辨率。
+> 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标）；长按证据只保留顶部 ${TOP_CROP_PX} px（其下是搜索历史）。其余保持原始分辨率。
 `;
 }
 
@@ -463,6 +539,12 @@ async function main(): Promise<number> {
     if (!clientId) throw new Error("the server did not name this tab");
     await a.waitForLayout(10_000);
     await b.waitForLayout(10_000);
+    // The first layout of a fresh start can be the splash (no nodes).
+    await a.until(
+      () => a!.nodes().nodes.some((n) => n.label.trim() === "首页"),
+      20_000,
+      "the Zhihu home page",
+    );
 
     results.push(
       await scenario("readonly guard", async () => {
@@ -519,13 +601,26 @@ async function main(): Promise<number> {
             !n.masked &&
             n.label.trim() &&
             !UNSAFE.test(n.label) &&
+            !isSearchEntry(n) &&
             area(n) >= 2000,
         );
-        const candidates = [pickTabTarget(nodes), ...fallback];
+        // A tap that leaves the feed would change what the next scenario sees,
+        // so every safe tab is tried before any content node.
+        const seen = new Set<string>();
+        const candidates: NodeInfo[] = [];
+        for (const n of [...pickTabTargets(nodes), ...fallback]) {
+          const key = `${n.label.trim()}|${n.cx}|${n.cy}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          candidates.push(n);
+        }
+        const n0 = a!.latestStats()?.n ?? 0;
+        let taps = 0;
         for (const node of candidates) {
           if (!node) continue;
           beforeKey = labelKey(a!.nodes().nodes);
           await tap(a!, node.cx, node.cy);
+          taps++;
           if (await labelsChanged(a!, beforeKey, 4000)) {
             used = node;
             break;
@@ -533,7 +628,17 @@ async function main(): Promise<number> {
           await sleep(300);
         }
         if (!used) throw new Error("no tap changed the screen");
-        const stats = await a!.waitForStats(5000);
+        // A category switch lands on a skeleton screen; wait for a content
+        // card so the evidence shows the page, not placeholders.
+        await a!
+          .until(
+            () => a!.nodes().nodes.some((n) => !n.masked && n.label.trim().length >= 12),
+            6000,
+            "the feed content",
+          )
+          .catch(() => undefined);
+        // Every tap is a down and an up; wait for a broadcast that saw them.
+        const stats = await a!.waitForStatsAtLeast(n0 + taps * 2);
         if (stats.p50 > 20) throw new Error(`p50 ${stats.p50.toFixed(1)} ms > 20 ms`);
         if (stats.p95 > 50) throw new Error(`p95 ${stats.p95.toFixed(1)} ms > 50 ms`);
         return {
@@ -545,31 +650,55 @@ async function main(): Promise<number> {
 
     results.push(
       await scenario("long press", async () => {
-        const node = pickPressTarget(a!.nodes().nodes);
-        if (!node) throw new Error("no safe long-press target on this screen");
-        const before = a!.nodes().nodes.length;
+        // A hold on a feed card in this build behaves exactly like a tap, so
+        // it would pass while proving nothing about the hold. The gesture that
+        // only a hold produces is on a text field: it opens the system input
+        // assistant (自动填充 / 拍摄输入 / 小艺帮写). The tap that opens the
+        // search page is the gesture proven by the previous scenario.
+        const entry = pickSearchEntry(a!.nodes().nodes);
+        if (!entry) throw new Error("no search entry in the top bar");
         const beforeKey = labelKey(a!.nodes().nodes);
-        await longPress(a!, node.cx, node.cy);
+        await tap(a!, entry.cx, entry.cy);
+        if (!(await labelsChanged(a!, beforeKey, 6000))) {
+          throw new Error("the search entry did not open");
+        }
+        // The page opens with the field already focused. Tapping it first
+        // makes the next hold a caret action instead of the assistant, so the
+        // hold is the first thing that touches the field.
+        await settle(a!);
+        const field = pickSearchEntry(a!.nodes().nodes);
+        if (!field) throw new Error("no search field on the search page");
+        const known = new Set(a!.nodes().nodes.map((n) => n.label.trim()));
+        const beforeN = a!.latestStats()?.n ?? 0;
+        await longPress(a!, field.cx, field.cy);
         const deadline = Date.now() + 5000;
-        let changed = false;
+        let assist: NodeInfo[] = [];
         while (Date.now() < deadline) {
-          const now = a!.nodes().nodes;
-          if (now.length !== before || labelKey(now) !== beforeKey) {
-            changed = true;
-            break;
-          }
+          assist = a!.nodes().nodes.filter(
+            (n) => ASSISTANT.test(n.label) && !known.has(n.label.trim()),
+          );
+          if (assist.length > 0) break;
           await sleep(100);
         }
-        if (!changed) throw new Error("long press did not open anything");
-        // A sheet animates in after the node table has already changed;
-        // shooting immediately catches the surface mid-transition (black).
-        await sleep(700);
-        const evidence = await shot(a!, "03-long-press");
-        // Close the popup without choosing anything in it.
+        if (assist.length === 0) {
+          const seen = a!.nodes().nodes
+            .map((n) => n.label.trim())
+            .filter(Boolean)
+            .slice(0, 12)
+            .join("|");
+          const afterN = a!.latestStats()?.n ?? 0;
+          throw new Error(
+            `the hold did not open the input assistant at ${field.cx},${field.cy} (ops ${beforeN}→${afterN}, screen: ${seen})`,
+          );
+        }
+        const evidence = await shot(a!, "03-long-press", TOP_CROP_PX);
+        // Close the keyboard, then the search page.
         a!.sendInput({ action: "key", key: "back" });
-        await sleep(800);
+        await sleep(600);
+        a!.sendInput({ action: "key", key: "back" });
+        await sleep(600);
         return {
-          detail: `长按「${node.label.trim().slice(0, 20)}」弹出菜单（节点 ${before} → ${a!.nodes().nodes.length}），已返回`,
+          detail: `长按搜索框弹出系统输入助手（${assist.map((n) => n.label.trim()).join(" / ")}）`,
           evidence: [evidence],
         };
       }),
@@ -596,6 +725,7 @@ async function main(): Promise<number> {
         if (!(await labelsChanged(a!, before, 6000))) {
           throw new Error("the swipe did not move the list");
         }
+        await sleep(600);
         return {
           detail: `在 ${cx},${bottom} → ${cx},${top} 竖划后可见内容变化`,
           evidence: [await shot(a!, "04-scroll")],
@@ -608,6 +738,10 @@ async function main(): Promise<number> {
     a?.close();
     b?.close();
     await run.close().catch(() => undefined);
+    // Put the person's own screen-off timeout back.
+    await new HdcRunner({ deviceId: target })
+      .shell("power-shell timeout -r")
+      .catch(() => undefined);
   }
 
   const report = renderReport(env, results, a?.latestStats() ?? null);
@@ -623,4 +757,7 @@ async function main(): Promise<number> {
   return failed === 0 && results.length > 0 ? 0 : 1;
 }
 
-process.exitCode = await main();
+const code = await main();
+// hdc's child-process handles can outlive a finished run; the report is
+// already on disk, so exit instead of waiting for the loop to drain.
+process.exit(code);
