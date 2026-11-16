@@ -13,6 +13,17 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
+/**
+ * The version the site must document, from the built package.
+ *
+ * Resolved here rather than written into the needle list: a hardcoded copy is
+ * exactly how a release ships with the site still claiming the previous
+ * version — the checker agreed with the stale page. It comes from `dist/` so a
+ * forgotten `npm run build` fails here too.
+ */
+const { VERSION } = await import(pathToFileURL(join(ROOT, "dist", "version.js")).href).catch(
+  () => fail("dist/version.js is missing; run npm run build first"),
+);
 /** SITE_DIR exists so the checker itself can be run against broken copies. */
 const SITE = resolve(process.env.SITE_DIR ?? join(ROOT, "site"));
 
@@ -424,7 +435,7 @@ for (const needle of [
   // bump it leaves the page claiming an older package than npm has.
   "0.6.0",
   "0.7.0",
-  "0.7.1",
+  VERSION,
   // Live mirroring is the release's headline: the docs must name the command,
   // the privacy switch and the fact that masking happens when the screen is
   // read rather than being painted over the video.
@@ -514,6 +525,10 @@ for (const needle of [
   "--approval-scope task",
   "升级后 Skill 自己跟上",
   ".uitest-skill.json",
+  // Screenshots and recording from the live page, and the fixes that came
+  // with running two pages on one device. The version itself is VERSION.
+  "截图与录屏、多实例",
+  "durationMs",
   // 0.7.1: the decoder fixes, which are the reason this patch exists.
   "0.7.1",
   "投屏解码修复",
@@ -582,9 +597,6 @@ if (apiHtml.length < 12000) fail(`api.html is only ${apiHtml.length} bytes; expe
 // The page states which package version it documents. A release that bumps
 // package.json but forgets the generator leaves the page advertising the
 // previous version — the same drift src/version.ts exists to prevent.
-const { VERSION } = await import(
-  pathToFileURL(join(ROOT, "dist", "version.js")).href
-).catch(() => fail("dist/version.js is missing; run npm run build first"));
 if (!apiHtml.includes(`<strong>${VERSION}</strong>`)) {
   fail(`api.html does not show the package version ${VERSION}; regenerate with scripts/gen-api-page.mjs`);
 }

@@ -214,7 +214,7 @@ npx uitest-sdk connect --agent gemini   # 也支持 codex、copilot
 npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
 npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
       <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
-      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code>、设备状态与审批记忆从 0.4.0 起提供，<code>dev.hypium</code> 的 118 个方法从 0.5.0 起提供，7.0 WebSocket 投流（<code>transport: "ws"</code>）从 0.6.0 起提供，<code>inspect</code>、<code>dev.files</code>、<code>CastConfig</code>、<code>FpsMeter</code> 与浏览器里的 <code>live</code> 投屏从 0.7.0 起提供；npm 上的 latest 是 0.7.1。</p>
+      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code>、设备状态与审批记忆从 0.4.0 起提供，<code>dev.hypium</code> 的 118 个方法从 0.5.0 起提供，7.0 WebSocket 投流（<code>transport: "ws"</code>）从 0.6.0 起提供，<code>inspect</code>、<code>dev.files</code>、<code>CastConfig</code>、<code>FpsMeter</code> 与浏览器里的 <code>live</code> 投屏从 0.7.0 起提供；npm 上的 latest 是 0.8.0。</p>
 
       <div class="bench-grid">
         <article class="bench-card">
