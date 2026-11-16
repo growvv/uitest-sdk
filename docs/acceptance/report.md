@@ -6,7 +6,7 @@
 
 | 项 | device |
 |---|---|
-| 设备 ID | <your-device-id> |
+| 设备 ID | 6c585f5b |
 | 型号 | BRA-AL00 |
 | API 版本 | 26 |
 | ABI | arm64-v8a |

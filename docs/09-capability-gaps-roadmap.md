@@ -366,15 +366,17 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 
 ### P1 · 可做，收益明确
 
-| 能力 | 他们怎么做 | 我们要做什么 |
+状态按 0.7.1 的实际交付物核对过一遍：✅ 是「已经能用」，⏳ 是「还差一截」。
+
+| 能力 | 他们怎么做 | 我们的现状 |
 |---|---|---|
-| **UI 布局检查面板 + 节点高亮** | `dumpLayout` 建树 + 在画面上按 `bounds` 叠色块 | ⏳ 纯客户端渲染，我们已能拿到完整布局树（`captureLayout`），只需叠图 |
-| **文件管理器** | hdc `file send/recv` + `ls` / `rm` / `mkdir` / `mv` | ⏳ 已有 HdcRunner，补几个封装即可 |
-| **参数配置 + INI 持久化** | `hscrcpy.ini`，缩放/码率/帧率/端口 | ⏳ 我们的配置项应直接映射 `start-daemon` 的 `-scale/-bitRate/-frameRate/-p` |
-| **实时帧率显示** | 客户端统计帧间隔 | ⏳ 客户端侧统计即可，无设备依赖 |
-| **码率上限 120 Mibps** | `-bitRate` 透传 | ⏳ 已验证 `-bitRate` 直接透传给 `OH_MD_KEY_BITRATE`，无上限限制 |
-| **截图/录屏按钮** | `snapshot_display` / casting `-m 1` | ⏳ 两者都已验证可用 |
-| **剪贴板粘贴** | `Ctrl+V` → 读本机剪贴板 → `Driver.inputText` | ⏳ 客户端剪贴板 + 现有 inputText |
+| **UI 布局检查面板 + 节点高亮** | `dumpLayout` 建树 + 在画面上按 `bounds` 叠色块 | ✅ `inspect` 出带框和编号的 JPEG（编号即 ref）+ 自包含 HTML 面板；`live` 页面按角色给框、点选复制。见 [13](13-stage-log.md) |
+| **文件管理器** | hdc `file send/recv` + `ls` / `rm` / `mkdir` / `mv` | ✅ `dev.files`：`list` / `stat` / `exists` / `mkdir` / `remove` / `move` / `push` / `pull` / `readText` |
+| **参数配置 + INI 持久化** | `hscrcpy.ini`，缩放/码率/帧率/端口 | ✅ `CastConfig`（`<state-dir>/cast.json`），字段与 `start-daemon` 的 `-scale/-bitRate/-frameRate/-p` 一一对应；格式是 JSON 不是 INI |
+| **实时帧率显示** | 客户端统计帧间隔 | ✅ `live` 页头的 fps 读数（浏览器侧按解码后的帧计）；SDK 侧另有 `FpsMeter` 供调用方自己统计 |
+| **码率上限 120 Mibps** | `-bitRate` 透传 | ✅ `CastOptions.bitRate` / `CastConfig.bitRate` 原样透传给 `OH_MD_KEY_BITRATE`，无上限限制；`live` 暂无 `--bit-rate` 旗标，走配置或 API |
+| **截图/录屏按钮** | `snapshot_display` / casting `-m 1` | ⏳ SDK 两条路都有（`screenshot` 命令、`createCast({ mode: "record" })`），但 `live` 页面还没有这两个按钮 |
+| **剪贴板粘贴** | `Ctrl+V` → 读本机剪贴板 → `Driver.inputText` | ✅ `type --paste` / `Session.type(…, { paste: true })`。实测 36 字符 1325 ms 对逐字符 2761 ms，中文与 emoji 完整。注意 `InputTextMode.addition` 在 `Driver.inputText` 路径上是空操作（只在 `Component.inputText` 上追加），所以没有对外暴露 |
 
 ### P2 · 有工作量，看需求
 
@@ -384,7 +386,7 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 | **H.264 软解兜底** | FFmpeg 软解 | ⏳ 交付「Annex-B NAL 流」即可，解码交给调用方（Node 侧可用 WebCodecs / wasm ffmpeg） |
 | **音频转发** | 自建 HAP 采集（`audioRecording` 后台模式）+ hdc rport 回传 | ⏳ 需要用户自己的华为账号签 HAP，见 2.5。SDK 可以封装「安装/启动/收流」三段 |
 | **多窗口 / 多设备同时投** | 每设备一套 SO + 端口 | ⏳ 7.0 端口隔离后已具备基础，多设备各自 fport 即可 |
-| **录制 MP4** | casting `-m 1` | ✅ 已逆向清楚（`-m 1` → `/data/local/tmp/mytest.mp4`），只需封装 |
+| **录制 MP4** | casting `-m 1` | ✅ 已封装：`createCast({ mode: "record", outputPath })`，`dispose()` 时把设备侧文件拉回本机 |
 
 ### P3 · 硬边界，做不了
 
@@ -410,10 +412,11 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 ## 四、如果要做，先后顺序
 
 1. ~~**7.0 WebSocket 通道**（P0）~~ —— ✅ 已完成（0.6.0，`transport: "ws"`）。7.0 SO 不打包，由调用方提供路径。
-2. **布局检查 + 节点高亮**（P1）—— 纯客户端，零设备风险，调试体验提升最大。
-3. **文件管理器 / 配置持久化 / 帧率显示**（P1）—— 都是薄封装。
-4. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。
-5. **模拟器自建扩展**（探索性）—— 模拟器无 XPM，可以在这里做虚拟屏 / AAMS 的原型验证，但结论不能平移到真机。
+2. ~~**布局检查 + 节点高亮**（P1）~~ —— ✅ 已完成（0.7.0 的 `inspect` 与 `live`）。
+3. ~~**文件管理器 / 配置持久化 / 帧率显示**（P1）~~ —— ✅ 已完成（0.7.0，`dev.files` / `CastConfig` / `FpsMeter`）。
+4. **`live` 页的截图与录屏按钮**（P1 余项）—— SDK 层两条路都已具备（`screenshot` 命令、`createCast({ mode: "record" })`），差的只是页面把它们露出来。
+5. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。
+6. **模拟器自建扩展**（探索性）—— 模拟器无 XPM，可以在这里做虚拟屏 / AAMS 的原型验证，但结论不能平移到真机。
 
 ---
 

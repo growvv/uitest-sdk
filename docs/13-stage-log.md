@@ -268,7 +268,7 @@ record  MP4 156,320 B / stsz.sample_count 128（约 6 s 连续滑动）
 
 ---
 
-## 2026-11-16 · 布局检查面板与节点高亮（未发版）
+## 2026-11-16 · 布局检查面板与节点高亮（0.7.0）
 
 ### A. 目标
 
@@ -315,7 +315,7 @@ settled · 5 个元素 · JPEG 127,621 B · HTML 85,918 B
 
 ---
 
-## 2026-11-16 · 薄封装三件套：文件、配置、帧率（未发版）
+## 2026-11-16 · 薄封装三件套：文件、配置、帧率（0.7.0）
 
 ### A. 交付
 
@@ -490,3 +490,84 @@ node scripts/check-site.mjs            site ok（含新增 6 条断言，逐条�
 - 高亮坐标和截图是绑定的：换一张图必须重新量坐标，否则 `check-site` 会拦住。
 - 这不是视频，也没有逐帧回放；它演示的是「点一行会发生什么」，不是投屏的真实流畅度——
   真实 fps 由上面的数字和 `demo.mp4` 负责。
+
+---
+
+## 2026-11-16 · CI 跑测试、文档对齐、`type --paste`（未发版）
+
+三件事按顺序做：让 CI 真的跑测试，把文档改成与 0.7.1 的实际状态一致，再把
+`InputTextMode.paste` 从 `dev.hypium` 层接到 `Session` 与 CLI。
+
+### A. CI 先测后发
+
+`.github/workflows/pages.yml` 原来只有 deploy 一个 job，单元测试只在 `prepublishOnly`
+里跑过——所以一个坏提交能到 master，而绿色的部署什么都不说明。现在：
+
+- 新增 `test` job：`npm ci` → `build` → `typecheck` → `test`，`deploy` 依赖它。
+- `pull_request` 也触发，但 deploy 带 `if: github.event_name != 'pull_request'`：
+  PR 只测不发，否则未合并的分支会覆盖线上站点。
+- `concurrency.group` 改为 `pages-${{ github.ref }}`。原来单一 `pages` 组下，
+  PR 的测试跑会取消 master 正在进行的部署。
+
+### B. 文档对齐
+
+审计发现四处漂移，都已修正：
+
+| 位置 | 原来的说法 | 实际 |
+|---|---|---|
+| `docs/09` P1 表 | 六项全是 ⏳ | 四项 0.7.0 已交付（inspect/live、`dev.files`、`CastConfig`、fps），只有 live 页的截图/录屏按钮与剪贴板是缺的 |
+| `docs/09` P2 表 | 录制 MP4「只需封装」 | 0.6.0 起 `createCast({ mode: "record" })` 已封装 |
+| `docs/13` 两处标题 | 「（未发版）」 | 两件事都在 0.7.0 里发了 |
+| `README` 验收段 | 「16/16 PASS」不带日期与范围 | 报告是 11-14 生成的，早于 0.7.0；0.7.x 的新功能不在其中，实测在本文 |
+
+顺带修了一个真问题：`scripts/acceptance.ts` 的 `renderReport()` 把 `--targets`
+的原始值写进 `docs/acceptance/report.md`，而那份报告是提交进版本库的。仓库里之所以
+是 `<your-device-id>`，是生成后手改的——文件头却写着「请勿手改」。下次谁跑一次，
+真实序列号就进了 git 历史。
+
+改法：设备 ID 一栏改用 `tagOf()`（sha1 前 8 位，`session` / `trace` / `lease` / `sn()`
+共用的那一个），不用 `doctor` 的 `deviceTagOf()`——后者带 `dev-` 前缀，是另一套哈希，
+报告里的标签要和日志里的对得上才有用。报告本身也换成了真实标签 `6c585f5b`。
+
+为此把 `renderReport` 与 `EnvInfo` 导出，并把脚本末尾的 `void main()` 改成
+「只在被直接执行时运行」（比较 `import.meta.url` 与 `process.argv[1]`），否则
+import 这个模块就会连设备并 `process.exit(2)`。三个测试：渲染结果不含序列号、
+多个目标各自打标签、**已提交的报告**不含占位符也不含序列号。第三条做过变异测试。
+
+### C. `type --paste`
+
+`InputTextMode`（`paste` / `addition`）早就在 `model.ts` 里，`dev.hypium` 也会透传，
+但 `Session.type()` 从不传 mode，CLI 也没有旗标。现在：
+
+- `TypeOptions.paste` → `AgentClient.inputText(x, y, text, mode)` → `Driver.inputText` 的第三个参数。
+- CLI `type --paste`；MCP 的 `uitest_type` 因为 schema 由 `COMMANDS` 生成，自动获得该字段。
+
+真机实测（设置 → 搜索框，`SearchField`）：
+
+```
+36 字符：逐字符 2761 / 2776 ms，--paste 1325 / 1340 ms
+中文 + emoji「蓝牙耳机🎧」：粘贴后原样在框里，没有变成 ??
+```
+
+**没有暴露 `addition`**。实测它在 `Driver.inputText` 路径上是空操作：把光标左移两位再输入，
+四种组合（默认 / paste / addition / paste+addition）结果都是 `ABCDEZ`。只有在
+`Component.inputText` 路径上 `addition` 才真的追加（`ABCDE` → `ABCDEZ`，默认则是替换成 `Z`）。
+`Session.type` 走的是坐标路径，所以给一个什么都不做的旗标比不给更糟。
+
+### D. 验收
+
+```
+npm run typecheck                     干净
+npm test                              647/647（新增 10 个用例）
+node scripts/check-site.mjs           site ok
+node dist/bin.js type --ref 302 --paste --text "蓝牙耳机🎧"
+                                      settled，框内为「蓝牙耳机🎧」
+变异测试：报告里的标签换回占位符 → 第 3 条测试红；不传 mode → paste 测试红
+```
+
+### E. 边界
+
+- `test/` 不在 `tsconfig` 的 include 里，所以测试文件本身不做类型检查（仓库里现有 27 处
+  测试类型错误）。新增的两个测试文件单独 `tsc` 过是干净的，但把 `test/` 纳入检查是
+  另一件事，没有顺手做。
+- `paste` 走设备剪贴板，会让「来自剪贴板」出现在搜索历史里——这是设备行为，不是 SDK 写的。

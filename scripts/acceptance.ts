@@ -8,8 +8,10 @@
  */
 import { writeFile } from "node:fs/promises";
 import { statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Device } from "../src/device.js";
+import { tagOf } from "../src/session.js";
 import type { CastClient } from "../src/cast/types.js";
 import { ROOT, Evidence, ensureDirs, type Result } from "../test/device/acceptance.helpers.js";
 
@@ -314,7 +316,7 @@ function findBundle(n: {
   return null;
 }
 
-interface EnvInfo {
+export interface EnvInfo {
   target: string;
   env: string;
   abi: string;
@@ -394,25 +396,29 @@ function cell(r: Result | undefined): string {
   return r.detail ? `${icon} ${r.detail}` : icon;
 }
 
-function renderReport(infos: EnvInfo[], results: Result[]): string {
+export function renderReport(infos: EnvInfo[], results: Result[]): string {
   const envs = infos.map((i) => i.env);
   const byKey = new Map(results.map((r) => [`${r.capability}|${r.env}`, r]));
+
+  const envRows: Array<[string, (i: EnvInfo) => string]> = [
+    // The serial never leaves the machine: report.md is committed, so the
+    // 设备 ID row shows the same short tag the trace, the lease files and
+    // sn() use. Being the same hash matters — a reader compares the report
+    // against a log, and two different hashes of one serial would not match.
+    ["设备 ID", (i) => tagOf(i.target)],
+    ["型号", (i) => i.model],
+    ["API 版本", (i) => i.osVersion],
+    ["ABI", (i) => i.abi],
+    ["分辨率", (i) => i.size],
+    ["agent.so md5", (i) => i.agentMd5],
+  ];
 
   const envTable = [
     "| 项 | " + envs.join(" | ") + " |",
     "|---|" + envs.map(() => "---").join("|") + "|",
-    ...[
-      ["设备 ID", "target"],
-      ["型号", "model"],
-      ["API 版本", "osVersion"],
-      ["ABI", "abi"],
-      ["分辨率", "size"],
-      ["agent.so md5", "agentMd5"],
-    ].map(
-      ([label, key]) =>
-        `| ${label} | ` +
-        infos.map((i) => String(i[key as keyof EnvInfo] ?? "")).join(" | ") +
-        " |",
+    ...envRows.map(
+      ([label, get]) =>
+        `| ${label} | ` + infos.map((i) => String(get(i) ?? "")).join(" | ") + " |",
     ),
   ].join("\n");
 
@@ -503,4 +509,9 @@ async function main(): Promise<void> {
   process.exit(failed.length === 0 ? 0 : 1);
 }
 
-void main();
+// Only run when executed directly. Importing this file (the report renderer has
+// a unit test) must not connect to a device and call process.exit().
+const invokedDirectly =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (invokedDirectly) void main();

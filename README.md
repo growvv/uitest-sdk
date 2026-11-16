@@ -335,8 +335,12 @@ UITEST_TARGET=127.0.0.1:5555 npm run test:device   # 指定目标
 npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 ```
 
-最新一次真机验收：**16/16 PASS**，报告在 [`docs/acceptance/report.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/acceptance/report.md)，
-含每个能力的截图、日志与可独立运行的最小复现脚本。
+最新一次真机验收：**16/16 PASS**（BRA-AL00，API 26，2026-11-14），报告在
+[`docs/acceptance/report.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/acceptance/report.md)，
+含每个能力的截图、日志与可独立运行的最小复现脚本。报告覆盖的是投流、录制、布局与输入这些
+原有能力；0.7.x 新增的 `inspect` / `live` / `dev.files` 不在其中，它们的实测记录在
+[`docs/13-stage-log.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/13-stage-log.md)。
+报告里的设备 ID 是序列号的 8 位哈希，与 trace、lease 文件里的标签同源。
 
 ## 文档
 
