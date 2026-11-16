@@ -148,6 +148,14 @@ interface Harness {
   screenReads(): number;
   /** Redaction flags the server asked the layout source for, in order. */
   redactions(): boolean[];
+  /** Screenshots the server asked the source to save. */
+  shots(): number;
+  /** Recordings started. */
+  recordings(): number;
+  /** Recordings stopped, including the one `close()` stops. */
+  recordStops(): number;
+  /** Lets a `stopRecording` held by `holdStop` finish. */
+  releaseStop(): void;
 }
 
 const running: LiveServer[] = [];
@@ -156,10 +164,25 @@ afterEach(async () => {
   for (const s of running.splice(0)) await s.close().catch(() => undefined);
 });
 
-async function start(over: { privacy?: boolean; graceMs?: number; layoutMs?: number } = {}): Promise<Harness> {
+async function start(
+  over: {
+    privacy?: boolean;
+    graceMs?: number;
+    layoutMs?: number;
+    captureError?: string;
+    /** Keeps `stopRecording` pending until the returned function is called. */
+    holdStop?: boolean;
+  } = {},
+): Promise<Harness> {
   const cast = new FakeCast();
   let screen = fakeScreen();
   let reads = 0;
+  let shots = 0;
+  let recordings = 0;
+  let recordStops = 0;
+  let recording = false;
+  let releaseStop: (() => void) | null = null;
+  let stopGate = over.holdStop ? new Promise<void>((r) => (releaseStop = r)) : null;
   const redactions: boolean[] = [];
   const server = await LiveServer.start({
     port: 0,
@@ -176,6 +199,24 @@ async function start(over: { privacy?: boolean; graceMs?: number; layoutMs?: num
         redactions.push(redact);
         return redact ? screen : { ...screen, elements: screen.elements.map(({ masked: _m, ...e }) => e) };
       },
+      async capture() {
+        if (over.captureError) throw new Error(over.captureError);
+        shots++;
+        return `/tmp/shot-${shots}.jpg`;
+      },
+      async startRecording() {
+        recordings++;
+        recording = true;
+        return "/tmp/rec.mp4";
+      },
+      async stopRecording() {
+        recordStops++;
+        // A stop in flight is not a stop that happened: while the gate is up,
+        // the recording is still active from the caller's point of view.
+        if (stopGate) await stopGate;
+        recording = false;
+        return "/tmp/rec.mp4";
+      },
     },
   });
   running.push(server);
@@ -188,6 +229,10 @@ async function start(over: { privacy?: boolean; graceMs?: number; layoutMs?: num
     },
     screenReads: () => reads,
     redactions: () => [...redactions],
+    shots: () => shots,
+    recordings: () => recordings,
+    recordStops: () => recordStops,
+    releaseStop: () => releaseStop?.(),
   };
 }
 
@@ -208,7 +253,7 @@ async function connect(port: number, query = ""): Promise<Client> {
   });
   const texts: Record<string, unknown>[] = [];
   const binaries: Buffer[] = [];
-  let buf = Buffer.alloc(0);
+  let buf: Buffer = Buffer.alloc(0);
   let upgraded = false;
   let onUpgrade: (() => void) | null = null;
   socket.on("data", (d) => {
@@ -509,5 +554,91 @@ describe("LiveServer", () => {
     await new Promise((r) => setTimeout(r, 300));
     expect(h.screenReads()).toBeLessThan(5);
     c.close();
+  });
+});
+
+describe("LiveServer: capture and record", () => {
+  it("saves a screenshot and tells every tab where it went", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "shot" });
+    await until(() => c.texts.some((t) => t.type === "saved"));
+    const saved = c.texts.find((t) => t.type === "saved")!;
+    expect(saved.path).toBe("/tmp/shot-1.jpg");
+    expect(h.shots()).toBe(1);
+    c.close();
+  });
+
+  it("reports a capture failure to the tab that asked", async () => {
+    const h = await start({ captureError: "device_locked" });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "shot" });
+    await until(() => c.texts.some((t) => t.type === "saved" && t.error));
+    expect(c.texts.find((t) => t.type === "saved")!.error).toBe("device_locked");
+    c.close();
+  });
+
+  it("starts and stops a recording, and reports the finished file", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.recording === true));
+    expect(h.recordings()).toBe(1);
+
+    c.send({ type: "record", action: "stop" });
+    await until(() => c.texts.some((t) => t.type === "saved" && t.path === "/tmp/rec.mp4"));
+    c.close();
+  });
+
+  it("refuses a second recording while one is running", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.recording === true));
+
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.error));
+    expect(c.texts.filter((t) => t.type === "record" && t.recording === true)).toHaveLength(1);
+    c.close();
+  });
+
+  it("does not stop a recording twice when close lands mid-stop", async () => {
+    const h = await start({ holdStop: true });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.recording === true));
+
+    c.send({ type: "record", action: "stop" });
+    await until(() => h.recordStops() === 1);
+    // The stop is still in flight — on a device that is an `onEnd` plus a pull
+    // of the MP4. Closing now must not issue a second one. `close()` waits for
+    // the in-flight stop, so it is not awaited until the gate opens.
+    const closing = h.server.close();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(h.recordStops()).toBe(1);
+
+    h.releaseStop();
+    await closing;
+    c.close();
+  });
+
+  it("stops a recording when the server closes", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.recording === true));
+
+    await h.server.close();
+    // A recording left running would keep the device encoder busy with no one
+    // to collect the file.
+    expect(h.recordStops()).toBe(1);
   });
 });

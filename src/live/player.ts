@@ -84,6 +84,14 @@ export const PLAYER_HTML = `<!doctype html>
     padding: 5px 9px; font: inherit; cursor: pointer;
   }
   button:hover { border-color: var(--dim); }
+  button:disabled { opacity: .5; cursor: default; }
+  /* Recording is a state of the device, not of one tab, so it is visible from
+     across the room: the same red dot the phone shows. */
+  button.rec { border-color: var(--warn); color: var(--warn); }
+  button.rec::before {
+    content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+    border-radius: 50%; background: var(--warn); vertical-align: 1px;
+  }
   #list { overflow: auto; flex: 1; min-height: 0; }
   .row {
     padding: 6px 10px; border-bottom: 1px solid #21262d; cursor: pointer; display: flex; gap: 8px;
@@ -117,6 +125,8 @@ export const PLAYER_HTML = `<!doctype html>
   <span class="stat" id="latency">–</span>
   <span class="spacer"></span>
   <label class="switch"><input id="privacy" type="checkbox" checked> mask credentials</label>
+  <button id="shot" title="Save a masked screenshot of the phone" hidden>Shot</button>
+  <button id="record" title="Record an MP4 on the device" hidden>Record</button>
   <button id="reconnect" title="Ask the device for a fresh keyframe">Reconnect</button>
 </header>
 <main>
@@ -151,6 +161,8 @@ export const PLAYER_HTML = `<!doctype html>
   var sizeEl = document.getElementById('size');
   var latencyEl = document.getElementById('latency');
   var privacyEl = document.getElementById('privacy');
+  var shotEl = document.getElementById('shot');
+  var recordEl = document.getElementById('record');
   var qEl = document.getElementById('q');
   var noticeEl = document.getElementById('notice');
   var toastEl = document.getElementById('toast');
@@ -166,6 +178,7 @@ export const PLAYER_HTML = `<!doctype html>
   var display = { width: 0, height: 0 };
   var selected = null;
   var privacy = true;
+  var recording = false;
   var frames = 0, fpsAt = 0, lastPts = 0, lastFrameAt = 0;
   var retry = 0, retryTimer = null, stopped = false;
 
@@ -456,6 +469,11 @@ export const PLAYER_HTML = `<!doctype html>
     try { msg = JSON.parse(text); } catch (e) { return; }
     if (msg.type === 'hello') {
       if (msg.privacy !== undefined) { privacy = !!msg.privacy; privacyEl.checked = privacy; }
+      // A button is shown only when the server said it can serve the request:
+      // a video-only mirror has no capture and no recorder behind it.
+      shotEl.hidden = !msg.canShot;
+      recordEl.hidden = !msg.canRecord;
+      setRecording(!!msg.recording);
       configure(msg);
       if (msg.state) setBadge(msg.state, msg.reason);
     } else if (msg.type === 'nodes') {
@@ -468,7 +486,21 @@ export const PLAYER_HTML = `<!doctype html>
       privacyEl.checked = privacy;
       drawBoxes();
       drawList();
+    } else if (msg.type === 'record') {
+      if (msg.error) toast(msg.error);
+      else setRecording(!!msg.recording);
+    } else if (msg.type === 'saved') {
+      toast(msg.error ? 'failed: ' + msg.error : 'saved ' + msg.path);
     }
+  }
+
+  // The record button is a toggle: the label says what the next click does, and
+  // every tab sees the same state because a recording belongs to the device.
+  function setRecording(on) {
+    recording = on;
+    recordEl.textContent = on ? 'Stop' : 'Record';
+    recordEl.className = on ? 'rec' : '';
+    recordEl.title = on ? 'Stop and save the MP4' : 'Record an MP4 on the device';
   }
 
   function connect() {
@@ -518,6 +550,20 @@ export const PLAYER_HTML = `<!doctype html>
     if (selected === null) { toast('select a node first'); return; }
     var n = nodes.filter(function (x) { return x.ref === selected; })[0];
     if (n) copy(JSON.stringify(n));
+  });
+
+  shotEl.addEventListener('click', function () {
+    if (!ws || ws.readyState !== 1) { toast('not connected'); return; }
+    // Disable for the round trip: the capture is a device read plus an encode,
+    // and a second click would queue a second file for no reason.
+    shotEl.disabled = true;
+    ws.send(JSON.stringify({ type: 'shot' }));
+    setTimeout(function () { shotEl.disabled = false; }, 1500);
+  });
+
+  recordEl.addEventListener('click', function () {
+    if (!ws || ws.readyState !== 1) { toast('not connected'); return; }
+    ws.send(JSON.stringify({ type: 'record', action: recording ? 'stop' : 'start' }));
   });
 
   document.addEventListener('keydown', function (ev) {

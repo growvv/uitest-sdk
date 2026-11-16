@@ -425,6 +425,12 @@ Credentials are masked by default — password values and codes are hidden in th
 node table and boxed over on the picture. `--privacy off` only sets the page's
 initial state; the switch in the page still works, and the server follows it.
 
+The page header has two buttons for the person watching: **Shot** saves a JPEG
+under `<state-dir>/shots/` (through the same masking path as the node table),
+and **Record** writes an MP4 there. Recording runs on a second cast daemon so
+the picture keeps streaming; only one recording runs at a time, and closing the
+page stops and finishes it.
+
 Like `mcp`, `hold` and `resume`, this is not one of the commands: it runs until
 interrupted and holds the device lease the whole time, so agent commands stop
 with `lease_held` while a person is watching. It listens on `127.0.0.1` unless

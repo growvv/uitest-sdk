@@ -108,3 +108,32 @@ describe("PLAYER_HTML", () => {
     expect(PLAYER_HTML).toMatch(/id="privacy"[^>]*checked/);
   });
 });
+
+describe("PLAYER_HTML: capture and record buttons", () => {
+  it("shows the buttons only when the server says it can serve them", () => {
+    // A video-only mirror (`--no-layout`, no session) has no capture and no
+    // recorder. A button that fails on click is worse than no button, so the
+    // hello carries the capabilities and the page starts them hidden.
+    expect(PLAYER_HTML).toContain('id="shot"');
+    expect(PLAYER_HTML).toContain('id="record"');
+    expect(PLAYER_HTML).toMatch(/id="shot"[^>]*hidden/);
+    expect(PLAYER_HTML).toMatch(/id="record"[^>]*hidden/);
+    expect(PLAYER_HTML).toContain("msg.canShot");
+    expect(PLAYER_HTML).toContain("msg.canRecord");
+  });
+
+  it("sends the shot and record messages the server handles", () => {
+    expect(PLAYER_HTML).toContain("type: 'shot'");
+    expect(PLAYER_HTML).toContain("type: 'record'");
+    // The toggle has to send the action the button is currently offering.
+    expect(PLAYER_HTML).toContain("action: recording ? 'stop' : 'start'");
+  });
+
+  it("turns the record button into a visible stop state", () => {
+    // A recording belongs to the device, not to the tab that started it, so
+    // every tab must show it is running.
+    expect(PLAYER_HTML).toContain("function setRecording");
+    expect(PLAYER_HTML).toContain("'Stop'");
+    expect(PLAYER_HTML).toContain("msg.type === 'saved'");
+  });
+});

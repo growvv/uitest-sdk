@@ -78,4 +78,15 @@ describe("H264CastClient.start", () => {
     const { hdc } = fakeHdc({ pidsAfter: "1000 2000 3000" });
     await expect(H264CastClient.start(hdc, { mode: "stream" })).rejects.toThrow(DaemonStartError);
   });
+
+  it("kills the fresh daemons it cannot attribute before giving up", async () => {
+    // A second daemon starting in the same window is not always an error we can
+    // walk away from: the ones that did start are ours to clean up. Leaving
+    // them behind leaks a device process per failed start — measured as four
+    // orphaned xdevice_scrcpy processes after a few failed recordings.
+    const { hdc, st } = fakeHdc({ pidsAfter: "1000 2000 3000" });
+    await expect(H264CastClient.start(hdc, { mode: "stream" })).rejects.toThrow(DaemonStartError);
+    expect(st.calls).toContain("kill -9 2000");
+    expect(st.calls).toContain("kill -9 3000");
+  });
 });

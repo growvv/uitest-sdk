@@ -252,11 +252,16 @@ await server.close();
 
 | 方向 | 类型 | 内容 |
 |---|---|---|
-| 服务端 → 页面 | text `hello` | `codec`、`description`（avcC，base64）、`width`、`height`、`state`、`privacy` |
+| 服务端 → 页面 | text `hello` | `codec`、`description`（avcC，base64）、`width`、`height`、`state`、`privacy`、`canShot`、`canRecord`、`recording` |
 | 服务端 → 页面 | text `nodes` | 节点表：`ref`、`role`、`label`、`masked`、矩形、中心、可点/可输入/可滚动 |
 | 服务端 → 页面 | text `state` / `privacy` | 状态变化、遮罩开关的权威值 |
+| 服务端 → 页面 | text `record` | `{recording: true, path}` 或 `{recording: false}`；出错时带 `error` |
+| 服务端 → 页面 | text `saved` | `{path}`，或 `{error}`。截图与录屏完成都发这个 |
 | 服务端 → 页面 | binary | `flag`(1 字节) + `pts`(4 字节大端) + AVCC（H.264）或整帧 JPEG（MJPEG） |
-| 页面 → 服务端 | text | `{"type":"privacy","value":false}`、`{"type":"requestIDR"}` |
+| 页面 → 服务端 | text | `{"type":"privacy","value":false}`、`{"type":"requestIDR"}`、`{"type":"shot"}`、`{"type":"record","action":"start"\|"stop"}` |
+
+`canShot` / `canRecord` 由 `LiveSource` 提供了哪个回调决定：纯视频源（没有 `capture`）两个
+都是 `false`，页面不显示按钮。`record` 是广播的——录屏属于设备，不属于点它的那个标签页。
 
 `hello` 在页面连上时先发一次（此时还不知道编码格式），拿到 SPS/PPS 后再发一次带 `codec` 与 `description` 的版本。
 
@@ -718,6 +723,11 @@ npx uitest-sdk live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
 - 页面开着期间设备被这个进程占着，Agent 命令以 `lease_held` 停下；Ctrl-C 退出时释放。
 - `--privacy off` 只是页面**初始**状态：页面里的开关仍可以随时切换，服务端以它为准。
 - `--no-layout` 不读布局，只投屏；省掉每秒几次 `captureLayout`。
+- 页头的 **Shot** 存一张 JPEG 到 `<state-dir>/shots/`，走的是 `Session.observe({ out })`，
+  所以遮罩规则和节点表一致——文字里被遮住的密码在像素里也是灰块。
+- 页头的 **Record** 录 MP4 到 `<state-dir>/shots/`。它另起一个 record daemon（grpc 用自己的
+  socket `uitest_live_record`，ws 用 stream 端口 +1），所以画面不会停。同一时间只能有一个
+  录屏；页面关闭时正在录的那一个会被停掉并写盘。
 - 详细协议与实测数字见 [6. 投流与录制](#6-投流与录制) 的 `LiveServer` 一节。
 
 ### 跨进程状态

@@ -375,7 +375,7 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 | **参数配置 + INI 持久化** | `hscrcpy.ini`，缩放/码率/帧率/端口 | ✅ `CastConfig`（`<state-dir>/cast.json`），字段与 `start-daemon` 的 `-scale/-bitRate/-frameRate/-p` 一一对应；格式是 JSON 不是 INI |
 | **实时帧率显示** | 客户端统计帧间隔 | ✅ `live` 页头的 fps 读数（浏览器侧按解码后的帧计）；SDK 侧另有 `FpsMeter` 供调用方自己统计 |
 | **码率上限 120 Mibps** | `-bitRate` 透传 | ✅ `CastOptions.bitRate` / `CastConfig.bitRate` 原样透传给 `OH_MD_KEY_BITRATE`，无上限限制；`live` 暂无 `--bit-rate` 旗标，走配置或 API |
-| **截图/录屏按钮** | `snapshot_display` / casting `-m 1` | ⏳ SDK 两条路都有（`screenshot` 命令、`createCast({ mode: "record" })`），但 `live` 页面还没有这两个按钮 |
+| **截图/录屏按钮** | `snapshot_display` / casting `-m 1` | ✅ `live` 页头的 Shot / Record 按钮。截图走 `Session.observe({ out })`，所以隐私遮罩与节点表同一套；录屏起一个独立的 record daemon（grpc 用自己的 socket、ws 用端口 +1），不打断画面 |
 | **剪贴板粘贴** | `Ctrl+V` → 读本机剪贴板 → `Driver.inputText` | ✅ `type --paste` / `Session.type(…, { paste: true })`。实测 36 字符 1325 ms 对逐字符 2761 ms，中文与 emoji 完整。注意 `InputTextMode.addition` 在 `Driver.inputText` 路径上是空操作（只在 `Component.inputText` 上追加），所以没有对外暴露 |
 
 ### P2 · 有工作量，看需求
@@ -414,13 +414,23 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 1. ~~**7.0 WebSocket 通道**（P0）~~ —— ✅ 已完成（0.6.0，`transport: "ws"`）。7.0 SO 不打包，由调用方提供路径。
 2. ~~**布局检查 + 节点高亮**（P1）~~ —— ✅ 已完成（0.7.0 的 `inspect` 与 `live`）。
 3. ~~**文件管理器 / 配置持久化 / 帧率显示**（P1）~~ —— ✅ 已完成（0.7.0，`dev.files` / `CastConfig` / `FpsMeter`）。
-4. **`live` 页的截图与录屏按钮**（P1 余项）—— SDK 层两条路都已具备（`screenshot` 命令、`createCast({ mode: "record" })`），差的只是页面把它们露出来。
-5. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。
-6. **模拟器自建扩展**（探索性）—— 模拟器无 XPM，可以在这里做虚拟屏 / AAMS 的原型验证，但结论不能平移到真机。
+4. ~~**`live` 页的截图与录屏按钮**（P1 余项）~~ —— ✅ 已完成（未发版）。截图复用了会话的遮罩规则；录屏必须另起一个 daemon，因为 `onStart` 在一个进程里只能开一次。
+5. **`live` 页的点击交互**（P1 余项）—— 画布上点一下就等于在设备上点一下。要先想清楚它与租约/接管的规则怎么配合：`live` 进程持有租约期间 Agent 命令本来就以 `lease_held` 停下，所以页面上的点击天然是「持租约的人」在操作，但页面必须把这件事说出来，否则同一块屏幕会出现两种操作来源。
+6. **多设备同时投屏**（P1 余项）—— 每台设备一个 `live` 进程，端口分开。实测多个 casting daemon 可以并存（`docs/05`），但要确认 `pidof` 归因与状态目录不会串。
+7. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。
+8. **模拟器自建扩展**（探索性）—— 模拟器无 XPM，可以在这里做虚拟屏 / AAMS 的原型验证，但结论不能平移到真机。
+
+## 五、发版计划
+
+下一个版本号是 **0.8.0**。已进这一版的：`live` 页的截图与录屏按钮、`test/` 与 `scripts/` 纳入类型检查、`type --paste`、验收报告去掉明文设备序列号。发版前要做的三件事：
+
+1. `npm version 0.8.0`，并把 `docs/13-stage-log.md` 里所有 `（未发版）` 改成 `（0.8.0）`。
+2. 在真机上跑一遍 `npm run acceptance:handoff`，确认验收报告与 `docs/acceptance/report.md` 一致。
+3. `npm publish`（用 bypass 2FA 的 granular token，npmrc 放仓库外，用完删）。
 
 ---
 
-## 五、本篇的实验产物
+## 六、本篇的实验产物
 
 | 文件 | 说明 |
 |---|---|

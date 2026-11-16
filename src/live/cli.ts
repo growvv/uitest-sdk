@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { Device } from "../device.js";
 import type { DeviceOptions } from "../device.js";
 import { Session } from "../session.js";
 import { parseArgv } from "../cli-main.js";
+import { Recording } from "./record.js";
 import { LiveServer } from "./server.js";
 import type { LiveServerOptions } from "./server.js";
 import type { CastOptions } from "../cast/types.js";
@@ -136,9 +139,34 @@ export async function startLive(
     return session.reader.read();
   };
 
-  const source: LiveServerOptions["source"] = opts.layout
-    ? { createCast: () => device.createCast({ mode: "stream", ...opts.cast }), readScreen }
-    : { createCast: () => device.createCast({ mode: "stream", ...opts.cast }) };
+  // A screenshot goes through the session, so it is masked the same way the
+  // node table is: a password the page hides in text must not be readable in
+  // the saved pixels. The session already owns that rule (`saveShot`), and a
+  // second implementation here would be a second place to get it wrong.
+  const stateDir = over.stateDir ?? ".uitest-phone";
+  const capture = async (): Promise<string> => {
+    const out = join(stateDir, "shots", `live-${Date.now()}.jpg`);
+    await mkdir(dirname(out), { recursive: true });
+    await session.observe({ out });
+    return out;
+  };
+
+  // Recording lives in its own module: the record daemon has to run beside the
+  // stream daemon, and the client is already recording when it is created, so
+  // opening a stream on it would start a second `onStart` the extension refuses.
+  const recording = new Recording({
+    stateDir,
+    createCast: (castOpts) => device.createCast(castOpts),
+    streamCast: { mode: "stream", ...opts.cast },
+  });
+
+  const source: LiveServerOptions["source"] = {
+    createCast: () => device.createCast({ mode: "stream", ...opts.cast }),
+    ...(opts.layout ? { readScreen } : {}),
+    capture,
+    startRecording: () => recording.start(),
+    stopRecording: () => recording.stop(),
+  };
 
   let server: LiveServer;
   try {

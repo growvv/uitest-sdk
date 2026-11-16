@@ -43,6 +43,21 @@ export interface LiveSource {
    * picture and no node table.
    */
   readScreen?(redact: boolean): Promise<Screen>;
+  /**
+   * Saves one screenshot and returns its path. Omitted means the page shows no
+   * capture button — there is nothing to save with.
+   */
+  capture?(): Promise<string>;
+  /**
+   * Starts an MP4 recording and returns the path it will be written to.
+   * Omitted means the page shows no record button.
+   *
+   * Recordings run on a second cast, so they need their own socket; the
+   * implementation is responsible for that. `stopRecording` resolves with the
+   * finished file, or null when there was nothing to stop.
+   */
+  startRecording?(): Promise<string>;
+  stopRecording?(): Promise<string | null>;
 }
 
 export interface LiveServerOptions {
@@ -98,6 +113,20 @@ export class LiveServer {
   private reread = false;
   private lastReadAt = 0;
   private lastCongestionIdrAt = 0;
+
+  /**
+   * The path of the in-flight recording, if any. One at a time: the
+   * extension's encoder is start/stop driven and a second recording would
+   * compete for it, so the page is told rather than silently starting a
+   * second one.
+   */
+  private recording: string | null = null;
+  /**
+   * The stop currently running. `close()` waits on it instead of issuing its
+   * own: on a device a second stop is a second `onEnd` and a second pull of
+   * the same MP4.
+   */
+  private stopping: Promise<void> | null = null;
 
   private constructor(
     private readonly server: Server,
@@ -157,6 +186,20 @@ export class LiveServer {
 
     for (const client of [...this.clients]) this.closeClient(client, 1001);
     this.clients.clear();
+
+    // A recording left running would keep the device's encoder busy with
+    // nobody left to collect the file. Stop it before the cast goes away —
+    // unless a stop is already in flight, in which case wait for that one.
+    if (this.stopping) {
+      await this.stopping.catch(() => undefined);
+    } else if (this.recording && this.source.stopRecording) {
+      try {
+        await this.source.stopRecording();
+      } catch {
+        // Shutting down anyway; the device-side file is left where it is.
+      }
+      this.recording = null;
+    }
 
     const cast = this.cast;
     this.cast = null;
@@ -296,6 +339,98 @@ export class LiveServer {
     if (type === "requestIDR" || type === "start") {
       client.congested = false;
       this.requestIdr("client");
+      return;
+    }
+    if (type === "shot") {
+      void this.capture(client);
+      return;
+    }
+    if (type === "record") {
+      if (message.action === "stop") void this.stopRecording(client);
+      else void this.startRecording(client);
+    }
+  }
+
+  /**
+   * Saves one screenshot on the server's behalf.
+   *
+   * The reply carries the path so the person can find the file; a failure is
+   * reported to the tab that asked and nowhere else, because the other tabs
+   * did not click anything.
+   */
+  private async capture(client: Client): Promise<void> {
+    const capture = this.source.capture;
+    if (!capture) {
+      this.sendText(client, { type: "saved", error: "this session cannot save screenshots" });
+      return;
+    }
+    try {
+      const path = await capture.call(this.source);
+      this.sendText(client, { type: "saved", path });
+    } catch (e) {
+      this.sendText(client, { type: "saved", error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  private async startRecording(client: Client): Promise<void> {
+    const start = this.source.startRecording;
+    if (!start) {
+      this.sendText(client, { type: "record", error: "this session cannot record" });
+      return;
+    }
+    if (this.recording || this.stopping) {
+      this.sendText(client, { type: "record", error: "already recording" });
+      return;
+    }
+    try {
+      const path = await start.call(this.source);
+      this.recording = path;
+      // Every tab shows the same badge: the recording belongs to the device,
+      // not to the tab that started it.
+      this.broadcastText({ type: "record", recording: true, path });
+    } catch (e) {
+      this.sendText(client, {
+        type: "record",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  /**
+   * Stops the recording and reports the finished file.
+   *
+   * The stop is kept as a promise so the window between the source's promise
+   * and the state update is visible: a second click, or `close()` landing in
+   * that window, would otherwise start a second stop and on a real device a
+   * second pull of the same file.
+   */
+  private async stopRecording(client: Client): Promise<void> {
+    const stop = this.source.stopRecording;
+    if (!stop || !this.recording || this.stopping) {
+      this.sendText(client, { type: "record", error: "not recording" });
+      return;
+    }
+    const run = (async () => {
+      try {
+        const path = await stop.call(this.source);
+        this.recording = null;
+        this.broadcastText({ type: "record", recording: false });
+        if (path) this.broadcastText({ type: "saved", path });
+        else this.sendText(client, { type: "saved", error: "the recording produced no file" });
+      } catch (e) {
+        this.recording = null;
+        this.broadcastText({ type: "record", recording: false });
+        this.sendText(client, {
+          type: "saved",
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    })();
+    this.stopping = run;
+    try {
+      await run;
+    } finally {
+      this.stopping = null;
     }
   }
 
@@ -364,6 +499,11 @@ export class LiveServer {
       height: this.screen?.display.height ?? 0,
       state: this.live.state,
       privacy: this.privacy,
+      // What this session can do, so the page shows a button only when
+      // clicking it would work. A video-only mirror has neither.
+      canShot: Boolean(this.source.capture),
+      canRecord: Boolean(this.source.startRecording && this.source.stopRecording),
+      recording: this.recording !== null,
     };
   }
 

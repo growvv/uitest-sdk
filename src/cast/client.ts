@@ -126,7 +126,10 @@ export class H264CastClient implements CastClient {
     const fresh = [...after].filter((p) => !before.has(p));
     // Exactly one new pid is attributable to this call; zero means the daemon
     // never started, several means a sibling started one in the same window.
+    // Whichever it is, the processes that did appear are ours to clean up:
+    // walking away from them leaks a device process per failed start.
     if (fresh.length !== 1) {
+      for (const pid of fresh) await hdc.shell(`kill -9 ${pid}`).catch(() => undefined);
       throw new DaemonStartError(
         `casting daemon did not start (pidof uitest showed ${fresh.length} new processes; extension ${EXTENSION_NAME})`,
         "ENODAEMON",
