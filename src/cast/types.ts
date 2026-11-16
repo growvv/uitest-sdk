@@ -44,8 +44,12 @@ export interface CastOptions {
   iFrameInterval?: number;
   screenId?: number;
   /**
-   * Record mode only: how long to keep recording before `dispose()` closes the
-   * muxer. The encoder is start/stop driven — it writes nothing until `onEnd`.
+   * Record mode only: how long to keep recording.
+   *
+   * When it elapses the client disposes itself — the same path a caller takes,
+   * so the muxer is closed, the file pulled and the daemon killed. Without it,
+   * the caller decides when to `dispose()`; the encoder is start/stop driven
+   * and writes nothing until then.
    */
   durationMs?: number;
 }

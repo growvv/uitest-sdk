@@ -272,6 +272,59 @@ describe("WsCastClient", () => {
     await fake.close();
   });
 
+  it("does not stop twice when dispose is called while it is already stopping", async () => {
+    // The `durationMs` timer and the caller can both dispose at once. Two
+    // `stop` commands are two pulls of the same file, so the second caller has
+    // to wait for the first instead of starting a second stop.
+    const fake = await startFakeExtension();
+    const { hdc } = fakeHdc(fake.port);
+    const pulled: string[] = [];
+    (hdc as unknown as { pull: (a: string, b: string) => Promise<void> }).pull = async (a: string, b: string) => {
+      pulled.push(`${a}->${b}`);
+    };
+
+    const cast = await WsCastClient.start(hdc, {
+      mode: "record",
+      port: 5000,
+      wsExtension,
+      outputPath: join(tmpdir(), "rec-twice.mp4"),
+    });
+    await Promise.all([cast.dispose(), cast.dispose()]);
+    await cast.dispose();
+
+    expect(fake.commands.filter((c) => c.includes("stop"))).toHaveLength(1);
+    expect(pulled).toHaveLength(1);
+    await fake.close();
+  });
+
+  it("stops recording on its own after durationMs", async () => {
+    // `durationMs` is documented as "how long to keep recording": without it
+    // the parameter is a promise the code never keeps.
+    const fake = await startFakeExtension();
+    const { hdc } = fakeHdc(fake.port);
+    const pulled: string[] = [];
+    (hdc as unknown as { pull: (a: string, b: string) => Promise<void> }).pull = async (a: string, b: string) => {
+      pulled.push(`${a}->${b}`);
+    };
+
+    const cast = await WsCastClient.start(hdc, {
+      mode: "record",
+      port: 5000,
+      wsExtension,
+      outputPath: join(tmpdir(), "rec-timed.mp4"),
+      durationMs: 150,
+    });
+    await new Promise((r) => setTimeout(r, 500));
+
+    // The timer ends the recording the same way a caller's dispose() does.
+    expect(fake.commands.some((c) => c.includes("stop"))).toBe(true);
+    expect(pulled).toHaveLength(1);
+    // And the caller's own dispose() afterwards is a no-op, not a second pull.
+    await cast.dispose();
+    expect(pulled).toHaveLength(1);
+    await fake.close();
+  });
+
   it("waits for the recorder to stop growing before pulling", async () => {
     // The 7.0 muxer creates the file early and keeps appending, so a non-zero
     // size proves nothing: pulling then yields a header-only MP4 (measured:

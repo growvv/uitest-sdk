@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
-import { DaemonStartError, DeviceNotConnectedError } from "./errors.js";
+import { DaemonStartError, DeviceNotConnectedError, UitestError } from "./errors.js";
 
 export interface HdcOptions {
   hdcPath?: string;
@@ -121,8 +121,22 @@ export class HdcRunner {
     await this.exec(["file", "send", source, remote], `file send ${source} ${remote}`);
   }
 
+  /**
+   * `file recv` reports a failed transfer on stdout and still exits 0:
+   * `[Fail]Error opening file: no such file or directory, path:...` when the
+   * local path cannot be opened. Trusting the exit code alone made a failed
+   * pull look successful — a recording's `dispose()` resolved and the caller
+   * had no file. The status line is therefore read as well.
+   */
   async pull(remote: string, local: string): Promise<void> {
-    await this.exec(["file", "recv", remote, local], `file recv ${remote} ${local}`);
+    const { stdout, stderr } = await this.exec(
+      ["file", "recv", remote, local],
+      `file recv ${remote} ${local}`,
+    );
+    const failure = /\[Fail\]\s*(.+)/.exec(`${stdout}\n${stderr}`);
+    if (failure) {
+      throw new UitestError(`hdc file recv ${remote} failed: ${failure[1]!.trim()}`, "EHDC");
+    }
   }
 
   /** Reads a file that was previously pulled. Kept here so CliRunner can be tested without fs. */

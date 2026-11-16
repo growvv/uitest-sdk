@@ -299,7 +299,7 @@ await cast.dispose();
 | `wsExtension` | `string` | — | `ws` 必填：本地 7.0 `.so` 路径，按文件名推到 `/data/local/tmp` |
 | `port` | `number` | `5000` | `ws` 专用：设备侧监听端口（`-p`），每个 daemon 一个端口 |
 | `socketName` | `string` | 内部常量 | `grpc` 专用：覆盖抽象 socket 名，同机跑多个投流的方式 |
-| `durationMs` | `number` | — | `record`：录制时长 |
+| `durationMs` | `number` | — | `record`：到点自动停止（等价于调 `dispose()`：关 muxer、拉回文件、杀 daemon）。不设则由调用方决定何时 `dispose()` |
 
 ### `CastClient`
 

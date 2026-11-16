@@ -75,6 +75,10 @@ export class WsCastClient implements CastClient {
   readonly castKind = "h264" as const;
 
   private disposed = false;
+  /** In-flight `dispose()`, so a second caller waits instead of repeating it. */
+  private disposePromise: Promise<void> | null = null;
+  /** The `durationMs` stop timer, cleared when the caller disposes first. */
+  private durationTimer: NodeJS.Timeout | undefined;
   private socket: Socket | null = null;
   private buffer: Buffer = Buffer.alloc(0);
   /** Commands awaiting a reply, matched by a substring of the reply's `type`. */
@@ -172,7 +176,10 @@ export class WsCastClient implements CastClient {
     client.attach(socket);
     // Record mode never iterates `stream()`, and `start` is what opens the
     // muxer — without this the recording is empty and `stop` writes nothing.
-    if (opts.mode === "record") await client.command({ type: "start" }, "started");
+    if (opts.mode === "record") {
+      await client.command({ type: "start" }, "started");
+      client.armDuration();
+    }
     return client;
   }
 
@@ -280,7 +287,35 @@ export class WsCastClient implements CastClient {
   }
 
   async dispose(): Promise<void> {
+    // A `durationMs` timer can fire while the caller is already disposing, so
+    // the second call must wait for the first rather than run beside it: two
+    // `stop` commands are two pulls of the same file.
+    if (this.disposePromise) return this.disposePromise;
     if (this.disposed) return;
+    this.disposePromise = this.finishDispose();
+    return this.disposePromise;
+  }
+
+  /**
+   * Ends the recording after `durationMs`, if it was given.
+   *
+   * The timer calls `dispose()`, which is what closes the muxer and pulls the
+   * file — the same path a caller takes.
+   */
+  private armDuration(): void {
+    const ms = this.opts.durationMs;
+    if (ms === undefined || ms <= 0) return;
+    this.durationTimer = setTimeout(() => {
+      this.durationTimer = undefined;
+      void this.dispose().catch(() => undefined);
+    }, ms);
+    // Never keep the process alive just for a recording deadline.
+    this.durationTimer.unref?.();
+  }
+
+  private async finishDispose(): Promise<void> {
+    clearTimeout(this.durationTimer);
+    this.durationTimer = undefined;
 
     // `stop` is what closes the muxer in record mode, so it must go out before
     // the socket dies — and before `disposed` is set, because `command()`
@@ -295,15 +330,19 @@ export class WsCastClient implements CastClient {
     this.socket = null;
     this.onClosed();
 
-    if (this.opts.mode === "record" && this.opts.outputPath) {
-      await waitForFile(this.hdc, DEVICE_RECORD_PATH);
-      await this.hdc.pull(DEVICE_RECORD_PATH, this.opts.outputPath);
+    // The cleanup below runs even when the pull throws: a failed transfer is
+    // exactly when a stray daemon and forward are easiest to leave behind.
+    try {
+      if (this.opts.mode === "record" && this.opts.outputPath) {
+        await waitForFile(this.hdc, DEVICE_RECORD_PATH);
+        await this.hdc.pull(DEVICE_RECORD_PATH, this.opts.outputPath);
+      }
+    } finally {
+      // The daemon cannot serve anyone after `stop` (its listening socket is
+      // gone), so leaving it would only strand a process.
+      await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
+      await this.hdc.fportRemove(this.localPort).catch(() => undefined);
     }
-
-    // The daemon cannot serve anyone after `stop` (its listening socket is
-    // gone), so leaving it would only strand a process.
-    await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
-    await this.hdc.fportRemove(this.localPort).catch(() => undefined);
   }
 }
 

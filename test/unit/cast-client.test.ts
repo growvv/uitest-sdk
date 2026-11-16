@@ -13,6 +13,7 @@ interface FakeState {
   calls: string[];
   added: number[];
   removed: number[];
+  pulls: number;
 }
 
 function fakeHdc(over: Partial<FakeState> = {}): { hdc: HdcRunner; st: FakeState } {
@@ -24,6 +25,7 @@ function fakeHdc(over: Partial<FakeState> = {}): { hdc: HdcRunner; st: FakeState
     calls: [],
     added: [],
     removed: [],
+    pulls: 0,
     ...over,
   };
   const hdc = {
@@ -45,7 +47,9 @@ function fakeHdc(over: Partial<FakeState> = {}): { hdc: HdcRunner; st: FakeState
     async fportRemove(port: number): Promise<void> {
       st.removed.push(port);
     },
-    async pull(): Promise<void> {},
+    async pull(): Promise<void> {
+      st.pulls++;
+    },
   };
   return { hdc: hdc as unknown as HdcRunner, st };
 }
@@ -71,6 +75,68 @@ describe("H264CastClient.start", () => {
     const { hdc, st } = fakeHdc({ pidsLive: "1000" });
     await expect(H264CastClient.start(hdc, { mode: "stream" })).rejects.toThrow(DaemonStartError);
     expect(st.added).toEqual([]);
+  });
+
+  it("kills its daemon and reports the error when the pull fails", async () => {
+    // A failed pull used to be silent (hdc exits 0), and once it throws the
+    // cleanup after it must still run: an early return here leaks the daemon
+    // and the port forward, which is how an absolute outputPath left an
+    // xdevice_scrcpy process behind on the device.
+    const { hdc, st } = fakeHdc({
+      socketLine: "0000: 00000002 00000000 00010000 0001 01 12345 @screen_record_grpc_socket",
+      psLine:
+        "shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness --extension-name libscreen_casting.z.so -scrcpy_socket_name screen_record_grpc_socket",
+    });
+    const shell = hdc.shell.bind(hdc);
+    (hdc as unknown as { shell: (c: string) => Promise<string> }).shell = async (cmd: string) => {
+      if (cmd.startsWith("ls -l /data/local/tmp/mytest.mp4")) {
+        return "-rw-r--r-- 1 shell shell 40960 2026-11-16 14:00 /data/local/tmp/mytest.mp4";
+      }
+      return shell(cmd);
+    };
+    (hdc as unknown as { pull: () => Promise<void> }).pull = async () => {
+      throw new Error("hdc file recv failed: Error opening file");
+    };
+
+    const client = await H264CastClient.start(hdc, {
+      mode: "record",
+      outputPath: "E:/nope/rec.mp4",
+    });
+    await expect(client.dispose()).rejects.toThrow(/Error opening file/);
+    expect(st.calls).toContain("kill -9 2000");
+    expect(st.removed).toHaveLength(1);
+  });
+
+  it("stops recording on its own after durationMs", async () => {
+    // `durationMs` is documented as "how long to keep recording"; a timer that
+    // never fires would leave it a promise the code does not keep.
+    // Record mode uses its own socket; the argv must say so.
+    const { hdc, st } = fakeHdc({
+      socketLine: "0000: 00000002 00000000 00010000 0001 01 12345 @screen_record_grpc_socket",
+      psLine:
+        "shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness --extension-name libscreen_casting.z.so -scrcpy_socket_name screen_record_grpc_socket",
+    });
+    // The recorder reports a real size on the second look.
+    let ls = 0;
+    const shell = hdc.shell.bind(hdc);
+    (hdc as unknown as { shell: (c: string) => Promise<string> }).shell = async (cmd: string) => {
+      if (cmd.startsWith("ls -l /data/local/tmp/mytest.mp4")) {
+        ls++;
+        const size = ls > 1 ? 40960 : 0;
+        return `-rw-r--r-- 1 shell shell ${size} 2026-11-16 14:00 /data/local/tmp/mytest.mp4`;
+      }
+      return shell(cmd);
+    };
+
+    await H264CastClient.start(hdc, {
+      mode: "record",
+      outputPath: "C:/tmp/rec-grpc.mp4",
+      durationMs: 100,
+    });
+    await new Promise((r) => setTimeout(r, 600));
+
+    expect(st.pulls).toBe(1);
+    expect(st.calls).toContain("kill -9 2000");
   });
 
   it("picks its own daemon by socket name when several started at once", async () => {

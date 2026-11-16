@@ -677,3 +677,43 @@ npm test                              664/664（新增 4 个用例）
 
 清理时发现 `hdc fport ls` 会堆着几十条历史转发（每次失败的启动留一条）。这是实验残留，
 不是代码问题，但值得记一笔：`fport rm` 要写完整的 `local remote` 两段，只写一段不生效。
+
+---
+
+## 2026-11-16 · `CastOptions.durationMs` 真正生效（未发版）
+
+`durationMs` 之前是一个只写在类型里、代码从不读的参数：`docs/api.md` 与官网都写着「record：
+录制时长」，但 `grep` 整个 `src/cast/` 只有那一行声明。按「不生效的旗标比没有更糟」的原则，
+要么实现要么删掉——选了实现。
+
+### A. 语义
+
+到点调 `dispose()`，也就是调用方自己会走的那条路：关 muxer（`onEnd` / `stop`）、等文件写完、
+拉回本机、杀 daemon、移除端口转发。两个客户端（gRPC 6.8 / WebSocket 7.0）都实现了，定时器
+`unref()`，不会为了一个录制期限把进程吊住。
+
+### B. 顺带修的两个真问题
+
+- **`dispose()` 不是并发安全的。** 定时器与调用方可能同时调它，而两个客户端的守卫都只在
+  同步段设 `disposed`，await 期间第二个调用会穿过去——两个 `onEnd` 就是两次拉同一个文件。
+  现在把进行中的 dispose 存成 promise，第二个调用等它。
+- **`hdc file recv` 失败时退出码是 0。** 它只在 stdout 打 `[Fail]Error opening file: ...`。
+  原来 `pull()` 只看退出码，于是录屏的 `dispose()` 正常返回、调用方却拿不到文件。实测用
+  绝对路径（`E:/...`）时 hdc 会把路径拼成 `E:\...\E:/...` 而失败，相对路径正常。现在
+  `pull()` 读状态行并抛 `EHDC`。
+- **拉文件失败会跳过清理。** 修完上一条后，pull 抛错会让后面的 `kill -9` 与 `fportRemove`
+  不执行——一个失败的传输恰恰最容易留下孤儿 daemon。清理挪进 `finally`。
+
+### C. 验收
+
+```
+npm run typecheck / typecheck:tests   干净
+npm test                              669/669（新增 5 个用例）
+变异：去掉 armDuration          → 两个 durationMs 测试红
+变异：去掉 dispose 的 promise   → 并发 dispose 测试红
+变异：去掉 finally 清理         → pull 失败测试红
+真机：相对路径 + durationMs=3000，7 s 后文件 69,820 B，第二次 dispose 无副作用
+真机：绝对路径                  → 明确抛 EHDC，设备上不留 daemon
+```
+
+官网 changelog 也补了 0.8.0 一节，并修掉「计划中」里把 0.7.0 已发的东西写成「待发布」的旧文案。

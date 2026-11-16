@@ -65,6 +65,10 @@ export class H264CastClient implements CastClient {
   private started = false;
   /** Open `onStart` call in record mode, cancelled after `onEnd`. */
   private recordCall: { cancel(): void } | null = null;
+  /** In-flight `dispose()`, so a second caller waits instead of repeating it. */
+  private disposePromise: Promise<void> | null = null;
+  /** The `durationMs` stop timer, cleared when the caller disposes first. */
+  private durationTimer: NodeJS.Timeout | undefined;
 
   private constructor(
     private readonly hdc: HdcRunner,
@@ -153,8 +157,30 @@ export class H264CastClient implements CastClient {
 
     // Record mode must be started here: `onEnd` only closes a muxer that
     // `onStart` opened, and a client that never opened one records zero frames.
-    if (opts.mode === "record") client.beginRecording();
+    if (opts.mode === "record") {
+      client.beginRecording();
+      client.armDuration();
+    }
     return client;
+  }
+
+  /**
+   * Ends the recording after `durationMs`, if it was given.
+   *
+   * The timer calls `dispose()`, which is what closes the muxer and pulls the
+   * file — the same path a caller takes. A rejection here would be unhandled
+   * and invisible, so it is swallowed: the file either appears or the caller's
+   * own `dispose()` reports why not.
+   */
+  private armDuration(): void {
+    const ms = this.opts.durationMs;
+    if (ms === undefined || ms <= 0) return;
+    this.durationTimer = setTimeout(() => {
+      this.durationTimer = undefined;
+      void this.dispose().catch(() => undefined);
+    }, ms);
+    // Never keep the process alive just for a recording deadline.
+    this.durationTimer.unref?.();
   }
 
   /** Opens the recording stream. Frames go to the muxer, not to us. */
@@ -199,8 +225,19 @@ export class H264CastClient implements CastClient {
   }
 
   async dispose(): Promise<void> {
+    // A `durationMs` timer can fire while the caller is already disposing, so
+    // the second call must wait for the first rather than run beside it: two
+    // `onEnd` calls are two pulls of the same file.
+    if (this.disposePromise) return this.disposePromise;
     if (this.disposed) return;
     this.disposed = true;
+    this.disposePromise = this.finishDispose();
+    return this.disposePromise;
+  }
+
+  private async finishDispose(): Promise<void> {
+    clearTimeout(this.durationTimer);
+    this.durationTimer = undefined;
 
     // In record mode the encoder is start/stop driven: `onStart` runs the muxer
     // and `onEnd` closes it, writing the file. `start()` already opened the
@@ -217,14 +254,18 @@ export class H264CastClient implements CastClient {
 
     // Pull before killing: `onEnd` only closes the muxer, and the file is
     // flushed by the daemon as it winds down. Killing first leaves nothing.
-    if (this.opts.mode === "record" && this.opts.outputPath) {
-      await waitForFile(this.hdc, DEVICE_RECORD_PATH);
-      await this.hdc.pull(DEVICE_RECORD_PATH, this.opts.outputPath);
+    // The cleanup below runs even when the pull throws — a failed transfer is
+    // exactly when a stray daemon and forward are easiest to leave behind.
+    try {
+      if (this.opts.mode === "record" && this.opts.outputPath) {
+        await waitForFile(this.hdc, DEVICE_RECORD_PATH);
+        await this.hdc.pull(DEVICE_RECORD_PATH, this.opts.outputPath);
+      }
+    } finally {
+      // Kill only our own daemon: agent.so lives in a sibling uitest process.
+      await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
+      await this.hdc.fportRemove(this.localPort).catch(() => undefined);
     }
-
-    // Kill only our own daemon: agent.so lives in a sibling uitest process.
-    await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
-    await this.hdc.fportRemove(this.localPort).catch(() => undefined);
   }
 }
 

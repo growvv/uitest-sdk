@@ -111,6 +111,18 @@ describe("HdcRunner file transfer", () => {
     await r.pull("/data/local/tmp/t.txt", ".work-bench/back.txt");
     expect(seen[0]).toEqual(["file", "recv", "/data/local/tmp/t.txt", ".work-bench/back.txt"]);
   });
+
+  it("throws when hdc reports a failed transfer with exit code 0", async () => {
+    // `hdc file recv` exits 0 even when it cannot open the local path, printing
+    // `[Fail]Error opening file` on stdout instead. Trusting the exit code made
+    // a failed pull look like a successful one: the recording's dispose()
+    // resolved and the caller had no file.
+    fakeHdc(() => ({
+      stdout: "[Fail]Error opening file: no such file or directory, path:E:/x/y.mp4\n",
+    }));
+    const r = new HdcRunner({ hdcPath: "C:/fake/hdc.exe" });
+    await expect(r.pull("/data/local/tmp/t.mp4", "E:/x/y.mp4")).rejects.toThrow(/Error opening file/);
+  });
 });
 
 describe("HdcRunner.command", () => {

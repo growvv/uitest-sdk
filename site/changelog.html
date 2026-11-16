@@ -25,6 +25,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-8-0">0.8.0 · 截图与录屏、多实例</a>
       <a href="#v0-7-1">0.7.1 · 投屏解码修复</a>
       <a href="#v0-7-0">0.7.0 · 投屏与实时检查</a>
       <a href="#v0-6-0">0.6.0 · 7.0 WebSocket 投流</a>
@@ -40,6 +41,40 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-8-0">
+        <div class="release-head">
+          <h2>0.8.0</h2>
+          <span class="release-date">未发布 · master</span>
+          <span class="release-tag">截图与录屏、多实例</span>
+        </div>
+
+        <h3><code>live</code> 页多了两个按钮</h3>
+        <ul>
+          <li>页头 <strong>Shot</strong> 存一张 JPEG 到 <code>&lt;state-dir&gt;/shots/</code>，走的是 <code>Session.observe({ out })</code>，所以遮罩规则和节点表同一套——文字里藏起来的密码在像素里也是灰块。</li>
+          <li>页头 <strong>Record</strong> 录 MP4 到同一目录。它另起一个 record daemon（gRPC 用自己的 socket，WebSocket 用端口 +1），画面不停；同一时间只有一个录屏，页面关掉时正在录的那个会被停掉并写盘。</li>
+          <li><code>CastOptions.durationMs</code> 现在真的生效：到点自动停止（关 muxer、拉回文件、杀 daemon），不设则由调用方决定何时 <code>dispose()</code>。</li>
+        </ul>
+
+        <h3>同一台设备可以开多个页面</h3>
+        <ul>
+          <li>每个 <code>live</code> 进程用自己的 socket 名（<code>uitest_live_&lt;pid&gt;</code>），互不覆盖。</li>
+          <li>daemon 归因改用 <code>ps -ef</code> 的 argv 精确匹配，不再靠「启动前后 pidof 的差集」。原来两个页面同时启动时，各自看到 2 个新进程、各自失败重试、并把对方刚起的 daemon 杀掉，实测陷入活锁并堆出 8 个进程。</li>
+          <li>租约的同名 task 重入现在要求 pid 相同。原来只要 task 名一样就算重入，于是两个进程都能拿到设备——这正是租约要防的并发驱动。</li>
+        </ul>
+
+        <h3>修掉两处静默失败</h3>
+        <ul>
+          <li><code>hdc file recv</code> 失败时退出码仍是 0，只在 stdout 打 <code>[Fail]Error opening file</code>。原来把退出码当成功，录屏的 <code>dispose()</code> 解析了而调用方没有文件。现在会读状态行并抛错。</li>
+          <li>拉文件失败时不再跳过 daemon 与端口的清理：一个失败的传输正是最容易留下孤儿进程的时候。</li>
+        </ul>
+
+        <h3>测试与 CI</h3>
+        <ul>
+          <li><code>test/</code> 与 <code>scripts/</code> 纳入类型检查（<code>tsconfig.test.json</code>），CI 的 <code>test</code> job 跑它。此前 <code>rootDir</code> 只覆盖 <code>src</code>，测试文件从未被检查过，积了 27 处错误。</li>
+          <li>CI 在部署前先跑单元测试（原来只在 <code>prepublishOnly</code> 里跑，坏提交能直接到 master）。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-7-1">
         <div class="release-head">
@@ -367,9 +402,10 @@
           <span class="release-tag">未发布 · 不是承诺</span>
         </div>
         <ul>
-          <li>布局检查（<code>inspect</code>）、设备文件（<code>dev.files</code>）、投流配置（<code>CastConfig</code>）与帧率统计（<code>FpsMeter</code>）已在 master 上，待下一个版本发布。</li>
+          <li><code>live</code> 页的点击交互：画布上点一下等于在设备上点一下。要先定清楚它与租约、接管的规则——页面开着期间 <code>live</code> 进程持有设备租约，点击天然是「持租约的人」在操作，但页面必须把这件事说出来。</li>
           <li><code>perfmonitor.so</code>（HTTP 9999）性能指标接入。</li>
           <li>录制参数在设备侧可配置（目前文件路径写死在扩展里）。</li>
+          <li>音频转发：需要自建 HAP 采集，得用使用者自己的华为账号签名。</li>
           <li>接管期间的线性「人的操作」时间线（<code>captureLayout</code> 轮询写 JSONL；<code>uiRecord</code> 与 daemon 互斥，不可用）。</li>
         </ul>
         <p class="note">版本节奏以实测为准：每个版本都会更新本页、README 与 npm 包内文档。</p>
