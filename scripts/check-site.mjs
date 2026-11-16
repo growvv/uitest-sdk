@@ -41,7 +41,7 @@ const pages = [
 ];
 
 // ------------------------------------------------------------------- anchors
-const sections = ["hero", "terminal", "cli", "bench", "compare", "features", "arch", "video", "limits"];
+const sections = ["hero", "terminal", "cli", "bench", "compare", "codec", "features", "arch", "video", "limits"];
 for (const id of sections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(html)) fail(`index.html is missing id="${id}"`);
 }
@@ -190,6 +190,49 @@ for (const needle of [
   if (!compare.includes(needle)) fail(`#compare 缺少「${needle}」`);
 }
 
+// The transport/codec section answers the one question a person choosing a
+// mirroring tool actually asks: is the pipeline faster than what else exists?
+// It must name the competitors it read, carry our measured numbers, and be
+// honest that the frame-rate ceiling is the device encoder.
+const codec = sectionHtml("codec");
+for (const needle of [
+  // the competitors, by name
+  "hscrcpy",
+  "HOScrcpy",
+  "HarmonyMirror",
+  // their decode path, stated as the finding rather than a vague comparison
+  "FFmpeg 软解",
+  "VideoToolbox",
+  // our path and the measured per-stage numbers
+  "WebCodecs",
+  "WebSocket",
+  "12 µs",
+  "1.57 ms",
+  "2.46 ms",
+  "777 fps",
+  // the honest framing: the encoder is the ceiling, not the transport
+  "瓶颈在编码器",
+  // A mirror that hard-requires hardware decode is black on GPU-less boxes;
+  // the page must say the browser chooses and falls back to software.
+  "可退软解",
+  "0/30 帧",
+]) {
+  if (!codec.includes(needle)) fail(`#codec 缺少「${needle}」`);
+}
+// The section is only trustworthy if it says where "未公开" comes from and
+// what machine produced our numbers.
+for (const needle of ["未公开", "Chrome 157"]) {
+  if (!codec.includes(needle)) fail(`#codec 缺少出处说明「${needle}」`);
+}
+// The diagram is the deliverable, not decoration: three lanes, and the
+// competitors' lanes must not be drawn in the accent colour.
+if (!/<svg[^>]*class="arch-svg"/.test(codec)) fail("#codec 缺少链路图 SVG");
+for (const lane of ["设备编码器", "WebCodecs", "VideoToolbox", "Python 桥接"]) {
+  if (!codec.includes(lane)) fail(`#codec 的图缺少「${lane}」`);
+}
+const accentNodes = (codec.match(/class="node node-accent"/g) ?? []).length;
+if (accentNodes !== 2) fail(`#codec 的图有 ${accentNodes} 个高亮节点，应为 2 个（WebSocket 与 WebCodecs）`);
+
 const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
 if (cards !== 12) fail(`#features 有 ${cards} 张 .card，必须恰好 12 张`);
@@ -318,6 +361,8 @@ for (const needle of [
   "WebCodecs",
   "privacy off",
   "遮罩在读的时候完成",
+  "12 µs/帧",
+  "index.html#codec",
   "LiveServer",
   "decodeQueueSize",
   // The 7.0 WebSocket transport is a user-visible option, not an internal
@@ -405,6 +450,10 @@ for (const needle of [
   "隐私开关",
   "redact: false",
   "marked as type key but wasn't a key frame",
+  // The decoder-choice defect: hard-requiring hardware decode is a black
+  // screen on GPU-less machines, and the changelog must record the fix.
+  "解码器由浏览器挑",
+  "重开解码器",
   // 0.5.0: the complete hypium surface.
   "0.5.0",
   "完整 hypium API：118 个方法",

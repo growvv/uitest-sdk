@@ -109,6 +109,52 @@
 
 ---
 
+## F3. 投屏链路的传输与解码（我们 vs 三个公开实现）
+
+2026-11-16 逐行读源码 + 本机实测。结论：**瓶颈在设备侧编码器，不在传输也不在解码**，三家一样。
+真正拉开差距的是「客户端要装什么」和「解码走 CPU 还是硬件」。
+
+### 对方怎么做的
+
+| 项目 | 传输 | 解码 | 渲染 | 每帧拷贝 |
+|---|---|---|---|---|
+| **hscrcpy**（OldBeer1，`src/h264_decoder.cpp`） | gRPC over nghttp2；7.0 另有一条手写 RFC6455 | **FFmpeg 软解**，`thread_count = 2`，`sws_scale` → BGRA | Direct2D，GDI 回退 | sws 直写帧缓冲（省一次 memcpy），但每帧仍 `CopyFromMemory` 上 GPU |
+| **HOScrcpy**（华为官方 jar，`MainForm.java`） | gRPC（grpc-java + Netty + protobuf，11 个 SO 打进 jar） | **FFmpeg 软解**（javacv），`sws_scale` → BGR24 | Swing `drawImage` + 抗锯齿 | sws 输出 + `DataBufferByte.get` 两次拷贝 |
+| **HarmonyMirror-macOS**（Swift + Python 桥） | gRPC → **Python 进程转发** → 本地 TCP | **VideoToolbox 硬解**（`AVSampleBufferDisplayLayer`） | 系统合成 | 桥接层两次 H.264 解析、两次 socket 边界 |
+| **uitest-sdk**（`src/live/`） | **WebSocket 单跳**，4 字节长度 + Annex-B | **WebCodecs 硬解**（浏览器内置） | Canvas `drawImage` | 无额外拷贝 |
+
+**hscrcpy 的 README 写「FFmpeg 硬解」，源码里没有任何 `hwaccel` / D3D11VA / DXVA 代码**
+（全树 grep 为空），实际是纯软件解码。它的「零拷贝」只指 sws 输出不额外 memcpy，帧仍要整帧上传 GPU。
+
+**HOScrcpy 的 SDK 根本不解码**：`ScreenCapCallback.onData(ByteBuffer)` 把裸 H.264 交给调用方，
+解码在它附带的 Swing 演示程序里。它还有一个真 bug：`hadScreenSizeChange` 置 true 后从不复位，
+分辨率变一次之后每帧都重新 `sws_getContext` + `av_image_alloc` + 窗口重排。
+
+### 我们量到的数字（本机 Windows，Chrome 157 无头）
+
+| 环节 | 实测 | 占 30 fps 预算（33.3 ms） |
+|---|---|---|
+| 服务端 Annex-B → AVCC → 帧封装 | **12 µs/帧**（关键帧 43 µs） | 0.04% |
+| 浏览器解码 1216×2688，硬解 | **1.57 ms/帧**（上限 638 fps） | 4.7% |
+| 浏览器解码 1216×2688，强制软解 | **2.46 ms/帧**（上限 406 fps） | 7.4% |
+| Canvas `drawImage` | **0.07 ms/帧** | 0.2% |
+| 合计（硬解路径） | 约 1.64 ms/帧 | 约 5% |
+
+同一段流解码上限 777 fps，而设备侧 `-frameRate 30` 只给 28.8–30.1 fps，
+`-frameRate 60` 给 59.3–65.3 fps（见 C3）。**客户端这一侧有 20 倍以上余量。**
+
+### 诚实的边界
+
+- 三个项目里**没有一个公开过解码耗时**，所以「我们更快」只在「我们量了、对方没量」这个意义上成立，
+  不能写成「比他们快 N 倍」。能写的是架构差异（硬解 vs 软解、单跳 vs 多跳）和绝对耗时。
+- 硬解与否取决于浏览器和显卡。无头 Chrome 157 上 `VideoDecoder` 默认走硬件；
+  `hardwareAcceleration: "prefer-software"` 强制软解时慢 57%，这是能测到的真实差距。
+- HarmonyMirror 的 VideoToolbox 路径也是硬解，单看解码它和我们同级；
+  它吃亏在多一层 Python 桥接（每帧两次进程边界、两次解析）。
+- 探针脚本在 `.work-bench/`（gitignored）：`codec-probe.mjs`、`swdecode.mjs`、`overflow-check.mjs`、`site-shot.mjs`。
+
+---
+
 ## G. 踩坑记录（工具类）
 
 | # | 坑 | 教训 |

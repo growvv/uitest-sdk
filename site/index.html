@@ -14,6 +14,7 @@
       <a href="#features">能力</a>
       <a href="#cli">命令行</a>
       <a href="#compare">对比</a>
+      <a href="#codec">传输与解码</a>
       <a href="#bench">实测</a>
       <a href="#video">视频</a>
       <a href="api.html">API</a>
@@ -354,6 +355,155 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
         </table>
       </div>
       <p class="table-note">对比基于我们复现过的公开工具路径，不是对厂商产品的完整评测；官方 26.x 指我们测试的 26.0.1.100 套件。</p>
+    </section>
+
+    <section id="codec" class="section codec reveal">
+      <h2>传输与解码，到底谁更快</h2>
+      <p class="section-lede">投屏好不好用，看两段：设备到客户端怎么传，客户端怎么解。我们把三条公开实现逐行读过，也在同一台机器上量了自己的数字。结论是<strong>传输不是瓶颈，解码也不是</strong>——瓶颈在设备侧编码器，三家都一样。</p>
+
+      <div class="arch-figure">
+        <svg class="arch-svg" viewBox="0 0 1040 470" role="img" aria-labelledby="codec-title codec-desc">
+          <title id="codec-title">三条投屏链路的传输与解码路径对比</title>
+          <desc id="codec-desc">上：hscrcpy 与 HOScrcpy 走 gRPC 加软件 FFmpeg 解码；中：HarmonyMirror 多一层 Python 桥接后交给 VideoToolbox；下：uitest-sdk 一条 WebSocket，浏览器 WebCodecs 解码（默认硬解，无 GPU 时退软解）。</desc>
+          <defs>
+            <marker id="codec-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#9aa0aa" />
+            </marker>
+          </defs>
+
+          <!-- lane labels -->
+          <text class="sub" x="20" y="34" font-size="13">其他方案</text>
+          <text class="sub" x="20" y="196" font-size="13">其他方案</text>
+          <text x="20" y="360" font-size="13" font-weight="600">uitest-sdk</text>
+
+          <!-- row 1: gRPC + software FFmpeg -->
+          <rect class="node" x="20" y="52" width="150" height="76" rx="12" />
+          <text x="95" y="84" text-anchor="middle" font-size="15" font-weight="600">设备编码器</text>
+          <text class="sub" x="95" y="108" text-anchor="middle" font-size="12">H.264 硬件编码</text>
+
+          <rect class="node" x="215" y="52" width="170" height="76" rx="12" />
+          <text x="300" y="80" text-anchor="middle" font-size="14" font-weight="600">gRPC / HTTP2</text>
+          <text class="sub" x="300" y="102" text-anchor="middle" font-size="12">unix socket + hdc</text>
+          <text class="sub" x="300" y="118" text-anchor="middle" font-size="12">protobuf 分帧</text>
+
+          <rect class="node" x="430" y="52" width="200" height="76" rx="12" />
+          <text x="530" y="80" text-anchor="middle" font-size="14" font-weight="600">FFmpeg 软解</text>
+          <text class="sub" x="530" y="102" text-anchor="middle" font-size="12">libavcodec + swscale</text>
+          <text class="sub" x="530" y="118" text-anchor="middle" font-size="12">YUV→RGB 走 CPU</text>
+
+          <rect class="node" x="675" y="52" width="150" height="76" rx="12" />
+          <text x="750" y="80" text-anchor="middle" font-size="14" font-weight="600">CPU 上传</text>
+          <text class="sub" x="750" y="102" text-anchor="middle" font-size="12">D2D / Swing</text>
+          <text class="sub" x="750" y="118" text-anchor="middle" font-size="12">每帧整帧拷贝</text>
+
+          <text class="sub" x="880" y="86" font-size="12">hscrcpy</text>
+          <text class="sub" x="880" y="106" font-size="12">HOScrcpy</text>
+
+          <path class="link" d="M170 90 H215" marker-end="url(#codec-arrow)" />
+          <path class="link" d="M385 90 H430" marker-end="url(#codec-arrow)" />
+          <path class="link" d="M630 90 H675" marker-end="url(#codec-arrow)" />
+
+          <!-- row 2: python bridge + VideoToolbox -->
+          <rect class="node" x="20" y="214" width="150" height="76" rx="12" />
+          <text x="95" y="246" text-anchor="middle" font-size="15" font-weight="600">设备编码器</text>
+          <text class="sub" x="95" y="270" text-anchor="middle" font-size="12">H.264 硬件编码</text>
+
+          <rect class="node" x="215" y="214" width="150" height="76" rx="12" />
+          <text x="290" y="242" text-anchor="middle" font-size="14" font-weight="600">gRPC</text>
+          <text class="sub" x="290" y="264" text-anchor="middle" font-size="12">unix socket</text>
+
+          <rect class="node" x="400" y="214" width="150" height="76" rx="12" />
+          <text x="475" y="242" text-anchor="middle" font-size="14" font-weight="600">Python 桥接</text>
+          <text class="sub" x="475" y="264" text-anchor="middle" font-size="12">本地 TCP 转发</text>
+
+          <rect class="node" x="585" y="214" width="160" height="76" rx="12" />
+          <text x="665" y="242" text-anchor="middle" font-size="14" font-weight="600">VideoToolbox</text>
+          <text class="sub" x="665" y="264" text-anchor="middle" font-size="12">硬解，系统直出</text>
+
+          <text class="sub" x="880" y="248" font-size="12">HarmonyMirror</text>
+          <text class="sub" x="880" y="268" font-size="12">macOS</text>
+
+          <path class="link" d="M170 252 H215" marker-end="url(#codec-arrow)" />
+          <path class="link" d="M365 252 H400" marker-end="url(#codec-arrow)" />
+          <path class="link" d="M550 252 H585" marker-end="url(#codec-arrow)" />
+
+          <!-- row 3: ours -->
+          <rect class="node" x="20" y="376" width="150" height="76" rx="12" />
+          <text x="95" y="408" text-anchor="middle" font-size="15" font-weight="600">设备编码器</text>
+          <text class="sub" x="95" y="432" text-anchor="middle" font-size="12">H.264 硬件编码</text>
+
+          <rect class="node node-accent" x="215" y="376" width="190" height="76" rx="12" />
+          <text x="310" y="404" text-anchor="middle" font-size="14" font-weight="600">WebSocket</text>
+          <text class="sub" x="310" y="426" text-anchor="middle" font-size="12">一条 TCP，4 字节长度前缀</text>
+
+          <rect class="node node-accent" x="450" y="376" width="200" height="76" rx="12" />
+          <text x="550" y="404" text-anchor="middle" font-size="14" font-weight="600">WebCodecs</text>
+          <text class="sub" x="550" y="426" text-anchor="middle" font-size="12">浏览器解码，默认硬解</text>
+
+          <text class="sub" x="700" y="410" font-size="12">uitest-sdk</text>
+          <text class="sub" x="700" y="430" font-size="12">无需安装解码器</text>
+
+          <path class="link link-accent" d="M170 414 H215" marker-end="url(#codec-arrow)" />
+          <path class="link link-accent" d="M405 414 H450" marker-end="url(#codec-arrow)" />
+        </svg>
+        <p class="codec-scroll-hint">左右滑动看完整链路</p>
+      </div>
+
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>传输：一条连接，没有中间层</h3>
+          <ul>
+            <li>别人走 gRPC over unix abstract socket，要 HTTP/2 栈 + protobuf 分帧；HarmonyMirror 还多一个 Python 进程做转发，每帧跨两次进程边界、两次 H.264 解析。</li>
+            <li>我们一条 WebSocket，二进制帧就是 <code>4 字节长度 + Annex-B</code>，转 AVCC 每帧 <strong>12 µs</strong>（增量帧）/ <strong>43 µs</strong>（关键帧），占 33 ms 预算的 0.04%。</li>
+            <li>同一台真机上 6.8 gRPC 与 7.0 WebSocket 帧率持平——<strong>瓶颈在编码器，不在传输</strong>，这条我们自己也测过。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>解码：交给浏览器，不用装 FFmpeg</h3>
+          <ul>
+            <li>hscrcpy 与 HOScrcpy 都是 <strong>FFmpeg 软解 + swscale 转 RGB</strong>；hscrcpy 的 README 写「硬解」，但源码里没有任何 <code>hwaccel</code>/D3D11VA 代码。</li>
+            <li>我们用浏览器自带的 WebCodecs，默认走硬件解码。1216×2688 实测 <strong>1.57 ms/帧</strong>（硬解）对 <strong>2.46 ms/帧</strong>（强制软解），画布绘制 <strong>0.07 ms</strong>。</li>
+            <li>没有 GPU 解码的机器上，浏览器自动退回软解并继续出画——不写死「必须硬解」，因为那样在这些机器上会直接配置失败、黑屏。</li>
+            <li>客户端不需要 FFmpeg、gRPC、protobuf 任何一个运行时；浏览器有就能用。</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-codec">
+          <thead>
+            <tr><th>环节</th><th>hscrcpy</th><th>HOScrcpy</th><th>HarmonyMirror</th><th>uitest-sdk</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>传输协议</td><td>gRPC（nghttp2）/ 7.0 也有 WebSocket</td><td>gRPC（grpc-java）</td><td>gRPC + 本地 TCP 转发</td><td>WebSocket，单跳</td></tr>
+            <tr><td>客户端运行时</td><td>nghttp2 + FFmpeg + protobuf</td><td>grpc-java + javacv/FFmpeg</td><td>Python + gRPC + Swift</td><td>无（浏览器内置）</td></tr>
+            <tr><td>解码</td><td>FFmpeg 软解，2 线程</td><td>FFmpeg 软解</td><td>VideoToolbox 硬解</td><td>WebCodecs（默认硬解，可退软解）</td></tr>
+            <tr><td>色彩转换</td><td>swscale 软件转 RGB</td><td>swscale 软件转 RGB</td><td>系统完成</td><td>GPU 完成</td></tr>
+            <tr><td>每帧解码实测</td><td>未公开</td><td>未公开</td><td>未公开</td><td>1.57 ms（1216×2688）</td></tr>
+            <tr><td>渲染</td><td>Direct2D / GDI 回退</td><td>Swing drawImage</td><td>AVSampleBufferDisplayLayer</td><td>Canvas drawImage</td></tr>
+            <tr><td>丢帧策略</td><td>最新帧胜出</td><td>有队列但渲染路径绕过</td><td>层未就绪即丢</td><td>写队列 + 解码队列双水位</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">「未公开」表示对方仓库里没有可引用的解码耗时数据——不是我们没查。hscrcpy 与 HOScrcpy 的结论来自源码逐行核对（<code>h264_decoder.cpp</code>、<code>MainForm.java</code>），HarmonyMirror 来自其 Swift 与 Python 桥接实现。我们的数字在同一台 Windows 机器上用 Chrome 157 无头模式测得，源码见仓库 <code>.work-bench/</code> 下的探针脚本。解码器的选择交给浏览器：显式要求 <code>prefer-hardware</code> 在无 GPU 的机器上会配置失败（实测 0/30 帧），所以只在默认配置失败后才重试软解。</p>
+
+      <h3 class="compare-sub">为什么传输不是瓶颈</h3>
+      <p class="section-lede">设备侧编码器决定了帧率上限：<code>-frameRate 30</code> 时两条通道都是 28.8–30.1 fps，<code>-frameRate 60</code> 时都是 59.3–65.3 fps。把同一段流交给浏览器解码，1216×2688 能跑到 777 fps 上限。也就是说，客户端这一侧还有 <strong>20 倍以上</strong>的余量。</p>
+      <div class="table-wrap">
+        <table class="table-budget">
+          <thead>
+            <tr><th>环节</th><th>实测</th><th>相对 30 fps 预算</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>服务端 Annex-B → AVCC → 帧封装</td><td>12 µs/帧</td><td>0.04%</td></tr>
+            <tr><td>浏览器解码 1216×2688（硬解）</td><td>1.57 ms/帧</td><td>4.7%</td></tr>
+            <tr><td>浏览器解码 1216×2688（强制软解）</td><td>2.46 ms/帧</td><td>7.4%</td></tr>
+            <tr><td>画布绘制（<code>drawImage</code>）</td><td>0.07 ms/帧</td><td>0.2%</td></tr>
+            <tr><td>合计（硬解路径）</td><td>约 1.64 ms/帧</td><td>约 5%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">32.5 ms 的预算里我们只用掉约 1.6 ms，剩下的是设备编码、网络和浏览器的合成开销。这也是为什么实测页面在持续画面下画 18.5 fps——限制来自设备端 <code>-frameRate 30</code> 与浏览器的显示节奏，不是解码能力。</p>
     </section>
 
     <section id="features" class="section features reveal">

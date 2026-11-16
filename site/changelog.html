@@ -50,6 +50,7 @@
         <ul>
           <li>新增 <code>uitest-sdk live</code>：一个本地页面同时给出画面和节点表。点节点（或点画面上的框）复制它的 ref、角色、标签与中心坐标，编号与 <code>tap --ref</code> 共用；<code>JSON</code> 按钮复制整条节点。</li>
           <li>解码全在浏览器：H.264 走 WebCodecs <code>VideoDecoder</code>，服务端把设备侧的 Annex-B 转成 AVCC 并把 SPS/PPS 拼成 <code>avcC</code> 作为 <code>description</code>；没有 MSE、没有 fMP4 重封装、没有额外缓冲层。</li>
+          <li>解码器由浏览器挑：不指定硬件加速，有 GPU 走硬解、没有就软解；默认配置被拒时再显式重试一次软解，并在页面上说明。解码中途出错会重开解码器并请求关键帧，画面能自己恢复。</li>
           <li>x86_64 没有编码器，走 MJPEG：同一页面用 <code>createImageBitmap</code> 画整帧 JPEG，不需要解码器配置或重同步。</li>
           <li>SDK 侧是 <code>LiveServer</code>：<code>LiveServer.start({ source: { createCast, readScreen } })</code>，<code>readScreen</code> 省略就是只投屏的页面。</li>
         </ul>

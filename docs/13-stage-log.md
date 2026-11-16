@@ -380,7 +380,7 @@ live 模式——在网页上看画面、取值、复制节点，带一个默认
 | `src/live/player.ts` | 单文件页面：WebCodecs 解码、MJPEG 分支、节点表、点选复制、隐私开关、fps/延迟读数 |
 | `src/live/cli.ts` | `uitest-phone live`：参数校验、设备/会话、Ctrl-C 释放 |
 | `src/agent/screen.ts` | `ScreenBuilderOptions.redact` 与 `setRedact()`；ref 不因开关重编号 |
-| 测试 | `live-ws` 14、`live-avc` 13、`live-state` 12、`live-server` 16、`live-cli` 11、`screen` +2 |
+| 测试 | `live-ws` 14、`live-avc` 13、`live-state` 12、`live-server` 16、`live-cli` 14、`screen` +2 |
 
 ### C. 实测中发现并修掉的三个缺陷
 
@@ -392,6 +392,21 @@ live 模式——在网页上看画面、取值、复制节点，带一个默认
    改为「只有所有连着的页面都要求不遮才不遮」，新页面从服务端默认值起步。
 3. **x86_64 的 MJPEG 被当成 H.264**。`createCast` 在没有编码器时返回 MJPEG 客户端，
    服务端把 JPEG 当 NAL 解析，页面同样黑屏。改为按 `castKind` 分流，同一信封（flag + pts + 整帧）。
+
+后续（2026-11-16，竞品调研时复测）又发现两个同类「连着但黑屏」的缺陷，都已修：
+
+4. **写死 `hardwareAcceleration: 'prefer-hardware'`**。这个参数是**硬要求**不是偏好：
+   在没有 GPU 解码的机器上（`--disable-gpu` 的 Chrome 实测）`isConfigSupported()` 返回 false、
+   `configure()` 抛 `OperationError`，**30 帧一帧都出不来**；同一台机器上不传该字段、
+   或传 `prefer-software`，都能正常解 30/30 帧。改为不指定，让浏览器自己挑；
+   默认配置被拒时再用 `prefer-software` 重试一次并在提示条上说明。
+5. **解码器出错后永不恢复**。`onDecodeError` 只把 `decoder` 置 null 并请求 IDR，
+   但没有任何地方再开一个解码器，于是 `onVideo` 里 `if (!decoder) return` 之后每帧都被丢掉，
+   那发出去的 IDR 请求永远没有接收方。实测：健康 20 帧 → 一个坏帧 → 卡在 20 帧不再前进。
+   改为记住最近一次 `hello`，出错时立刻重开解码器再请求关键帧；实测恢复后继续画到 40 帧。
+
+两条都有先失败后通过的测试（`live-cli.test.ts`），并用无头 Chrome 加载真实的 `PLAYER_HTML`
+验证过新旧行为：旧代码 0/30 与 20→20，新代码 30/30 与 20→40。
 
 ### D. 真机验收
 

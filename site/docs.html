@@ -327,6 +327,7 @@ npx uitest-sdk live --no-layout        # 只投屏</code></pre>
       <p><strong>隐私开关默认打开</strong>：密码框与验证码在节点表和画面上都被遮住。关掉后服务端用 <code>redact: false</code> 重新读布局，原文才出现 —— 遮罩在读的时候完成，不是事后擦除。多个页面同时连着时，只要有一个还开着遮罩，共享的屏幕模型就保持遮罩。</p>
       <p>状态机是 <code>idle → starting → live → reconnecting → stopping → stopped</code>，失败从任意状态进入 <code>failed</code> 并按 0.5/1/2/4/5 s 退避重启；页面重载有 5 s 宽限期，不重开投流。背压在 socket 写队列超过 1 MB 时丢增量帧并请求 IDR，页面侧 <code>decodeQueueSize &gt; 4</code> 时同样丢。</p>
       <p>真机 1216×2688 / 30 fps 实测：首帧约 3.1 s（含 daemon 启动），画面持续变化时页面绘制 <strong>18.5 fps</strong>，帧间隔中位 33 ms、p90 55 ms，每帧平均 11.6 KB。</p>
+      <p>这条链路每一步的耗时都量过：服务端把 Annex-B 转 AVCC 并封装成帧是 <strong>12 µs/帧</strong>（关键帧 43 µs），浏览器解码 1216×2688 是 <strong>1.57 ms/帧</strong>（硬解）到 2.46 ms/帧（强制软解），画布绘制 0.07 ms。30 fps 的 33 ms 预算里只用掉约 5%，瓶颈在设备侧编码器。<a href="index.html#codec">和 hscrcpy / HOScrcpy / HarmonyMirror 的逐行对比见首页</a>。</p>
       <pre><code>import { LiveServer } from "uitest-sdk";
 
 const server = await LiveServer.start({
