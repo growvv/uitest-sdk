@@ -112,10 +112,9 @@ trace）全在磁盘。但**设备侧**仍有一个 `uitest start-daemon singlen
 
 ---
 
-## 2026-11-16 · 完整 hypium API（未发版）
+## 2026-11-16 · 完整 hypium API（0.5.0）
 
 本阶段把 hypium 6.1.0.210 的公开 API 全部铺平成 SDK 门面，并为它单开一个官网页面。
-**这一阶段只在 master 上，没有发 npm、没有打 tag。**
 
 ### A. 交付
 
@@ -158,11 +157,24 @@ trace）全在磁盘。但**设备侧**仍有一个 `uitest start-daemon singlen
   否则 Pages 构建会在「catalog.js is missing」处失败。
 - `package.json` 的 `bin` 仍写成 `./dist/bin.js`，npm 11 会警告并自动修正；发版前顺手去掉 `./`。
 
-### E. 下一阶段候选
+### E. 发布
 
-1. 把这一阶段发成 `0.5.0`：需要更新 `site/docs.html` 的版本号、`changelog.html` 的「未发布」区转为正式版本、
-   `docs/api.md` 的版本行，并重新跑一遍完整验收；
-2. 7.0 casting（WebSocket 分支）实验支持；
-3. `perfmonitor.so`（HTTP 9999）性能指标接入；
-4. 录制参数设备侧可配置；
-5. （可选）接管期间的线性「人的操作」时间线。
+| 项目 | 结果 |
+|---|---|
+| Release commit | `c72c9f6 feat: expose the complete hypium API and publish 0.5.0` |
+| Git tag | `v0.5.0`（已推 origin） |
+| npm | `latest = 0.5.0`；分阶段发布，约 4 分钟后在 registry 可见 |
+| GitHub Release | https://github.com/growvv/uitest-sdk/releases/tag/v0.5.0 |
+| 官网 | Pages 部署成功；`api.html` 首次上线（此前 404），三个页面都显示 0.5.0 |
+| 全新安装验证 | `npm install uitest-sdk@0.5.0` → `uitest-phone --version` 输出 `0.5.0`；`HypiumDriver` / `HYPIIUM_CATALOG`(118) / `Gesture` / `UnsupportedError` 均可导入 |
+
+发版时发现并处理：`check-site.mjs` 依赖 `dist/hypium/catalog.js`，而 Pages 工作流只跑检查不构建，
+CI 会在 `catalog.js is missing` 处失败。已在工作流中补 `setup-node` + `npm ci` + `npm run build`，
+并用「移走 dist」复现过该失败。
+
+### F. 下一阶段候选
+
+1. 7.0 casting（WebSocket 分支）实验支持；
+2. `perfmonitor.so`（HTTP 9999）性能指标接入；
+3. 录制参数设备侧可配置；
+4. （可选）接管期间的线性「人的操作」时间线。
