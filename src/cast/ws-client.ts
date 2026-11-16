@@ -5,6 +5,7 @@ import type { HdcRunner } from "../hdc.js";
 import { DaemonStartError, ExtensionMissingError, UitestError } from "../errors.js";
 import type { H264Chunk } from "../model.js";
 import type { CastClient, CastOptions } from "./types.js";
+import { ownDaemon, pids } from "./daemon.js";
 import {
   buildHandshake,
   decodeFrames,
@@ -57,10 +58,6 @@ function freePort(): Promise<number> {
       srv.close(() => resolve(port));
     });
   });
-}
-
-function pids(output: string): Set<string> {
-  return new Set(output.split(/\s+/).filter((t) => /^\d+$/.test(t)));
 }
 
 /**
@@ -119,8 +116,6 @@ export class WsCastClient implements CastClient {
     const extensionName = basename(opts.wsExtension);
     await pushExtension(hdc, opts.wsExtension, `/data/local/tmp/${extensionName}`);
 
-    const before = pids(await hdc.shell("pidof uitest"));
-
     const args = [
       "start-daemon",
       "singleness",
@@ -143,16 +138,18 @@ export class WsCastClient implements CastClient {
     ];
     await hdc.shell(`/system/bin/uitest ${args.join(" ")}`);
 
-    const after = pids(await hdc.shell("pidof uitest"));
-    const fresh = [...after].filter((p) => !before.has(p));
-    if (fresh.length !== 1) {
+    // Identify our daemon by its `-p <port>` in the argv, not by pid timing:
+    // two clients starting in the same window each see the other's daemon as a
+    // new pid, and killing that one is how two pages take turns killing each
+    // other's daemons.
+    const ownPid = await ownDaemon(hdc, `-p ${port}`);
+    if (!ownPid) {
       throw new DaemonStartError(
-        `casting daemon did not start (pidof uitest showed ${fresh.length} new processes; ` +
+        `casting daemon did not start (no process carries -p ${port}; ` +
           `port ${port} may already be in use by another daemon)`,
         "ENODAEMON",
       );
     }
-    const ownPid = fresh[0]!;
 
     let localPort = 0;
     let socket: Socket | null = null;

@@ -3,15 +3,19 @@ import { dirname, join } from "node:path";
 import type { CastClient, CastOptions } from "../cast/types.js";
 import { UitestError } from "../errors.js";
 
-/** Socket name for the record daemon under the grpc transport. */
-const RECORD_SOCKET = "uitest_live_record";
-
 /** The port offset for the record daemon under the ws transport. */
 const RECORD_PORT_OFFSET = 1;
 
 export interface RecordingOptions {
   /** Where the MP4 goes; the file is named by start time under `shots/`. */
   stateDir: string;
+  /**
+   * Socket name for the record daemon, unique per process.
+   *
+   * A fixed name is not usable: a second `live` on the same device would take
+   * over the first one's socket, and the two daemons would fight over it.
+   */
+  socketName: string;
   createCast(opts: CastOptions): Promise<CastClient>;
   /** The stream's own cast options, copied so the record daemon differs only
    *  where it must: mode, output path and socket/port. */
@@ -50,7 +54,7 @@ export class Recording {
       // A second daemon on the stream's socket would take the picture away.
       ...(stream.transport === "ws"
         ? { port: (stream.port ?? 5000) + RECORD_PORT_OFFSET }
-        : { socketName: RECORD_SOCKET }),
+        : { socketName: this.opts.socketName }),
       outputPath: out,
     });
     // Set only after the cast exists: a failed start must leave no half-state

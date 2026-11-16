@@ -151,17 +151,28 @@ export async function startLive(
     return out;
   };
 
+  // Each page gets its own daemons: a fixed socket name lets a second `live`
+  // on the same device take over the first one's socket, and the two then
+  // fight over it. The suffix is the process id, which is unique on this host.
+  const socketSuffix = String(process.pid);
+  const streamCast: CastOptions = {
+    mode: "stream",
+    ...opts.cast,
+    ...(opts.cast.transport === "ws" ? {} : { socketName: `uitest_live_${socketSuffix}` }),
+  };
+
   // Recording lives in its own module: the record daemon has to run beside the
   // stream daemon, and the client is already recording when it is created, so
   // opening a stream on it would start a second `onStart` the extension refuses.
   const recording = new Recording({
     stateDir,
+    socketName: `uitest_live_record_${socketSuffix}`,
     createCast: (castOpts) => device.createCast(castOpts),
-    streamCast: { mode: "stream", ...opts.cast },
+    streamCast,
   });
 
   const source: LiveServerOptions["source"] = {
-    createCast: () => device.createCast({ mode: "stream", ...opts.cast }),
+    createCast: () => device.createCast(streamCast),
     ...(opts.layout ? { readScreen } : {}),
     capture,
     startRecording: () => recording.start(),

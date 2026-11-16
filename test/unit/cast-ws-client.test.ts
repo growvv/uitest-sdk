@@ -88,7 +88,10 @@ function startFakeExtension(
 }
 
 /** Fake hdc whose `fportAdd` points at the fake extension's port. */
-function fakeHdc(port: number, over: { pidsAfter?: string; pidsLive?: string; fportThrows?: boolean } = {}): {
+function fakeHdc(
+  port: number,
+  over: { pidsLive?: string; psLine?: string; fportThrows?: boolean } = {},
+): {
   hdc: HdcRunner;
   calls: string[];
   added: number[];
@@ -99,14 +102,17 @@ function fakeHdc(port: number, over: { pidsAfter?: string; pidsLive?: string; fp
   const added: number[] = [];
   const removed: number[] = [];
   const pushed: string[] = [];
-  let pidof = 0;
   const hdc = {
     async shell(cmd: string): Promise<string> {
       calls.push(cmd);
-      if (cmd.includes("pidof uitest")) {
-        pidof++;
-        if (pidof === 1) return "1000";
-        return over.pidsAfter ?? "1000 2000";
+      if (cmd.includes("pidof uitest")) return over.pidsLive ?? "1000 2000";
+      // The daemon is identified by `-p <port>` in its argv; the port is what
+      // tells two daemons on one device apart.
+      if (cmd.includes("ps -ef")) {
+        return (
+          over.psLine ??
+          "shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness -p 5000"
+        );
       }
       if (cmd.includes("/proc/net/tcp")) return " 8: 00000000:1388 00000000:0000 0A";
       // Record mode pulls this file on dispose; report it as written.
@@ -194,9 +200,36 @@ describe("WsCastClient", () => {
     await fake.close();
   });
 
+  it("picks its own daemon by port when another started in the same window", async () => {
+    // Two pages on one device start a daemon each; a pidof diff cannot tell
+    // them apart, but the argv can.
+    const fake = await startFakeExtension();
+    const { hdc, calls } = fakeHdc(fake.port, {
+      pidsLive: "1000 2000 3000",
+      psLine:
+        "shell  3000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness -p 5000",
+    });
+    const cast = await WsCastClient.start(hdc, { mode: "stream", port: 5000, wsExtension });
+    await cast.dispose();
+    expect(calls.filter((c) => c.startsWith("kill -9"))).toEqual(["kill -9 3000"]);
+    await fake.close();
+  });
+
+  it("does not kill a daemon serving another port", async () => {
+    const fake = await startFakeExtension();
+    const { hdc, calls } = fakeHdc(fake.port, {
+      psLine: "shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness -p 5001",
+    });
+    await expect(WsCastClient.start(hdc, { mode: "stream", port: 5000, wsExtension })).rejects.toThrow(
+      DaemonStartError,
+    );
+    expect(calls.filter((c) => c.startsWith("kill -9"))).toEqual([]);
+    await fake.close();
+  });
+
   it("rejects a daemon that never appears", async () => {
     const fake = await startFakeExtension();
-    const { hdc } = fakeHdc(fake.port, { pidsAfter: "1000" });
+    const { hdc } = fakeHdc(fake.port, { psLine: "" });
     await expect(WsCastClient.start(hdc, { mode: "stream", port: 5000, wsExtension })).rejects.toThrow(DaemonStartError);
     await fake.close();
   });

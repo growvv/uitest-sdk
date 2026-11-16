@@ -35,6 +35,8 @@ const hdcState = {
   stuck: false,
   /** `cat /proc/<pid>/cmdline` output for each pid `pidof uitest` reports. */
   cmdlines: {} as Record<string, string>,
+  /** `ps -ef` output; `start-daemon` appends a line for the new daemon. */
+  psLines: [] as string[],
   /** Per-target hdc state; an id without an entry is Connected. */
   states: {} as Record<string, string>,
 };
@@ -168,6 +170,14 @@ vi.mock("../../src/hdc.js", () => {
         hdcState.listening = true;
         hdcState.pidof = hdcState.pidofAfterStart;
         hdcState.stuck = false;
+        // Echo the argv the way a real `ps -ef` does, so the client can find
+        // the daemon it started by its socket name or port.
+        const socket = /-scrcpy_socket_name (\S+)/.exec(cmd)?.[1];
+        const port = /-p (\d+)/.exec(cmd)?.[1];
+        const marker = socket ? `-scrcpy_socket_name ${socket}` : port ? `-p ${port}` : "";
+        hdcState.psLines.push(
+          `shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness ${marker}`,
+        );
         return "";
       }
       if (cmd.startsWith("kill -9 ")) {
@@ -180,6 +190,8 @@ vi.mock("../../src/hdc.js", () => {
         return hdcState.cmdlines[pid] ?? "";
       }
       if (cmd.includes("pidof uitest")) return hdcState.pidof;
+      // The daemon is identified by its argv; the port tells two apart.
+      if (cmd.includes("ps -ef")) return hdcState.psLines.join("\n");
       if (cmd.includes("/proc/net/tcp")) {
         if (!hdcState.listening) return "";
         return ["  2: 00000000:1F4C 00000000:0000 0A", ...hdcState.sockets].join("\n");
@@ -220,6 +232,7 @@ beforeEach(() => {
   hdcState.removedPorts = [];
   hdcState.pidof = "1000";
   hdcState.pidofAfterStart = "1000 2000";
+  hdcState.psLines = [];
   hdcState.extDir = makeExtDir("arm64", true);
   hdcState.agentPort = 0;
   hdcState.castPort = 0;

@@ -31,6 +31,7 @@ function harness() {
   const stateDir = "C:/tmp/state";
   const rec = new Recording({
     stateDir,
+    socketName: "uitest_live_record_4242",
     createCast: async (opts) => {
       options.push(opts);
       const c = new FakeRecordClient();
@@ -78,6 +79,7 @@ describe("Recording", () => {
     const options: CastOptions[] = [];
     const rec = new Recording({
       stateDir: "C:/tmp/state",
+      socketName: "uitest_live_record_4242",
       createCast: async (opts) => {
         options.push(opts);
         const c = new FakeRecordClient();
@@ -114,6 +116,7 @@ describe("Recording", () => {
     let calls = 0;
     const rec = new Recording({
       stateDir: "C:/tmp/state",
+      socketName: "uitest_live_record_4242",
       createCast: async () => {
         calls++;
         if (calls === 1) throw new Error("daemon did not start");

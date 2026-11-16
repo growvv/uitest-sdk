@@ -154,8 +154,11 @@ export class Lease {
         await unlink(opts.path).catch(() => undefined);
         continue;
       }
-      if (current.task === info.task) {
-        // Re-entering the same task is a no-op that keeps the original owner.
+      // A re-entry is the same process coming back, not merely a task with the
+      // same name: every `live` page calls its task "live", and matching on the
+      // name alone let two processes both hold the device. The name is a label
+      // for `lease_held`; the pid is the identity.
+      if (current.task === info.task && current.pid === pid && current.host === host) {
         // A handoff that asks again is the exception: the person may now need
         // a different step, and the reason is the message they are acting on.
         if (info.reason && current.hold && current.reason !== info.reason) {

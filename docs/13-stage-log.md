@@ -623,3 +623,57 @@ node scripts/check-site.mjs          site ok
 ```
 
 真机：`live` 页面按 Record，画面 fps 保持 29–30 不掉；按 Stop 得到 41,830 字节的 MP4。
+
+---
+
+## 2026-11-16 · 多设备与多实例：归因改用 `ps -ef`、租约认进程（未发版）
+
+探索「多设备同时投屏」时，顺手挖出两个真问题。两个都不是多设备特有的——同一台设备上开两个
+`live` 页面就能复现。
+
+### A. daemon 归因：`pidof` 差集 → `ps -ef` 的 argv
+
+原来 `H264CastClient.start()` 用「起 daemon 前后 `pidof uitest` 的差集」认自己的进程，差集
+不等于 1 就报错。两个页面同时启动时，各自看到「2 个新进程」，于是两个都失败、都重试、都
+把对方刚起的 daemon 杀掉——实测成了一种活锁，页面反复 `starting → failed → starting`，
+设备上堆了 8 个 daemon。
+
+试过 `cat /proc/<pid>/cmdline`（`Permission denied`）和 `/proc/<pid>/fd`（同样拒绝），最后
+发现 **`ps -ef` 能读到完整 argv**：
+
+```
+shell 49575 1 0 23:18:47 ? 00:00:00 uitest start-daemon singleness ... -scrcpy_socket_name scrcpy_grpc_socket
+```
+
+所以归因改成按 argv 里的 socket 名（gRPC）或端口（WebSocket）精确匹配，见
+`src/cast/daemon.ts` 的 `ownDaemon()`。匹配不到就报错，**不杀任何进程**——那些新 pid 是别人的。
+
+`live` 也给每个进程生成了自己的 socket 名（`uitest_live_<pid>`，录制是
+`uitest_live_record_<pid>`），这样两页各自一个 daemon、互不覆盖。实测两页同时 `live`、
+各自 socket 名不同、都能出流。
+
+### B. 租约：同名 task 不再算重入
+
+`Lease.acquire()` 原来只要 task 名相同就当作重入，直接返回原 lease。而每个 `live` 都把
+task 叫 `live`，于是两个**不同进程**都能拿到设备——这正是租约要防的并发驱动。
+
+改成要求 pid + host 也相同才算重入。task 名只是给 `lease_held` 看的标签，身份是进程。
+有先红后绿的测试（`lease.test.ts`「refuses the same task name from a second process」）。
+
+### C. 多设备
+
+不需要新代码：每台设备一个 `live` 进程、端口分开即可。`pidof` 按 target 跑，状态文件
+（`refs-`/`approvals-`/`grants-`/`leases/<tag>`）都按设备 tag 分，`traces/` 的文件名带
+毫秒时间戳与进程内序号。唯一要注意的是同设备别开两个页面——现在会被租约挡住。
+
+### D. 验收
+
+```
+npm run typecheck / typecheck:tests   干净
+npm test                              664/664（新增 4 个用例）
+真机：两个 live 页各自 uitest_live_<pid> socket，都进入 live
+真机：同 state-dir 的第二个 live       lease_held（不再静默拿到设备）
+```
+
+清理时发现 `hdc fport ls` 会堆着几十条历史转发（每次失败的启动留一条）。这是实验残留，
+不是代码问题，但值得记一笔：`fport rm` 要写完整的 `local remote` 两段，只写一段不生效。

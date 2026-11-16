@@ -7,6 +7,7 @@ import type { HdcRunner } from "../hdc.js";
 import { DaemonStartError, UitestError } from "../errors.js";
 import type { H264Chunk } from "../model.js";
 import type { CastClient, CastOptions, JpegFrame } from "./types.js";
+import { ownDaemon, pids } from "./daemon.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -45,11 +46,6 @@ function freePort(): Promise<number> {
       srv.close(() => resolve(port));
     });
   });
-}
-
-/** Parses `pidof` output. Multiple pids come back space-separated on one line. */
-function pids(output: string): Set<string> {
-  return new Set(output.split(/\s+/).filter((t) => /^\d+$/.test(t)));
 }
 
 /**
@@ -94,8 +90,6 @@ export class H264CastClient implements CastClient {
       );
     }
 
-    const before = pids(await hdc.shell("pidof uitest"));
-
     const args = [
       "start-daemon",
       "singleness",
@@ -120,22 +114,19 @@ export class H264CastClient implements CastClient {
     ];
     await hdc.shell(`/system/bin/uitest ${args.join(" ")}`);
 
-    // The only way to find our own daemon: pidof returns every uitest process,
-    // and neither /proc/<pid>/fd nor `netstat -p` is readable from shell.
-    const after = pids(await hdc.shell("pidof uitest"));
-    const fresh = [...after].filter((p) => !before.has(p));
-    // Exactly one new pid is attributable to this call; zero means the daemon
-    // never started, several means a sibling started one in the same window.
-    // Whichever it is, the processes that did appear are ours to clean up:
-    // walking away from them leaks a device process per failed start.
-    if (fresh.length !== 1) {
-      for (const pid of fresh) await hdc.shell(`kill -9 ${pid}`).catch(() => undefined);
+    // Identify our daemon by the socket name in its argv, not by the timing of
+    // its arrival: `pidof` returns every uitest process, so a sibling starting
+    // in the same window would otherwise be indistinguishable from ours.
+    // Nothing is killed here — a fresh pid that does not carry our socket name
+    // belongs to somebody else, and killing it would make two clients take
+    // turns killing each other's daemons.
+    const ownPid = await ownDaemon(hdc, `-scrcpy_socket_name ${socketName}`);
+    if (!ownPid) {
       throw new DaemonStartError(
-        `casting daemon did not start (pidof uitest showed ${fresh.length} new processes; extension ${EXTENSION_NAME})`,
+        `casting daemon did not start (no process carries -scrcpy_socket_name ${socketName}; extension ${EXTENSION_NAME})`,
         "ENODAEMON",
       );
     }
-    const ownPid = fresh[0]!;
 
     let localPort = 0;
     try {

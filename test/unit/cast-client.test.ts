@@ -4,10 +4,10 @@ import { DaemonStartError, UitestError } from "../../src/errors.js";
 import type { HdcRunner } from "../../src/hdc.js";
 
 interface FakeState {
-  pidsBefore: string;
-  pidsAfter: string;
-  /** Third and later `pidof` calls; defaults to `pidsAfter`. */
+  /** `pidof uitest`: only used now to check our daemon is still alive. */
   pidsLive: string;
+  /** Output of `ps -ef`, filtered by socket name. */
+  psLine: string;
   socketLine: string;
   fportThrows: boolean;
   calls: string[];
@@ -17,9 +17,8 @@ interface FakeState {
 
 function fakeHdc(over: Partial<FakeState> = {}): { hdc: HdcRunner; st: FakeState } {
   const st: FakeState = {
-    pidsBefore: "1000",
-    pidsAfter: "1000 2000",
     pidsLive: "1000 2000",
+    psLine: "shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness --extension-name libscreen_casting.z.so -scrcpy_socket_name scrcpy_grpc_socket",
     socketLine: "0000: 00000002 00000000 00010000 0001 01 12345 @scrcpy_grpc_socket",
     fportThrows: false,
     calls: [],
@@ -27,14 +26,14 @@ function fakeHdc(over: Partial<FakeState> = {}): { hdc: HdcRunner; st: FakeState
     removed: [],
     ...over,
   };
-  let pidofCalls = 0;
   const hdc = {
     async shell(cmd: string): Promise<string> {
       st.calls.push(cmd);
-      if (cmd.includes("pidof uitest")) {
-        pidofCalls++;
-        return pidofCalls === 1 ? st.pidsBefore : pidofCalls === 2 ? st.pidsAfter : st.pidsLive;
-      }
+      if (cmd.includes("pidof uitest")) return st.pidsLive;
+      // `ps -ef` carries the full argv, including the socket name, so the
+      // daemon that serves *this* socket can be identified even when several
+      // started in the same window.
+      if (cmd.includes("ps -ef")) return st.psLine;
       if (cmd.includes("/proc/net/unix")) return st.socketLine;
       return "";
     },
@@ -74,19 +73,30 @@ describe("H264CastClient.start", () => {
     expect(st.added).toEqual([]);
   });
 
-  it("refuses to claim a daemon when several fresh pids appear at once", async () => {
-    const { hdc } = fakeHdc({ pidsAfter: "1000 2000 3000" });
-    await expect(H264CastClient.start(hdc, { mode: "stream" })).rejects.toThrow(DaemonStartError);
+  it("picks its own daemon by socket name when several started at once", async () => {
+    // Two `live` pages on one device start a daemon each in the same window.
+    // A pidof diff then shows two new pids, but only one of them carries our
+    // socket name — the other belongs to the sibling and is not ours to kill.
+    const { hdc, st } = fakeHdc({
+      pidsLive: "1000 2000 3000",
+      psLine:
+        "shell  3000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness --extension-name libscreen_casting.z.so -scrcpy_socket_name scrcpy_grpc_socket",
+    });
+    const client = await H264CastClient.start(hdc, { mode: "stream" });
+    await client.dispose();
+    expect(st.calls.filter((c) => c.startsWith("kill -9"))).toEqual(["kill -9 3000"]);
   });
 
-  it("kills the fresh daemons it cannot attribute before giving up", async () => {
-    // A second daemon starting in the same window is not always an error we can
-    // walk away from: the ones that did start are ours to clean up. Leaving
-    // them behind leaks a device process per failed start — measured as four
-    // orphaned xdevice_scrcpy processes after a few failed recordings.
-    const { hdc, st } = fakeHdc({ pidsAfter: "1000 2000 3000" });
+  it("does not kill a daemon it cannot attribute to its socket", async () => {
+    // Without a match, the fresh processes are somebody else's. Killing them
+    // would make two live pages take turns killing each other's daemons, which
+    // is exactly the livelock this replaces.
+    const { hdc, st } = fakeHdc({
+      pidsLive: "1000 2000 3000",
+      psLine:
+        "shell  2000  1 0 00:00:00 ? 00:00:00 uitest start-daemon singleness --extension-name libscreen_casting.z.so -scrcpy_socket_name someone_else",
+    });
     await expect(H264CastClient.start(hdc, { mode: "stream" })).rejects.toThrow(DaemonStartError);
-    expect(st.calls).toContain("kill -9 2000");
-    expect(st.calls).toContain("kill -9 3000");
+    expect(st.calls.filter((c) => c.startsWith("kill -9"))).toEqual([]);
   });
 });

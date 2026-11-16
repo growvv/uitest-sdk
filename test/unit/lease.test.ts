@@ -35,12 +35,27 @@ describe("Lease", () => {
     });
   });
 
-  it("lets the same task re-enter and keeps the original token", async () => {
+  it("lets the same task re-enter from the same process and keeps the token", async () => {
     await withDir(async (dir) => {
       const path = join(dir, "dev.lock");
       const first = await Lease.acquire({ path, task: "same" });
       const second = await Lease.acquire({ path, task: "same" });
       expect(second.info.token).toBe(first.info.token);
+    });
+  });
+
+  it("refuses the same task name from a second process", async () => {
+    // Two `live` pages both call their task "live". Matching on the name alone
+    // let both hold the device, and the two casting daemons then fought over
+    // the socket — measured as a livelock where each page killed the other's
+    // daemon. A task name is not an identity; the process is.
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      await Lease.acquire({ path, task: "live", pid: 4242, isAlive: () => true });
+      const err = await Lease.acquire({ path, task: "live", pid: 4343, isAlive: () => true }).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(LeaseHeldError);
     });
   });
 
