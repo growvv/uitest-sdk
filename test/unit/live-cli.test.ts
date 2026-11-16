@@ -56,6 +56,26 @@ describe("liveOptions", () => {
 });
 
 describe("PLAYER_HTML", () => {
+  it("has the takeover controls and input bar", () => {
+    for (const id of ["takeover", "control-state", "input-ms", "keys", "send-text",
+      "key-back", "key-home", "key-enter", "key-delete", "touch"]) {
+      expect(PLAYER_HTML).toContain(`id="${id}"`);
+    }
+  });
+
+  it("handles the control and input messages the server sends", () => {
+    expect(PLAYER_HTML).toContain("msg.type === 'control'");
+    expect(PLAYER_HTML).toContain("action: 'take'");
+    expect(PLAYER_HTML).toContain("action: 'release'");
+    expect(PLAYER_HTML).toContain("action: 'pinch'");
+  });
+
+  it("only sends input while this tab controls", () => {
+    expect(PLAYER_HTML).toContain("function sendInput");
+    expect(PLAYER_HTML).toContain("controlledId");
+    expect(PLAYER_HTML).toContain("clientId");
+  });
+
   it("decodes with WebCodecs and asks for a keyframe when it needs one", () => {
     // The page's whole latency story rests on these three things: the browser
     // decoder, a keyframe request after any gap, and dropping deltas it cannot
