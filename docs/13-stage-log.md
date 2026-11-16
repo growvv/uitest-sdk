@@ -251,3 +251,17 @@ record  MP4 156,320 B / stsz.sample_count 128（约 6 s 连续滑动）
 - `site/`：changelog 新增 0.6.0、docs.html 投流小节与版本、index.html 版本与导出数
 - `scripts/check-site.mjs`：新增 `transport: "ws"` / `wsExtension` / 单客户端规则三条断言
 - 版本 `0.5.0 → 0.6.0`
+
+### F. 发布
+
+| 项目 | 结果 |
+|---|---|
+| Release commit | `e4c1dd5 release: 0.6.0 — 7.0 WebSocket casting transport` |
+| Git tag | `v0.6.0`（已推 origin） |
+| npm | `latest = 0.6.0`（分阶段发布，约 70 秒后可见） |
+| GitHub Release | https://github.com/growvv/uitest-sdk/releases/tag/v0.6.0 |
+| 官网 | Pages 部署成功（45 s）；changelog / docs / index 均显示 0.6.0 |
+| 全新安装验证 | `npm install uitest-sdk@0.6.0` → `uitest-phone --version` 输出 `0.6.0`；107 个运行时导出，`WsCastClient` / `HypiumDriver` / 118 条 catalog 均可导入 |
+
+发版时处理：旧 npm token 没有 bypass 2FA 权限（`403`），改用用户提供的、开启 bypass 的 granular token；
+临时 npmrc 放在仓库外，发布完成后立即删除。
