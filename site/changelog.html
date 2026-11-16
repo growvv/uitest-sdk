@@ -45,7 +45,7 @@
       <section class="release" id="v0-8-0">
         <div class="release-head">
           <h2>0.8.0</h2>
-          <span class="release-date">未发布 · master</span>
+          <span class="release-date">2026-11-16</span>
           <span class="release-tag">截图与录屏、多实例</span>
         </div>
 
@@ -60,7 +60,7 @@
         <ul>
           <li>每个 <code>live</code> 进程用自己的 socket 名（<code>uitest_live_&lt;pid&gt;</code>），互不覆盖。</li>
           <li>daemon 归因改用 <code>ps -ef</code> 的 argv 精确匹配，不再靠「启动前后 pidof 的差集」。原来两个页面同时启动时，各自看到 2 个新进程、各自失败重试、并把对方刚起的 daemon 杀掉，实测陷入活锁并堆出 8 个进程。</li>
-          <li>租约的同名 task 重入现在要求 pid 相同。原来只要 task 名一样就算重入，于是两个进程都能拿到设备——这正是租约要防的并发驱动。</li>
+          <li>租约的同名 task 重入现在要求 pid 相同。原来只要 task 名一样就算重入，于是两个进程都能拿到设备——这正是租约要防的并发驱动。人的 <code>hold</code> 是例外：它没有所属进程（<code>hold</code> 写完就退出，人在另一个 shell 里才 <code>resume</code>），所以按「有没有人持机」判重入。第一版漏了这一条，真机验收时 <code>resume</code> 放不掉租约。</li>
         </ul>
 
         <h3>修掉两处静默失败</h3>
