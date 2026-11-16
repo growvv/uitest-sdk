@@ -158,3 +158,77 @@ describe("LiveInput pointer", () => {
     expect(stats?.p95).toBeGreaterThanOrEqual(stats!.p50);
   });
 });
+
+describe("LiveInput pinch, wheel and text", () => {
+  it("records a pinch baseline, then sends one segment per update", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.pinch(200, 400, 100);
+    await settle();
+    expect(lane.ops("pinch")).toEqual([]);
+    input.pinch(200, 400, 140);
+    input.pinch(200, 400, 180);
+    await settle();
+    expect(lane.ops("pinch")).toEqual([
+      [200, 400, 100, 140, 140],
+      [200, 400, 140, 180, 140],
+    ]);
+  });
+
+  it("lifts a drag before starting a pinch", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.down(10, 10);
+    await settle();
+    input.pinch(200, 400, 100);
+    await settle();
+    expect(lane.calls.map((c) => c[0])).toEqual(["touchDown", "touchUp"]);
+    expect(input.state()).toBe("idle");
+  });
+
+  it("coalesces wheel deltas while one scroll is in flight", async () => {
+    const lane = new FakeLane();
+    lane.hold = true;
+    const input = new LiveInput({ lane, bounds });
+    input.wheel(100, 200, 100);
+    await settle();
+    input.wheel(100, 200, 200);
+    input.wheel(100, 200, 100);
+    lane.release();
+    await settle();
+    expect(lane.ops("scroll")).toEqual([
+      [100, 200, true, 1],
+      [100, 200, true, 3],
+    ]);
+  });
+
+  it("chooses typing or paste from length and charset", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds, focusPoint: () => ({ x: 50, y: 60 }) });
+    input.type("abc");
+    await settle();
+    input.type("你好");
+    input.type("   ");
+    input.type("a\nb");
+    await settle();
+    expect(lane.ops("text")).toEqual([
+      [50, 60, "abc", "typing"],
+      [50, 60, "你好", "paste"],
+      [50, 60, "a b", "typing"],
+    ]);
+  });
+
+  it("prefers an explicit point, then the last press", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.down(11, 22);
+    input.up(11, 22);
+    input.type("abc");
+    input.type("xyz", { x: 7, y: 8 });
+    await settle();
+    expect(lane.ops("text")).toEqual([
+      [11, 22, "abc", "typing"],
+      [7, 8, "xyz", "typing"],
+    ]);
+  });
+});
