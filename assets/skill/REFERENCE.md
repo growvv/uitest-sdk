@@ -406,6 +406,27 @@ when a person wants to look at the layout, or when a ref is ambiguous.
 
 Both files default to `<state-dir>/shots/inspect-<timestamp>.jpg`.
 
+### live (not a command)
+
+```
+live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
+     [--scale 1..5] [--fps 15|30|60|120] [--transport grpc|ws]
+```
+
+Serves the phone in a browser tab: the screen on the left, the node table on the
+right. Clicking a node (or its box on the picture) copies its ref, role, label
+and centre; the refs are the same ones `tap --ref` takes. H.264 is decoded by
+the browser's own WebCodecs decoder, so no plugin or build step is involved.
+
+Credentials are masked by default — password values and codes are hidden in the
+node table and boxed over on the picture. `--privacy off` only sets the page's
+initial state; the switch in the page still works, and the server follows it.
+
+Like `mcp`, `hold` and `resume`, this is not one of the commands: it runs until
+interrupted and holds the device lease the whole time, so agent commands stop
+with `lease_held` while a person is watching. It listens on `127.0.0.1` unless
+`--host` says otherwise.
+
 ### report
 
 ```

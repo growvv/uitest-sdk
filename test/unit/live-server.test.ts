@@ -1,0 +1,513 @@
+import { describe, it, expect, afterEach } from "vitest";
+import { createConnection, type Socket } from "node:net";
+import { LiveServer } from "../../src/live/server.js";
+import { buildHandshake, decodeFrames, encodeTextFrame } from "../../src/cast/ws.js";
+import type { H264Chunk } from "../../src/model.js";
+import type { JpegFrame } from "../../src/cast/types.js";
+import type { Screen } from "../../src/agent/screen.js";
+import type { CastClient } from "../../src/cast/types.js";
+
+const SPS = Buffer.from([0x67, 0x64, 0x00, 0x28, 0xac, 0xd9, 0x40, 0x78]);
+const PPS = Buffer.from([0x68, 0xee, 0x3c, 0xb0]);
+const IDR = Buffer.from([0x65, 0x88, 0x84, 0x00]);
+
+const annexB = (...units: Buffer[]): Buffer =>
+  Buffer.concat(units.map((u) => Buffer.concat([Buffer.from([0, 0, 0, 1]), u])));
+
+const keyframe = (): H264Chunk => ({
+  data: annexB(SPS, PPS, IDR),
+  pts: 1000,
+  flags: 0,
+  isKeyFrame: true,
+});
+
+const delta = (n = 1, size = 4): H264Chunk => ({
+  data: annexB(Buffer.alloc(size, 0x41)),
+  pts: 1000 + n,
+  flags: 0,
+  isKeyFrame: false,
+});
+
+/** A cast whose frames are pushed by the test. */
+class FakeCast implements CastClient {
+  readonly castKind = "h264" as const;
+  readonly queued: H264Chunk[] = [];
+  private waiter: ((c: H264Chunk | null) => void) | null = null;
+  disposed = false;
+  idrRequests = 0;
+
+  push(chunk: H264Chunk): void {
+    if (this.waiter) {
+      const w = this.waiter;
+      this.waiter = null;
+      w(chunk);
+    } else this.queued.push(chunk);
+  }
+
+  async *stream(): AsyncIterable<H264Chunk> {
+    for (;;) {
+      if (this.disposed) return;
+      const queued = this.queued.shift();
+      if (queued) {
+        yield queued;
+        continue;
+      }
+      const next = await new Promise<H264Chunk | null>((resolve) => {
+        this.waiter = resolve;
+      });
+      if (!next) return;
+      yield next;
+    }
+  }
+
+  async requestIDRFrame(): Promise<void> {
+    this.idrRequests++;
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    this.waiter?.(null);
+  }
+}
+
+/** An MJPEG cast, which is what x86_64 devices have instead of H.264. */
+class FakeMjpegCast implements CastClient {
+  readonly castKind = "mjpeg" as const;
+  readonly queued: JpegFrame[] = [];
+  private waiter: ((c: JpegFrame | null) => void) | null = null;
+  disposed = false;
+
+  push(frame: JpegFrame): void {
+    if (this.waiter) {
+      const w = this.waiter;
+      this.waiter = null;
+      w(frame);
+    } else this.queued.push(frame);
+  }
+
+  async *stream(): AsyncIterable<JpegFrame> {
+    for (;;) {
+      if (this.disposed) return;
+      const queued = this.queued.shift();
+      if (queued) {
+        yield queued;
+        continue;
+      }
+      const next = await new Promise<JpegFrame | null>((resolve) => {
+        this.waiter = resolve;
+      });
+      if (!next) return;
+      yield next;
+    }
+  }
+
+  async requestIDRFrame(): Promise<void> {}
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    this.waiter?.(null);
+  }
+}
+
+const element = (ref: number, label: string, masked = false) => ({
+  ref,
+  role: "button" as const,
+  label,
+  rect: { x: ref * 10, y: ref * 20, width: 100, height: 40 },
+  center: { x: ref * 10 + 50, y: ref * 20 + 20 },
+  state: [] as string[],
+  clickable: true,
+  input: false,
+  scrollable: false,
+  focused: false,
+  signature: `sig-${ref}`,
+  node: { attributes: {}, children: [] },
+  ...(masked ? { masked: true } : {}),
+});
+
+function fakeScreen(label = "Save"): Screen {
+  const elements = [element(1, label), element(2, "hunter2", true)];
+  return {
+    header: "screen 400x800 · app: com.demo",
+    bundle: "com.demo",
+    display: { width: 400, height: 800 },
+    rotation: 0,
+    elements,
+    lines: elements.map((e) => `[${e.ref}] button "${e.label}"`),
+    hash: "h-" + label,
+    signatures: new Set(elements.map((e) => e.signature)),
+    tree: { attributes: {}, children: [] },
+    at: Date.now(),
+  };
+}
+
+interface Harness {
+  server: LiveServer;
+  cast: FakeCast;
+  port: number;
+  setScreen(s: Screen): void;
+  screenReads(): number;
+  /** Redaction flags the server asked the layout source for, in order. */
+  redactions(): boolean[];
+}
+
+const running: LiveServer[] = [];
+
+afterEach(async () => {
+  for (const s of running.splice(0)) await s.close().catch(() => undefined);
+});
+
+async function start(over: { privacy?: boolean; graceMs?: number; layoutMs?: number } = {}): Promise<Harness> {
+  const cast = new FakeCast();
+  let screen = fakeScreen();
+  let reads = 0;
+  const redactions: boolean[] = [];
+  const server = await LiveServer.start({
+    port: 0,
+    host: "127.0.0.1",
+    privacy: over.privacy ?? true,
+    graceMs: over.graceMs ?? 200,
+    layoutMs: over.layoutMs ?? 30,
+    source: {
+      async createCast() {
+        return cast;
+      },
+      async readScreen(redact: boolean) {
+        reads++;
+        redactions.push(redact);
+        return redact ? screen : { ...screen, elements: screen.elements.map(({ masked: _m, ...e }) => e) };
+      },
+    },
+  });
+  running.push(server);
+  return {
+    server,
+    cast,
+    port: server.port,
+    setScreen(s) {
+      screen = s;
+    },
+    screenReads: () => reads,
+    redactions: () => [...redactions],
+  };
+}
+
+interface Client {
+  socket: Socket;
+  texts: Record<string, unknown>[];
+  binaries: Buffer[];
+  send(message: Record<string, unknown>): void;
+  close(): void;
+}
+
+/** A minimal browser: handshake, then collect frames until `predicate` holds. */
+async function connect(port: number, query = ""): Promise<Client> {
+  const socket = createConnection({ host: "127.0.0.1", port });
+  await new Promise<void>((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("error", reject);
+  });
+  const texts: Record<string, unknown>[] = [];
+  const binaries: Buffer[] = [];
+  let buf = Buffer.alloc(0);
+  let upgraded = false;
+  let onUpgrade: (() => void) | null = null;
+  socket.on("data", (d) => {
+    buf = Buffer.concat([buf, d]);
+    if (!upgraded) {
+      const end = buf.indexOf("\r\n\r\n");
+      if (end < 0) return;
+      upgraded = true;
+      buf = buf.subarray(end + 4);
+      onUpgrade?.();
+      onUpgrade = null;
+    }
+    const { frames, rest } = decodeFrames(buf);
+    buf = rest;
+    for (const f of frames) {
+      if (f.opcode === 0x1) texts.push(JSON.parse(f.payload.toString()) as Record<string, unknown>);
+      else if (f.opcode === 0x2) binaries.push(Buffer.from(f.payload));
+    }
+  });
+  // A browser does not consider itself connected until the 101 arrives; waiting
+  // for it keeps "connect then push a frame" from racing the server's attach.
+  const upgradedP = new Promise<void>((resolve) => (onUpgrade = resolve));
+  socket.write(buildHandshake(`127.0.0.1:${port}`).replace("GET / HTTP/1.1", `GET /live${query} HTTP/1.1`));
+  await upgradedP;
+  return {
+    socket,
+    texts,
+    binaries,
+    send(message) {
+      socket.write(encodeTextFrame(JSON.stringify(message)));
+    },
+    close() {
+      socket.write(Buffer.from([0x88, 0x80, 0, 0, 0, 0]));
+      socket.destroy();
+    },
+  };
+}
+
+async function until(fn: () => boolean, ms = 3000): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > deadline) throw new Error("condition not met in time");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+async function http(port: number, path: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const sock = createConnection({ host: "127.0.0.1", port }, () => {
+      sock.write(`GET ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n`);
+    });
+    let raw = "";
+    sock.on("data", (d) => (raw += d.toString("latin1")));
+    sock.on("end", () => {
+      const [head = "", ...rest] = raw.split("\r\n\r\n");
+      const status = Number(/^HTTP\/1\.1 (\d{3})/.exec(head)?.[1] ?? 0);
+      resolve({ status, body: rest.join("\r\n\r\n") });
+    });
+    sock.on("error", reject);
+    sock.setTimeout(3000, () => {
+      sock.destroy();
+      resolve({ status: 0, body: raw });
+    });
+  });
+}
+
+describe("LiveServer", () => {
+  it("serves the player page", async () => {
+    const h = await start();
+    const res = await http(h.port, "/");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("VideoDecoder");
+    expect(res.body).toContain("uitest live");
+  });
+
+  it("answers 404 for anything else", async () => {
+    const h = await start();
+    expect((await http(h.port, "/nope")).status).toBe(404);
+  });
+
+  it("sends hello with the codec, avcC and frame size once the format is known", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => c.binaries.length > 0);
+    // The greeting at attach cannot name a codec — nothing has arrived yet — so
+    // the server greets again as soon as the first parameter sets do.
+    const hellos = c.texts.filter((t) => t.type === "hello");
+    expect(hellos.length).toBeGreaterThan(1);
+    const hello = hellos[hellos.length - 1]!;
+    expect(hello.codec).toBe("avc1.640028");
+    expect(hello.state).toBe("live");
+    const desc = Buffer.from(String(hello.description), "base64");
+    expect(desc[0]).toBe(1); // avcC configurationVersion
+    expect(hello.privacy).toBe(true);
+    c.close();
+  });
+
+  it("forwards frames as flag byte + pts + AVCC", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => c.binaries.length > 0);
+    const frame = c.binaries[0]!;
+    expect(frame[0]).toBe(1); // keyframe flag
+    expect(frame.readUInt32BE(1)).toBe(1000);
+    // AVCC: SPS, PPS and IDR, each length-prefixed.
+    const body = frame.subarray(5);
+    expect(body.readUInt32BE(0)).toBe(SPS.length);
+    expect(body.subarray(4, 4 + SPS.length).equals(SPS)).toBe(true);
+    const atPps = 4 + SPS.length;
+    expect(body.readUInt32BE(atPps)).toBe(PPS.length);
+    const atIdr = atPps + 4 + PPS.length;
+    expect(body.readUInt32BE(atIdr)).toBe(IDR.length);
+    expect(body.subarray(atIdr + 4).equals(IDR)).toBe(true);
+    c.close();
+  });
+
+  it("does not send parameter sets as a decodable key frame", async () => {
+    // The 6.8 extension opens a stream with a frame that carries only SPS and
+    // PPS and marks it `isKeyFrame`. WebCodecs rejects such a chunk outright
+    // ("marked as type key but wasn't a key frame"), so the flag the browser
+    // sees must mean "carries an IDR slice", and a frame with no slice at all
+    // must not be sent.
+    const h = await start();
+    const c = await connect(h.port);
+    h.cast.push({ data: annexB(SPS, PPS), pts: 1, flags: 2, isKeyFrame: true });
+    await until(() => c.texts.some((t) => t.type === "hello" && t.codec === `avc1.${SPS.subarray(1, 4).toString("hex")}`));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(c.binaries).toHaveLength(0);
+    h.cast.push(keyframe());
+    await until(() => c.binaries.length > 0);
+    expect(c.binaries[0]![0]).toBe(1);
+    c.close();
+  });
+
+  it("marks delta frames with a clear flag byte", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    h.cast.push(delta(7));
+    await until(() => c.binaries.length >= 2);
+    expect(c.binaries[1]![0]).toBe(0);
+    c.close();
+  });
+
+  it("pushes the node table as text, redacted by default", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "nodes"));
+    const nodes = c.texts.find((t) => t.type === "nodes")!;
+    const list = nodes.nodes as { ref: number; label: string; masked?: boolean }[];
+    expect(list).toHaveLength(2);
+    expect(list[0]!.label).toBe("Save");
+    expect(list[1]!.label).toBe("hunter2");
+    expect(list[1]!.masked).toBe(true);
+    expect(nodes.privacy).toBe(true);
+    c.close();
+  });
+
+  it("asks the layout source for an unredacted view when privacy is off", async () => {
+    // Masking is decided where the screen is built, not here: the server can
+    // only report what it was given. So the flag has to travel down to the
+    // source, and the honest report is the flag itself.
+    const h = await start({ privacy: false });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "nodes"));
+    const nodes = c.texts.find((t) => t.type === "nodes")!;
+    expect(nodes.privacy).toBe(false);
+    expect(h.redactions().every((r) => r === false)).toBe(true);
+    const list = nodes.nodes as { label: string; masked?: boolean }[];
+    expect(list[1]!.label).toBe("hunter2");
+    expect(list[1]!.masked).toBeUndefined();
+    c.close();
+  });
+
+  it("re-reads the layout when a page turns privacy off", async () => {
+    const h = await start({ layoutMs: 1000 });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "nodes"));
+    const before = h.screenReads();
+    c.send({ type: "privacy", value: false });
+    await until(() => h.redactions().includes(false), 2000);
+    expect(h.screenReads()).toBeGreaterThan(before);
+    // And the page is told what it is now looking at.
+    await until(() => c.texts.some((t) => t.type === "privacy" && t.value === false), 2000);
+    c.close();
+  });
+
+  it("masks again when a second page opens after one unmasked itself", async () => {
+    // Two tabs share one screen model, so "unmasked" cannot be per tab: the
+    // person who unmasked would leave the next person's tab showing passwords.
+    // Masking wins unless every attached tab has opted out.
+    const h = await start({ layoutMs: 1000 });
+    const first = await connect(h.port);
+    await until(() => first.texts.some((t) => t.type === "nodes"));
+    first.send({ type: "privacy", value: false });
+    await until(() => h.redactions().includes(false), 2000);
+
+    const second = await connect(h.port);
+    // The new tab starts masked, and the screen is re-read masked for both.
+    await until(() => second.texts.some((t) => t.type === "nodes" && t.privacy === true), 2000);
+    await until(() => h.redactions()[h.redactions().length - 1] === true, 2000);
+    // The tab that asked for no masking is told it no longer has it.
+    await until(() => first.texts.some((t) => t.type === "privacy" && t.value === true), 2000);
+    first.close();
+    second.close();
+  });
+
+  it("unmasks only once every attached page asks for it", async () => {
+    const h = await start({ layoutMs: 1000 });
+    const first = await connect(h.port);
+    const second = await connect(h.port);
+    await until(() => first.texts.some((t) => t.type === "nodes"), 2000);
+    first.send({ type: "privacy", value: false });
+    await new Promise((r) => setTimeout(r, 300));
+    // One page still wants masking, so the shared model stays masked.
+    expect(h.redactions().includes(false)).toBe(false);
+    second.send({ type: "privacy", value: false });
+    await until(() => h.redactions().includes(false), 2000);
+    first.close();
+    second.close();
+  });
+
+  it("drops frames and asks for an IDR when the client cannot keep up", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => c.binaries.length > 0);
+    // Attaching already asks for one keyframe; only a rise past that baseline
+    // can prove the backpressure path ran.
+    const before = h.cast.idrRequests;
+    // Stop reading: the socket's write queue grows past the watermark.
+    c.socket.pause();
+    for (let i = 0; i < 40; i++) h.cast.push(delta(i, 100_000));
+    await until(() => h.cast.idrRequests > before, 5000);
+    expect(h.cast.idrRequests).toBeGreaterThan(before);
+    c.socket.destroy();
+  });
+
+  it("keeps the cast through a short reconnect and stops it after the grace", async () => {
+    const h = await start({ graceMs: 150 });
+    const first = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => first.binaries.length > 0);
+    first.close();
+    // A second tab attaches while the first one's grace has not expired.
+    const second = await connect(h.port);
+    h.cast.push(delta(3));
+    await until(() => second.binaries.length > 0);
+    expect(h.cast.disposed).toBe(false);
+    second.close();
+    await until(() => h.cast.disposed, 3000);
+  });
+
+  it("reports its state in every hello", async () => {
+    const h = await start();
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    // The greeting sent at attach cannot claim to be streaming yet.
+    expect(c.texts.find((t) => t.type === "hello")!.state).toBe("starting");
+    h.cast.push(keyframe());
+    await until(() => c.texts.filter((t) => t.type === "hello").some((t) => t.state === "live"));
+    expect(h.server.state).toBe("live");
+    c.close();
+  });
+
+  it("serves an MJPEG source as JPEG frames, not as a broken H.264 stream", async () => {
+    // x86_64 devices have no casting extension, so `createCast` hands back an
+    // MJPEG client. Treating its JPEGs as NAL units would produce a page that
+    // connects and never paints — the one failure mode a person cannot tell
+    // from a broken phone.
+    const cast = new FakeMjpegCast();
+    const server = await LiveServer.start({
+      port: 0,
+      host: "127.0.0.1",
+      graceMs: 200,
+      layoutMs: 1000,
+      source: { async createCast() { return cast; }, async readScreen() { return fakeScreen(); } },
+    });
+    running.push(server);
+    const c = await connect(server.port);
+    cast.push({ data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]), pts: 42 });
+    await until(() => c.texts.some((t) => t.type === "hello" && t.codec === "mjpeg"));
+    await until(() => c.binaries.length > 0);
+    // Same envelope as H.264: a flag byte and a pts, then the picture.
+    const frame = c.binaries[0]!;
+    expect(frame[0]).toBe(1); // every JPEG is independently decodable
+    expect(frame.readUInt32BE(1)).toBe(42);
+    expect(frame.subarray(5).equals(Buffer.from([0xff, 0xd8, 0xff, 0xd9]))).toBe(true);
+    c.close();
+  });
+
+  it("does not read the layout on every frame", async () => {
+    const h = await start({ layoutMs: 1000 });
+    const c = await connect(h.port);
+    for (let i = 0; i < 50; i++) h.cast.push(delta(i));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(h.screenReads()).toBeLessThan(5);
+    c.close();
+  });
+});

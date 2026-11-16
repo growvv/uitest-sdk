@@ -117,6 +117,42 @@
         </table>
       </div>
 
+      <h3 class="cli-sub">也可以一直开着：<code>uitest-sdk live</code></h3>
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>浏览器里同时看到画面和布局</h3>
+          <ul>
+            <li><code>live</code> 起一个本地页面：左边是投屏，右边是当前屏的节点表。</li>
+            <li>点节点或点画面上的框，复制它的 ref、角色、标签与中心坐标；编号与 <code>tap --ref</code> 共用。</li>
+            <li>H.264 走浏览器自带 WebCodecs 解码；x86_64 的 MJPEG 走 <code>createImageBitmap</code>。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>隐私开关默认打开</h3>
+          <ul>
+            <li>密码框与验证码在节点表和画面上都被遮住。</li>
+            <li>关掉后用 <code>redact: false</code> 重新读布局，原文才出现——遮罩是在读的时候做的。</li>
+            <li>多个页面同时连着时，只要还有一个开着遮罩，共享模型就保持遮罩。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>状态机与背压</h3>
+          <ul>
+            <li><code>idle → starting → live → reconnecting → stopping → stopped</code>，失败按 0.5/1/2/4/5 s 退避重启。</li>
+            <li>页面重载有 5 s 宽限期，不重开投流 daemon。</li>
+            <li>写队列超过 1 MB 丢增量帧并请求 IDR；页面侧 <code>decodeQueueSize &gt; 4</code> 时同样丢。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>实测</h3>
+          <ul>
+            <li>真机 1216×2688 / 30 fps：首帧约 3.1 s（含 daemon 启动）。</li>
+            <li>画面持续变化时页面绘制 <strong>18.5 fps</strong>，帧间隔中位 <strong>33 ms</strong>、p90 <strong>55 ms</strong>。</li>
+            <li>每帧平均 11.6 KB；MJPEG 路径同一页面 22 fps。</li>
+          </ul>
+        </article>
+      </div>
+
       <h3 class="cli-sub">一次调用一条命令，状态留在磁盘上</h3>
       <div class="bench-grid">
         <article class="bench-card">
@@ -176,7 +212,7 @@ npx uitest-sdk connect --agent gemini   # 也支持 codex、copilot
 npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
 npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
       <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
-      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code>、设备状态与审批记忆从 0.4.0 起提供，<code>dev.hypium</code> 的 118 个方法从 0.5.0 起提供，7.0 WebSocket 投流（<code>transport: "ws"</code>）从 0.6.0 起提供；npm 上的 latest 是 0.6.0。<code>inspect</code>、<code>dev.files</code>、<code>CastConfig</code> 与 <code>FpsMeter</code> 已合入 master，随下一个版本发布。</p>
+      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code>、设备状态与审批记忆从 0.4.0 起提供，<code>dev.hypium</code> 的 118 个方法从 0.5.0 起提供，7.0 WebSocket 投流（<code>transport: "ws"</code>）从 0.6.0 起提供，<code>inspect</code>、<code>dev.files</code>、<code>CastConfig</code>、<code>FpsMeter</code> 与浏览器里的 <code>live</code> 投屏从 0.7.0 起提供；npm 上的 latest 是 0.7.0。</p>
 
       <div class="bench-grid">
         <article class="bench-card">
@@ -311,7 +347,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
             <tr><td>连续 H.264 投流</td><td>不支持</td><td>不支持</td><td>内置投屏，未公开 API</td><td>15–89 fps</td></tr>
             <tr><td>MP4 录制</td><td>不支持</td><td>不支持</td><td>7.0 上失效</td><td>6.8 casting</td></tr>
             <tr><td>多实例并发</td><td>命令无状态，受设备锁限制</td><td>命令无状态，受设备锁限制</td><td>单设备会话为主</td><td>复用 daemon + 退避</td></tr>
-            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，115 个导出</td></tr>
+            <tr><td>编程接口</td><td>shell 字符串</td><td>shell 字符串</td><td>图形化 + 脚本</td><td>TypeScript，125 个导出</td></tr>
             <tr><td>命令行 / Agent</td><td>手敲命令</td><td>手敲命令</td><td>图形化界面</td><td>21 条命令 + MCP + Skill</td></tr>
             <tr><td>结构化错误</td><td>文本输出</td><td>文本输出</td><td>文本 / 异常为主</td><td><code>UitestError</code> + code</td></tr>
           </tbody>

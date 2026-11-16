@@ -121,6 +121,47 @@ describe("ScreenBuilder", () => {
     expect(nodesUnder(screen, 200, 650).map((e) => e.label)).toContain("Item one");
   });
 
+  it("keeps credential values when redaction is turned off", () => {
+    // The live inspector's privacy switch is a person's decision about their
+    // own phone. With it off the screen model must carry the raw labels, and
+    // nothing may still be flagged `masked` — a stale flag would grey out
+    // pixels the person explicitly asked to see.
+    const tree = node({ bundleName: "com.example.app" }, [
+      node({ type: "Text", text: "Your code is 482913", bounds: "[0,100][400,160]" }),
+      node({ type: "TextInput", text: "hunter2", password: "true", bounds: "[0,200][400,260]" }),
+    ]);
+    const screen = new ScreenBuilder(null, { redact: false }).build(tree, { display, rotation: 0 });
+    const text = renderFull(screen);
+    expect(text).toContain("482913");
+    expect(text).toContain("hunter2");
+    expect(screen.elements.every((e) => e.masked !== true)).toBe(true);
+    expect(findText(screen, "482913")).not.toBeNull();
+  });
+
+  it("switches redaction on a live builder without renumbering refs", () => {
+    // The live inspector's privacy switch flips while the page is open. Refs
+    // are how a person points at a node and then acts on it, so a toggle must
+    // not renumber the table under them.
+    const tree = node({ bundleName: "com.example.app" }, [
+      node({ type: "Text", text: "Home", bounds: "[20,100][300,180]" }),
+      node({ type: "TextInput", text: "hunter2", password: "true", bounds: "[0,200][400,260]" }),
+    ]);
+    const builder = new ScreenBuilder(null, { redact: false });
+    const open = builder.build(tree, { display, rotation: 0 });
+    const openInput = open.elements.find((e) => e.role === "input")!;
+    expect(openInput.label).toBe("hunter2");
+
+    builder.setRedact(true);
+    const masked = builder.build(tree, { display, rotation: 0 });
+    const maskedInput = masked.elements.find((e) => e.role === "input")!;
+    expect(maskedInput.label).toBe("••••••");
+    expect(maskedInput.masked).toBe(true);
+    expect(maskedInput.ref).toBe(openInput.ref);
+    expect(masked.elements.find((e) => e.label === "Home")!.ref).toBe(
+      open.elements.find((e) => e.label === "Home")!.ref,
+    );
+  });
+
   it("masks one-time codes and password values in the rendered screen", () => {
     const tree = node({ bundleName: "com.example.app" }, [
       node({ type: "Text", text: "Your code is 482913", bounds: "[0,100][400,160]" }),

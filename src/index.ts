@@ -151,6 +151,15 @@ export { MjpegCastClient } from "./cast/mjpeg.js";
 export { resolveCastingExtension, CASTING_EXTENSION } from "./cast/resolve.js";
 export type { CastClient, CastOptions, JpegFrame } from "./cast/types.js";
 
+export { LiveServer } from "./live/server.js";
+export type { LiveServerOptions, LiveSource } from "./live/server.js";
+export { LiveState } from "./live/state.js";
+export type { LiveStatus } from "./live/state.js";
+export { avcC, codecString, parameterSets, splitNalUnits, toAvcc } from "./live/avc.js";
+export { PLAYER_HTML } from "./live/player.js";
+export { startLive, liveOptions } from "./live/cli.js";
+export type { LiveCommandOptions, LiveRun } from "./live/cli.js";
+
 export { parseBounds, cropRect } from "./util/bounds.js";
 export type { H264Chunk, Rect, UiEvent, UiNode } from "./model.js";
 

@@ -194,6 +194,72 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);      // 任意 h
 
 ## 6. 投流与录制
 
+### 投屏与实时检查：`LiveServer`
+
+把设备画面和布局同时放进一个浏览器页面，给**人**看，而不是给程序消费。
+一条命令起一个页面：
+
+```bash
+npx uitest-sdk live                       # http://127.0.0.1:7000/
+npx uitest-sdk live --port 7100 --privacy off
+npx uitest-sdk live --no-layout           # 只投屏，不读布局
+```
+
+页面里能做的事：
+
+- **镜像**：H.264 走浏览器自带的 WebCodecs `VideoDecoder`，MJPEG（x86_64）走 `createImageBitmap`；
+  服务端把设备侧的 Annex-B 转成 AVCC，并把 SPS/PPS 拼成 `avcC` 作为 `description`，
+  所以页面上没有 MSE、没有 fMP4 重封装、没有额外缓冲层。
+- **取值**：右侧是当前屏的节点表，点节点（或点画面上的框）就复制它的 `ref` / `role` / `label` / 中心坐标；
+  `JSON` 按钮复制整条节点。框上的编号与 `observe` / `tap --ref` 用的是同一套 ref。
+- **隐私开关**：默认打开，密码框与验证码在**节点表和画面上都被遮住**。关掉后服务端会用
+  `redact: false` 重新读布局，标签原文才出现。遮罩在 `ScreenBuilder` 里完成，所以关掉开关是
+  「不遮」，不是「事后擦除」；多个页面同时连着时，只要有一个还开着遮罩，共享的屏幕模型就保持遮罩。
+- **状态机**：`idle → starting → live → reconnecting → stopping → stopped`，失败从任意状态进入 `failed`，
+  之后按 0.5/1/2/4/5 s 退避重启。页面重载不会重开投流：断开后保留 5 s 宽限期，宽限期内重新连上就继续出流。
+- **背压**：单个 socket 的写队列超过 1 MB 就丢增量帧并请求 IDR（250 ms 内至多一次）；
+  MJPEG 是整帧，直接丢。页面侧在 `decodeQueueSize > 4` 时同样丢增量帧。
+
+```ts
+import { LiveServer } from "uitest-sdk";
+
+const server = await LiveServer.start({
+  port: 0,                       // 0 → 系统分配
+  privacy: true,
+  graceMs: 5000,                 // 页面断开后保留投流的时间
+  layoutMs: 250,                 // 两次读布局的最小间隔
+  source: {
+    createCast: () => dev.createCast({ mode: "stream", frameRate: 30 }),
+    readScreen: (redact) => {
+      session.reader.builder.setRedact(redact);
+      return session.reader.read();
+    },
+  },
+});
+console.log(server.port, server.state);
+await server.close();
+```
+
+`readScreen` 可以省略：那就是只投屏的页面，节点表为空。遮罩开关通过 `ScreenBuilder.setRedact()`
+在两次读之间切换，ref 不会因为开关而重编号。
+
+**协议**（一个 WebSocket，`GET /live`）：
+
+| 方向 | 类型 | 内容 |
+|---|---|---|
+| 服务端 → 页面 | text `hello` | `codec`、`description`（avcC，base64）、`width`、`height`、`state`、`privacy` |
+| 服务端 → 页面 | text `nodes` | 节点表：`ref`、`role`、`label`、`masked`、矩形、中心、可点/可输入/可滚动 |
+| 服务端 → 页面 | text `state` / `privacy` | 状态变化、遮罩开关的权威值 |
+| 服务端 → 页面 | binary | `flag`(1 字节) + `pts`(4 字节大端) + AVCC（H.264）或整帧 JPEG（MJPEG） |
+| 页面 → 服务端 | text | `{"type":"privacy","value":false}`、`{"type":"requestIDR"}` |
+
+`hello` 在页面连上时先发一次（此时还不知道编码格式），拿到 SPS/PPS 后再发一次带 `codec` 与 `description` 的版本。
+
+**性能**（真机 BRA-AL00，1216×2688，`--fps 30`）：连接后首帧约 3.1 s（含投流 daemon 启动），
+画面持续变化时页面绘制 **18.5 fps**，帧间隔中位 **33 ms**、p90 **55 ms**；服务端每帧平均 11.6 KB。
+x86_64 的 MJPEG 路径在同一页面里 22 fps（400×800 合成源实测）。
+
+
 ```ts
 const cast = await dev.createCast({
   mode: "stream",      // "stream" | "record"
@@ -633,6 +699,22 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 脱敏在 `Session` 的渲染与存图路径上。低层 API `agent.captureLayout()` / `agent.captureScreen()`
 返回设备原样数据，不脱敏；直接使用低层 API 的调用方需要自己处理。
 
+### `live`：给人在浏览器里看
+
+不是 `COMMANDS` 里的一条命令（它一直开着，直到人按 Ctrl-C），和 `mcp` / `hold` 同一类：
+
+```bash
+npx uitest-sdk live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
+                    [--scale 1..5] [--fps 15|30|60|120] [--transport grpc|ws]
+                    [--ws-extension path] [--cast-port 5000] [--host 127.0.0.1]
+```
+
+- 默认只听 `127.0.0.1`；`--host` 改成别的地址前想清楚，能连上这个端口的人都能看到手机画面。
+- 页面开着期间设备被这个进程占着，Agent 命令以 `lease_held` 停下；Ctrl-C 退出时释放。
+- `--privacy off` 只是页面**初始**状态：页面里的开关仍可以随时切换，服务端以它为准。
+- `--no-layout` 不读布局，只投屏；省掉每秒几次 `captureLayout`。
+- 详细协议与实测数字见 [6. 投流与录制](#6-投流与录制) 的 `LiveServer` 一节。
+
 ### 跨进程状态
 
 - ref 表在 `<state-dir>/refs-<hash>.json`：`observe` 打印的 ref 在下一条命令里仍指向同一个元素。
@@ -762,4 +844,4 @@ try {
 
 ---
 
-生成于 2026-11-16。行为与数字对应的源码版本：`0.6.0`。
+生成于 2026-11-16。行为与数字对应的源码版本：`0.7.0`。

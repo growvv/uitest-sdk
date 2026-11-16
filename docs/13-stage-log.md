@@ -349,3 +349,68 @@ push → list → readText(40) → move → remove -rf   全部成功
 
 - `list` 用 `ls -l`，不显示隐藏文件；需要时传具体路径用 `stat`。
 - `hdc shell` 会做行尾转换，`readText` 读到的 JSON 里是 `\r\r\n`；需要精确字节时走 `pull`。
+
+---
+
+## 2026-11-16 · 浏览器投屏与实时检查 `live`（0.7.0）
+
+用户的要求分两半：普通用户能直接看到手机画面（不是拿到一串 H.264 字节），以及 `inspect` 要有
+live 模式——在网页上看画面、取值、复制节点，带一个默认打开的隐私开关。两半是同一件事：
+一个页面、一条 WebSocket、一路投流。
+
+### A. 架构决定
+
+| 决定 | 理由 |
+|---|---|
+| 浏览器端用 WebCodecs `VideoDecoder` | 浏览器自带的硬解路径，一帧一次 `decode()` + 一次 `drawImage`；MSE 需要 fMP4 重封装并自带缓冲，延迟不可控 |
+| 服务端做 Annex-B → AVCC | `avc1` 的 `EncodedVideoChunk` 必须是长度前缀样本，`description` 必须是 `avcC`；两者都由 SPS/PPS 现算 |
+| 手写 RFC6455 服务端半边 | 包内已有客户端半边（`cast/ws.ts`）与零依赖原则，服务端只需 accept-key、帧头、解掩码三件事 |
+| 纯状态机独立成模块 | 转移图可单测；服务端里只留 I/O |
+| 背压 = 丢增量帧 + 请求 IDR | 画面已经落后时，补一帧旧增量只会让延迟更长；关键帧一次追平 |
+| 断线宽限期 5 s | 刷新页面不该重开投流 daemon（真机启动 ~1.2 s + 首帧 3 s） |
+
+### B. 交付
+
+| 文件 | 内容 |
+|---|---|
+| `src/live/ws-server.ts` | RFC6455 服务端：`acceptKey` / `buildUpgradeResponse` / 帧头（7/16/64 位）/ `decodeClientFrames`（拒未掩码的客户端帧） |
+| `src/live/avc.ts` | `splitNalUnits` / `nalType` / `codecString` / `toAvcc` / `avcC` / `parameterSets` |
+| `src/live/state.ts` | `LiveState`：声明式转移图、失败原因、重连计数、监听器 |
+| `src/live/server.ts` | `LiveServer`：HTTP 页面 + `/live` 升级 + hello/nodes 文本 + 二进制帧 + 布局轮询节流 + 宽限期 + 退避重启 |
+| `src/live/player.ts` | 单文件页面：WebCodecs 解码、MJPEG 分支、节点表、点选复制、隐私开关、fps/延迟读数 |
+| `src/live/cli.ts` | `uitest-phone live`：参数校验、设备/会话、Ctrl-C 释放 |
+| `src/agent/screen.ts` | `ScreenBuilderOptions.redact` 与 `setRedact()`；ref 不因开关重编号 |
+| 测试 | `live-ws` 14、`live-avc` 13、`live-state` 12、`live-server` 16、`live-cli` 11、`screen` +2 |
+
+### C. 实测中发现并修掉的三个缺陷
+
+1. **参数集被当成可解码的关键帧**。6.8 扩展开场那一帧只有 SPS+PPS（31 B）却标 `isKeyFrame`；
+   WebCodecs 直接拒绝：`An EncodedVideoChunk was marked as type 'key' but wasn't a key frame`。
+   页面因此连得上、显示 live、画布全黑——最难察觉的一类故障。改为按 NAL 类型判定：
+   有 IDR 才是关键帧，没有切片就整帧不发。
+2. **第二个页面继承了第一个页面关掉的遮罩**。屏幕模型是共享的一个对象，谁关开关就影响所有人。
+   改为「只有所有连着的页面都要求不遮才不遮」，新页面从服务端默认值起步。
+3. **x86_64 的 MJPEG 被当成 H.264**。`createCast` 在没有编码器时返回 MJPEG 客户端，
+   服务端把 JPEG 当 NAL 解析，页面同样黑屏。改为按 `castKind` 分流，同一信封（flag + pts + 整帧）。
+
+### D. 真机验收
+
+```
+node dist/bin.js live --port 7100 --no-open     页面 200，/nope 404
+探针（模拟浏览器）：101 + accept 正确 → hello(codec avc1.640034, avcC 34 B) → nodes 57 条
+                    二进制帧：flag=1 + pts + AVCC(SPS/PPS/IDR)
+无头 Chrome 实测：画布 1216×2688，非黑采样 3257/3293，badge live
+连续 fling 20 s：绘制 375 帧 → 18.5 fps，帧间隔中位 33 ms / p90 55 ms / 最大 625 ms
+隐私：开关 → 服务端 echo privacy:false → 重新读布局（redact=false）
+重载：断开 300 ms 后重连 → 无 starting，直接续流
+MJPEG（400×800 合成源）：页面 22 fps，像素均值 = 源 RGB
+```
+
+### E. 边界
+
+- `live` 进程持有设备租约：页面开着期间 Agent 命令以 `lease_held` 停下。这是有意的——投流与
+  Agent 动作抢同一块屏幕，混着用会互相打断。
+- 像素级遮罩只作用于节点表与框；视频流本身不做像素打码。要连画面一起遮，必须让设备侧不渲染
+  （`ScreenBuilder` 的遮罩发生在模型层），这一点写进了文档而不是含糊过去。
+- 布局是轮询读的（默认 250 ms 一次），滚动时框可能落后一帧；这是 `captureLayout` 的成本，不是同步机制。
+- 首帧 ~3.1 s 里大部分是 casting daemon 启动；宽限期正是为了避免刷新时重复付这笔钱。

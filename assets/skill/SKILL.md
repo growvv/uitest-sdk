@@ -121,6 +121,7 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Inspect a window | `window --bundle com.example.app` |
 | Save a screenshot | `screenshot --out shot.jpg` |
 | See where each element is | `inspect --html panel.html` |
+| Watch the phone in a browser | `live` (a person's tool, not an agent command) |
 | Write a report | `report --title "WLAN check"` |
 | Session info | `status` |
 

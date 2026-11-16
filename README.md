@@ -94,6 +94,28 @@ const cast = await dev.createCast({
 配置文件不会在背后改变一次 cast。帧率统计用 `FpsMeter`：每来一帧 `add()`，`stats()` 给出
 `fps` / `frames` / `spanMs` / `stalledMs`，与投流实现无关，MJPEG 和 H.264 都能用。
 
+### 投屏：给人在浏览器里看
+
+```bash
+npx uitest-sdk live                    # 打开 http://127.0.0.1:7000/
+npx uitest-sdk live --privacy off      # 初始不遮凭据
+npx uitest-sdk live --no-layout        # 只投屏
+```
+
+一个页面里同时有画面和布局：右边是当前屏的节点表，点节点（或点画面上的框）就复制它的 ref、角色、
+标签和中心坐标；画面上的编号就是 `observe` / `tap --ref` 用的那套 ref。隐私开关默认打开，密码框与
+验证码在节点表和画面上都被遮住；关掉后服务端用 `redact: false` 重新读布局。多个页面同时连着时，
+只要有一个还开着遮罩，共享的屏幕模型就保持遮罩。
+
+解码全在浏览器里：H.264 走 WebCodecs `VideoDecoder`（服务端把 Annex-B 转 AVCC 并生成 `avcC`），
+MJPEG（x86_64）走 `createImageBitmap`；没有 MSE、没有 fMP4 重封装。状态机是
+`idle → starting → live → reconnecting → stopping → stopped`，失败后退避重启；页面重载有 5 s 宽限期，
+不重开投流。背压按 socket 写队列（1 MB 水位）丢增量帧并请求 IDR。
+
+真机 1216×2688 / 30 fps：首帧约 3.1 s（含 daemon 启动），画面持续变化时页面绘制 18.5 fps，
+帧间隔中位 33 ms、p90 55 ms，每帧平均 11.6 KB。SDK 里同一套东西是 `LiveServer`，见
+[`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md#6-投流与录制)。
+
 ### 录制
 
 ```ts
@@ -123,6 +145,10 @@ npx uitest-sdk report --title "WLAN check"
 
 `inspect` 画在图上的编号就是 `observe` / `tap` 用的 ref：框线按角色着色，被脱敏的元素先涂灰再画框，
 `--html` 面板是单文件（图片内嵌），悬停表格行会高亮对应的框。
+
+一次性的 `inspect` 之外，还有一直开着的 `live`：一个浏览器页面同时给出画面和节点表，
+点节点即复制 ref / JSON，隐私开关默认打开（见上面的「投屏」一节）。它不占 21 条命令的名额，
+和 `mcp` / `hold` 一样是长期运行的子命令。
 
 真机上每条命令的端到端耗时（含 Node 启动与设备打开，2026-11-16 采样）：
 `status` 1.2 s、`apps --current` 1.5 s、`observe` 1.7 s、`doctor` 1.9 s、`tap --ref` 2.3 s。

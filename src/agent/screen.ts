@@ -68,6 +68,16 @@ export interface ScreenContext {
   rotation: number;
 }
 
+export interface ScreenBuilderOptions {
+  /**
+   * Mask credentials in rendered labels. Default true. The live inspector lets
+   * a person switch it off for their own phone, and the flag has to reach the
+   * builder: masking any later would leave `masked` boxes on labels the person
+   * asked to see.
+   */
+  redact?: boolean;
+}
+
 export interface Diff {
   mode: "full" | "diff";
   text: string;
@@ -235,7 +245,13 @@ export class ScreenBuilder {
   /** Signatures seen in the most recent build, spared from pruning. */
   private lastSignatures = new Set<string>();
 
-  constructor(private readonly store: FileRefStore | null = null) {
+  private redact: boolean;
+
+  constructor(
+    private readonly store: FileRefStore | null = null,
+    options: ScreenBuilderOptions = {},
+  ) {
+    this.redact = options.redact !== false;
     const table = store?.load();
     if (table) {
       for (const [signature, ref] of Object.entries(table.refs)) {
@@ -245,6 +261,18 @@ export class ScreenBuilder {
       this.nextRef = Math.max(table.next, highest + 1);
     }
     this.saved = this.store ? JSON.stringify(this.table()) : "";
+  }
+
+  /**
+   * Turns credential masking on or off for subsequent builds.
+   *
+   * The live inspector's privacy switch flips while a page is open, so this is
+   * settable after construction. Refs are keyed by the raw label and survive
+   * the change: a person who pointed at node 7 before the toggle still means
+   * node 7 after it.
+   */
+  setRedact(on: boolean): void {
+    this.redact = on;
   }
 
   /** Writes the table when it changed; returns whether anything was written. */
@@ -302,7 +330,7 @@ export class ScreenBuilder {
         const password = state.includes("password");
         const credentialContext =
           password || isSecretContext(label) || ancestors.some((a) => isSecretContext(a.label));
-        const shownLabel = redactLabel(label, { password, context: credentialContext });
+        const shownLabel = this.redact ? redactLabel(label, { password, context: credentialContext }) : label;
         const masked = shownLabel !== label;
         const clickable = isTrue(node, "clickable") || isTrue(node, "longClickable");
         const input = role === "input";

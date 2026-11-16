@@ -24,6 +24,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-7-0">0.7.0 · 投屏与实时检查</a>
       <a href="#v0-6-0">0.6.0 · 7.0 WebSocket 投流</a>
       <a href="#v0-5-0">0.5.0 · 完整 hypium API</a>
       <a href="#v0-4-0">0.4.0 · 脱敏、设备状态与审批</a>
@@ -37,6 +38,44 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-7-0">
+        <div class="release-head">
+          <h2>0.7.0</h2>
+          <span class="release-date">2026-11-16</span>
+          <span class="release-tag">投屏与实时检查</span>
+        </div>
+
+        <h3>投屏：给人在浏览器里看</h3>
+        <ul>
+          <li>新增 <code>uitest-sdk live</code>：一个本地页面同时给出画面和节点表。点节点（或点画面上的框）复制它的 ref、角色、标签与中心坐标，编号与 <code>tap --ref</code> 共用；<code>JSON</code> 按钮复制整条节点。</li>
+          <li>解码全在浏览器：H.264 走 WebCodecs <code>VideoDecoder</code>，服务端把设备侧的 Annex-B 转成 AVCC 并把 SPS/PPS 拼成 <code>avcC</code> 作为 <code>description</code>；没有 MSE、没有 fMP4 重封装、没有额外缓冲层。</li>
+          <li>x86_64 没有编码器，走 MJPEG：同一页面用 <code>createImageBitmap</code> 画整帧 JPEG，不需要解码器配置或重同步。</li>
+          <li>SDK 侧是 <code>LiveServer</code>：<code>LiveServer.start({ source: { createCast, readScreen } })</code>，<code>readScreen</code> 省略就是只投屏的页面。</li>
+        </ul>
+
+        <h3>隐私开关：默认打开</h3>
+        <ul>
+          <li>密码框与验证码在节点表和画面上都被遮住；关掉后服务端用 <code>redact: false</code> 重新读布局，原文才出现 —— 遮罩在读的时候完成，不是事后擦除。</li>
+          <li>多个页面同时连着时，只要有一个还开着遮罩，共享的屏幕模型就保持遮罩；新开的页面从不继承别人关掉的开关。</li>
+          <li>开关不会让 ref 重编号：<code>ScreenBuilder.setRedact()</code> 只换渲染，签名与编号不变。</li>
+        </ul>
+
+        <h3>状态机、重连与背压</h3>
+        <ul>
+          <li><code>idle → starting → live → reconnecting → stopping → stopped</code>；失败从任意状态进入 <code>failed</code>，之后按 0.5/1/2/4/5 s 退避重启。重复断言当前状态是 no-op，未声明的转移直接抛错。</li>
+          <li>页面重载有 5 s 宽限期：宽限期内重新连上就继续出流，不重开投流 daemon（实测重载后没有 <code>starting</code>）。</li>
+          <li>背压按 socket 写队列：超过 1 MB 丢增量帧并请求 IDR（250 ms 内至多一次），队列回落到一半时只在关键帧上恢复；页面侧 <code>decodeQueueSize &gt; 4</code> 时同样丢增量帧。</li>
+          <li>只把带 IDR 切片的帧标成关键帧。6.8 扩展开场那一帧只有 SPS/PPS 却被标成 keyframe，WebCodecs 会直接拒绝（<code>marked as type key but wasn't a key frame</code>）—— 这是实测中发现并修掉的。</li>
+        </ul>
+
+        <h3>实测</h3>
+        <ul>
+          <li>真机 BRA-AL00，1216×2688，<code>--fps 30</code>：连接后首帧约 3.1 s（含 daemon 启动），画面持续变化时页面绘制 <strong>18.5 fps</strong>，帧间隔中位 <strong>33 ms</strong>、p90 <strong>55 ms</strong>，每帧平均 11.6 KB。</li>
+          <li>MJPEG 路径（400×800 合成源）同一页面 22 fps，像素与源一致。</li>
+          <li>页面无外部依赖：单文件 HTML，没有 CDN、没有构建步骤，离线可用。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-6-0">
         <div class="release-head">

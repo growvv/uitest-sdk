@@ -167,6 +167,7 @@ export function formatHelp(): string {
     "  connect              register the MCP server in an agent's settings and install the skill",
     "  hold                 take the device for yourself; agent commands then stop with lease_held",
     "  resume               hand a held device back to agents",
+    "  live                 serve the screen and layout in a browser tab (mirror + inspect)",
     "  mcp                  serve every command as an MCP tool over stdio",
     "  install-skill        write the bundled skill into the directories agents read",
   );

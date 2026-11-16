@@ -6,6 +6,7 @@ import type { AgentId } from "./connect.js";
 import { Device } from "./device.js";
 import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevice } from "./hold.js";
 import { installSkill, refreshSkill } from "./install-skill.js";
+import { liveMain } from "./live/cli.js";
 import { McpServer } from "./mcp.js";
 import { Session } from "./session.js";
 import { UitestError } from "./errors.js";
@@ -22,6 +23,7 @@ import { fileURLToPath } from "node:url";
 async function run(argv: string[]): Promise<number> {
   const [first] = argv;
   if (first === "mcp") return mcpMain(argv.slice(1));
+  if (first === "live") return liveMain(argv.slice(1));
   if (first === "install-skill") return installSkillMain(argv.slice(1));
   if (first === "connect") return connectMain(argv.slice(1));
   if (first === "hold") return holdMain(argv.slice(1));

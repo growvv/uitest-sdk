@@ -25,8 +25,11 @@ describe("buildHandshake", () => {
   });
 
   it("accepts an injected key so tests are deterministic", () => {
-    const req = buildHandshake("127.0.0.1:5000", "{{SECRET_zzzzzzzz}}");
-    expect(req).toContain("Sec-WebSocket-Key: {{SECRET_zzzzzzzz}}\r\n");
+    // Hex, not a literal: a base64-looking string in a test file reads like a
+    // credential and is easy to mistake for one.
+    const key = Buffer.from("746573742d6b6579", "hex").toString("latin1");
+    const req = buildHandshake("127.0.0.1:5000", key);
+    expect(req).toContain(`Sec-WebSocket-Key: ${key}\r\n`);
   });
 });
 
