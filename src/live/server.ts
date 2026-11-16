@@ -7,6 +7,8 @@ import { WS_OPCODE_CLOSE, WS_OPCODE_PING, WS_OPCODE_TEXT } from "../cast/ws.js";
 import { NAL_IDR, avcC, codecString, nalType, parameterSets, splitNalUnits, toAvcc } from "./avc.js";
 import { LiveState, type LiveStatus } from "./state.js";
 import { PLAYER_HTML } from "./player.js";
+import { LiveInput } from "./input.js";
+import type { InputSession } from "./input-lane.js";
 import {
   buildUpgradeResponse,
   decodeClientFrames,
@@ -58,6 +60,11 @@ export interface LiveSource {
    */
   startRecording?(): Promise<string>;
   stopRecording?(): Promise<string | null>;
+  /**
+   * Opens the second agent connection used for input. Omitted means the page
+   * has no takeover button — there is no wire to send gestures on.
+   */
+  openInput?(): Promise<InputSession>;
 }
 
 export interface LiveServerOptions {
@@ -69,10 +76,18 @@ export interface LiveServerOptions {
   graceMs?: number;
   /** Minimum spacing between layout reads. Default 250 ms. */
   layoutMs?: number;
+  /**
+   * How long a held pointer may go without movement before the server lifts it.
+   * Default 10_000. A tab that sleeps mid-drag must not leave the phone stuck
+   * in a press.
+   */
+  watchdogMs?: number;
   source: LiveSource;
 }
 
 interface Client {
+  /** Server-assigned identity: `c1`, `c2`… Stable for the life of the socket. */
+  id: string;
   socket: Socket;
   buf: Buffer;
   /** Deltas are being dropped until the socket drains. */
@@ -86,6 +101,7 @@ export class LiveServer {
   private readonly clients = new Set<Client>();
   private readonly graceMs: number;
   private readonly layoutMs: number;
+  private readonly watchdogMs: number;
   private readonly source: LiveSource;
 
   private cast: CastClient | null = null;
@@ -114,6 +130,24 @@ export class LiveServer {
   private lastReadAt = 0;
   private lastCongestionIdrAt = 0;
 
+  // ---- Takeover -----------------------------------------------------------
+  //
+  // Page-level control only: the live process keeps its device lease, and a
+  // second agent connection carries gestures. The server is the single
+  // arbiter of which tab, if any, is driving — a browser tab cannot be trusted
+  // to coordinate with its peers.
+  private nextClientId = 1;
+  private controller: Client | null = null;
+  private input: LiveInput | null = null;
+  private inputSession: InputSession | null = null;
+  /** A lane-open already in flight; concurrent take requests share it. */
+  private inputOpening: Promise<InputSession> | null = null;
+  /** No takeover attempt before this timestamp; a failed open backs off. */
+  private inputRetryAt = 0;
+  private taking = false;
+  private watchdogTimer: NodeJS.Timeout | undefined;
+  private statsTimer: NodeJS.Timeout | undefined;
+
   /**
    * The path of the in-flight recording, if any. One at a time: the
    * extension's encoder is start/stop driven and a second recording would
@@ -134,6 +168,7 @@ export class LiveServer {
   ) {
     this.graceMs = opts.graceMs ?? 5000;
     this.layoutMs = opts.layoutMs ?? 250;
+    this.watchdogMs = opts.watchdogMs ?? 10_000;
     this.maskByDefault = opts.privacy !== false;
     this.privacy = this.maskByDefault;
     this.source = opts.source;
@@ -156,6 +191,10 @@ export class LiveServer {
         resolve();
       });
     });
+    // Open the write lane now, while the first tab is still loading its
+    // player, so the first takeover is fast. A read-only session never opens
+    // one: the failure is swallowed and the next take reports it.
+    void self.ensureInput().catch(() => undefined);
     return self;
   }
 
@@ -183,6 +222,14 @@ export class LiveServer {
     this.layoutTimer = undefined;
     this.graceTimer = undefined;
     this.retryTimer = undefined;
+
+    // Go read-only and lift any held pointer before the sockets and the lane
+    // go away. `cancel()` caps its wait at 500 ms, so a dead lane cannot hang
+    // shutdown.
+    await this.releaseControl("closed");
+    const inputSession = this.inputSession;
+    this.inputSession = null;
+    if (inputSession) await inputSession.close().catch(() => undefined);
 
     for (const client of [...this.clients]) this.closeClient(client, 1001);
     this.clients.clear();
@@ -249,7 +296,16 @@ export class LiveServer {
     }
     socket.setNoDelay(true);
     socket.write(response);
-    this.attach({ socket, buf: Buffer.alloc(0), congested: false, unmasked: false }, head);
+    this.attach(
+      {
+        id: `c${this.nextClientId++}`,
+        socket,
+        buf: Buffer.alloc(0),
+        congested: false,
+        unmasked: false,
+      },
+      head,
+    );
   }
 
   private attach(client: Client, head: Buffer): void {
@@ -281,7 +337,12 @@ export class LiveServer {
   }
 
   private dropClient(client: Client): void {
-    if (!this.clients.delete(client)) return;
+    if (!this.clients.has(client)) return;
+    // The controller leaving is a release. Do it while the tab is still in the
+    // set, so the read-only broadcast reaches the other tabs before anything
+    // else about this disconnect is processed.
+    if (this.controller === client) void this.releaseControl("disconnected");
+    this.clients.delete(client);
     try {
       client.socket.destroy();
     } catch {
@@ -331,6 +392,16 @@ export class LiveServer {
       return;
     }
     const type = String(message.type ?? "");
+    // Control messages are arbitrated first: a stale tab's input must not be
+    // able to ride in on the same event as a takeover request.
+    if (type === "control") {
+      this.onControl(client, message);
+      return;
+    }
+    if (type === "input") {
+      this.routeInput(client, message);
+      return;
+    }
     if (type === "privacy") {
       client.unmasked = !Boolean(message.value);
       this.refreshPrivacy();
@@ -349,6 +420,259 @@ export class LiveServer {
       if (message.action === "stop") void this.stopRecording(client);
       else void this.startRecording(client);
     }
+  }
+
+  // ---- Takeover -----------------------------------------------------------
+
+  private onControl(client: Client, message: Record<string, unknown>): void {
+    const action = String(message.action ?? "");
+    if (action === "take") {
+      void this.takeControl(client);
+      return;
+    }
+    // Releasing is the controller's privilege; a stale tab cannot end someone
+    // else's session.
+    if (action === "release" && this.controller === client) {
+      void this.releaseControl("released");
+    }
+  }
+
+  /**
+   * Grants control to one tab, or refuses with a reason it can show.
+   *
+   * The state changes only after the write lane is open: reporting
+   * `controlled` first and failing the first gesture later is exactly the
+   * "clicked, nothing happened" failure this design forbids.
+   */
+  private async takeControl(client: Client): Promise<void> {
+    if (this.closing || !this.clients.has(client)) return;
+    // Another take is opening the lane. Refuse instead of queueing: letting
+    // both tabs think they are operating is worse than refusing one.
+    if (this.taking || this.controller) {
+      this.sendBusy(client);
+      return;
+    }
+    this.taking = true;
+    try {
+      const session = await this.ensureInput();
+      if (this.closing || !this.clients.has(client)) return;
+      if (this.controller) {
+        this.sendBusy(client);
+        return;
+      }
+      this.controller = client;
+      this.input = new LiveInput({
+        lane: session.lane,
+        // The server clamps to the latest known display; LiveInput clamps too,
+        // as a second line of defence for tests and old pages.
+        bounds: () => this.screen?.display ?? null,
+        focusPoint: () => focusedCenter(this.screen),
+        holdMs: this.watchdogMs,
+        onError: (error) => this.onInputError(error),
+      });
+      this.startWatchdog();
+      this.startStats();
+      this.broadcastText({
+        type: "control",
+        state: "controlled",
+        clientId: client.id,
+        by: client.id,
+      });
+    } catch (e) {
+      this.sendText(client, {
+        type: "control",
+        state: "readonly",
+        reason: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      this.taking = false;
+    }
+  }
+
+  /**
+   * Returns the write lane, opening it if needed.
+   *
+   * Concurrent requests share one open. A failure is remembered for five
+   * seconds so a page whose button is still clickable cannot hammer the
+   * device with fport attempts.
+   */
+  private async ensureInput(): Promise<InputSession> {
+    if (this.inputSession) return this.inputSession;
+    if (Date.now() < this.inputRetryAt) {
+      throw new Error("the input lane is cooling down after a failure");
+    }
+    if (this.inputOpening) return this.inputOpening;
+    const open = this.source.openInput;
+    if (!open) throw new Error("this session cannot send input");
+    const opening = (async (): Promise<InputSession> => {
+      try {
+        const session = await open.call(this.source);
+        if (this.closing) {
+          await session.close().catch(() => undefined);
+          throw new Error("the server closed while the input lane was opening");
+        }
+        this.inputSession = session;
+        return session;
+      } catch (e) {
+        this.inputRetryAt = Date.now() + 5000;
+        throw e;
+      } finally {
+        this.inputOpening = null;
+      }
+    })();
+    this.inputOpening = opening;
+    return opening;
+  }
+
+  /**
+   * Drops control and lifts a held pointer.
+   *
+   * The read-only broadcast goes out before the lift is awaited: the page
+   * must stop looking controllable immediately, and the device-side lift is
+   * best effort. `cancel()` bounds that lift at 500 ms.
+   */
+  private async releaseControl(reason?: string, message?: string): Promise<void> {
+    const held = this.input;
+    const wasControlled = this.controller !== null;
+    this.controller = null;
+    this.input = null;
+    this.stopWatchdog();
+    this.stopStats();
+    if (wasControlled) {
+      this.broadcastText({
+        type: "control",
+        state: "readonly",
+        ...(reason ? { reason } : {}),
+        ...(message ? { message } : {}),
+      });
+    }
+    if (held) await held.cancel().catch(() => undefined);
+  }
+
+  /**
+   * Routes one input message from the controller.
+   *
+   * Everything is validated here and nowhere else: a malformed number or an
+   * unknown key is dropped rather than forwarded. Coordinates are clamped by
+   * LiveInput against the latest display.
+   */
+  private routeInput(client: Client, message: Record<string, unknown>): void {
+    const input = this.input;
+    if (!input || this.controller !== client) return;
+    const finite = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) ? v : null;
+    switch (String(message.action ?? "")) {
+      case "down": {
+        const x = finite(message.x);
+        const y = finite(message.y);
+        if (x !== null && y !== null) input.down(x, y);
+        return;
+      }
+      case "move": {
+        const x = finite(message.x);
+        const y = finite(message.y);
+        if (x !== null && y !== null) input.move(x, y);
+        return;
+      }
+      case "up": {
+        const x = finite(message.x);
+        const y = finite(message.y);
+        if (x !== null && y !== null) input.up(x, y);
+        return;
+      }
+      case "pinch": {
+        const cx = finite(message.cx);
+        const cy = finite(message.cy);
+        const half = finite(message.half);
+        if (cx !== null && cy !== null && half !== null) input.pinch(cx, cy, half);
+        return;
+      }
+      case "wheel": {
+        const x = finite(message.x);
+        const y = finite(message.y);
+        const dy = finite(message.dy);
+        if (x !== null && y !== null && dy !== null) input.wheel(x, y, dy);
+        return;
+      }
+      case "text": {
+        if (typeof message.text !== "string") return;
+        const text = message.text.slice(0, 2000);
+        const x = finite(message.x);
+        const y = finite(message.y);
+        input.type(text, x !== null && y !== null ? { x, y } : undefined);
+        return;
+      }
+      case "key": {
+        const key = String(message.key ?? "");
+        if (key === "back" || key === "home" || key === "enter" || key === "delete") {
+          input.key(key);
+        }
+        return;
+      }
+    }
+  }
+
+  /**
+   * The write lane rejected an operation. The page must go read-only at once;
+   * the lane is discarded and reopened on the next takeover after a short
+   * backoff.
+   */
+  private onInputError(error: Error): void {
+    const session = this.inputSession;
+    this.inputSession = null;
+    this.inputRetryAt = Date.now() + 500;
+    void this.releaseControl("error", error.message);
+    if (session) void session.close().catch(() => undefined);
+  }
+
+  private sendBusy(client: Client): void {
+    const holder = this.controller;
+    this.sendText(client, {
+      type: "control",
+      state: "readonly",
+      reason: "busy",
+      ...(holder ? { by: holder.id } : {}),
+    });
+  }
+
+  /**
+   * Ticks the watchdog while control is held. The interval is a quarter of the
+   * hold window (capped at a second), so a stuck pointer is lifted close to
+   * the deadline rather than up to a second late.
+   */
+  private startWatchdog(): void {
+    this.stopWatchdog();
+    const every = Math.max(10, Math.min(1000, Math.floor(this.watchdogMs / 4)));
+    this.watchdogTimer = setInterval(() => this.input?.tick(), every);
+    this.watchdogTimer.unref?.();
+  }
+
+  private stopWatchdog(): void {
+    clearInterval(this.watchdogTimer);
+    this.watchdogTimer = undefined;
+  }
+
+  /** Publishes injection latency at most once a second while controlled. */
+  private startStats(): void {
+    this.stopStats();
+    this.statsTimer = setInterval(() => {
+      if (!this.input || !this.controller) return;
+      const stats = this.input.stats();
+      if (!stats) return;
+      this.broadcastText({
+        type: "control",
+        state: "controlled",
+        clientId: this.controller.id,
+        stats,
+      });
+    }, 1000);
+    this.statsTimer.unref?.();
+  }
+
+  private stopStats(): void {
+    clearInterval(this.statsTimer);
+    this.statsTimer = undefined;
   }
 
   /**
@@ -479,7 +803,9 @@ export class LiveServer {
   }
 
   private sendHello(client: Client): void {
-    this.sendText(client, this.hello());
+    // A greeting names the tab it greets; the broadcast hello cannot, because
+    // one message goes to every tab.
+    this.sendText(client, this.hello(client.id));
   }
 
   private broadcastHello(): void {
@@ -490,9 +816,17 @@ export class LiveServer {
     }
   }
 
-  private hello(): Record<string, unknown> {
+  private controlState(): { state: "readonly" | "controlled"; by?: string } {
+    return this.controller
+      ? { state: "controlled", by: this.controller.id }
+      : { state: "readonly" };
+  }
+
+  private hello(clientId?: string): Record<string, unknown> {
     return {
       type: "hello",
+      ...(clientId !== undefined ? { clientId } : {}),
+      control: this.controlState(),
       codec: this.codec,
       description: this.description ? this.description.toString("base64") : null,
       width: this.screen?.display.width ?? 0,
@@ -761,4 +1095,10 @@ export class LiveServer {
   private settle(next: LiveStatus, reason?: string): void {
     this.transition(next, reason);
   }
+}
+
+/** The center of the focused input, where text goes when the page sends no point. */
+function focusedCenter(screen: Screen | null): { x: number; y: number } | null {
+  const field = screen?.elements.find((e) => e.focused && e.input);
+  return field ? { x: field.center.x, y: field.center.y } : null;
 }

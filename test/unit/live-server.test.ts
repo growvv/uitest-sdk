@@ -6,6 +6,7 @@ import type { H264Chunk } from "../../src/model.js";
 import type { JpegFrame } from "../../src/cast/types.js";
 import type { Screen } from "../../src/agent/screen.js";
 import type { CastClient } from "../../src/cast/types.js";
+import type { InputLane, InputSession } from "../../src/live/input-lane.js";
 
 const SPS = Buffer.from([0x67, 0x64, 0x00, 0x28, 0xac, 0xd9, 0x40, 0x78]);
 const PPS = Buffer.from([0x68, 0xee, 0x3c, 0xb0]);
@@ -27,6 +28,28 @@ const delta = (n = 1, size = 4): H264Chunk => ({
   flags: 0,
   isKeyFrame: false,
 });
+
+/** The second agent connection, faked at the lane boundary. */
+class FakeInputLane implements InputLane {
+  calls: Array<[string, ...unknown[]]> = [];
+  fail = false;
+  closed = false;
+  private go(name: string, ...args: unknown[]): Promise<void> {
+    this.calls.push([name, ...args]);
+    if (this.fail) return Promise.reject(new Error("lane failed"));
+    return Promise.resolve();
+  }
+  click(...a: [number, number]) { return this.go("click", ...a); }
+  touchDown(x: number, y: number) { return this.go("touchDown", x, y); }
+  touchMove(x: number, y: number) { return this.go("touchMove", x, y); }
+  touchUp(x: number, y: number) { return this.go("touchUp", x, y); }
+  key(code: number) { return this.go("key", code); }
+  text(x: number, y: number, text: string, mode: string) { return this.go("text", x, y, text, mode); }
+  pinch(cx: number, cy: number, from: number, to: number, ms: number) { return this.go("pinch", cx, cy, from, to, ms); }
+  scroll(x: number, y: number, down: boolean, steps: number) { return this.go("scroll", x, y, down, steps); }
+  async close() { this.closed = true; }
+  ops(name: string) { return this.calls.filter((c) => c[0] === name).map((c) => c.slice(1)); }
+}
 
 /** A cast whose frames are pushed by the test. */
 class FakeCast implements CastClient {
@@ -156,6 +179,10 @@ interface Harness {
   recordStops(): number;
   /** Lets a `stopRecording` held by `holdStop` finish. */
   releaseStop(): void;
+  /** Input lanes opened so far, in order. */
+  lanes(): FakeInputLane[];
+  /** How many times the source was asked for an input lane. */
+  openInputs(): number;
 }
 
 const running: LiveServer[] = [];
@@ -172,6 +199,9 @@ async function start(
     captureError?: string;
     /** Keeps `stopRecording` pending until the returned function is called. */
     holdStop?: boolean;
+    watchdogMs?: number;
+    /** Makes `openInput` reject with this message. */
+    inputOpenError?: string;
   } = {},
 ): Promise<Harness> {
   const cast = new FakeCast();
@@ -184,12 +214,15 @@ async function start(
   let releaseStop: (() => void) | null = null;
   let stopGate = over.holdStop ? new Promise<void>((r) => (releaseStop = r)) : null;
   const redactions: boolean[] = [];
+  const lanes: FakeInputLane[] = [];
+  let openInputs = 0;
   const server = await LiveServer.start({
     port: 0,
     host: "127.0.0.1",
     privacy: over.privacy ?? true,
     graceMs: over.graceMs ?? 200,
     layoutMs: over.layoutMs ?? 30,
+    ...(over.watchdogMs !== undefined ? { watchdogMs: over.watchdogMs } : {}),
     source: {
       async createCast() {
         return cast;
@@ -217,6 +250,19 @@ async function start(
         recording = false;
         return "/tmp/rec.mp4";
       },
+      async openInput() {
+        openInputs++;
+        if (over.inputOpenError) throw new Error(over.inputOpenError);
+        const lane = new FakeInputLane();
+        lanes.push(lane);
+        const session: InputSession = {
+          lane,
+          close: async () => {
+            lane.closed = true;
+          },
+        };
+        return session;
+      },
     },
   });
   running.push(server);
@@ -233,6 +279,8 @@ async function start(
     recordings: () => recordings,
     recordStops: () => recordStops,
     releaseStop: () => releaseStop?.(),
+    lanes: () => lanes,
+    openInputs: () => openInputs,
   };
 }
 
@@ -640,5 +688,156 @@ describe("LiveServer: capture and record", () => {
     // A recording left running would keep the device encoder busy with no one
     // to collect the file.
     expect(h.recordStops()).toBe(1);
+  });
+});
+
+describe("LiveServer: takeover", () => {
+  it("lets one tab take control and tells every tab", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    const b = await connect(h.port);
+    await until(() => a.texts.some((t) => t.type === "hello"));
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    await until(() => b.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    const hello = a.texts.find((t) => t.type === "hello")!;
+    const ctrl = a.texts.find((t) => t.type === "control" && t.state === "controlled")!;
+    expect(ctrl.clientId).toBe(hello.clientId);
+    expect(hello.clientId).toBeTypeOf("string");
+    // The greeting was sent at attach, before this tab took control.
+    expect(hello.control).toEqual({ state: "readonly" });
+  });
+
+  it("refuses a second takeover while one tab controls", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    const b = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    b.send({ type: "control", action: "take" });
+    await until(() => b.texts.some((t) => t.type === "control" && t.reason === "busy"));
+    // b receives the controlled broadcast — every tab has to know — but it is
+    // never the tab named as the controller.
+    const helloB = b.texts.find((t) => t.type === "hello")!;
+    expect(
+      b.texts.some(
+        (t) => t.type === "control" && t.state === "controlled" && t.clientId === helloB.clientId,
+      ),
+    ).toBe(false);
+  });
+
+  it("arbitrates two take requests sent in the same tick", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    const b = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    b.send({ type: "control", action: "take" });
+    const all = () => [...a.texts, ...b.texts];
+    await until(() => all().some((t) => t.type === "control" && t.reason === "busy"));
+    await until(() => all().some((t) => t.type === "control" && t.state === "controlled"));
+    const controlled = all().filter((t) => t.type === "control" && t.state === "controlled");
+    expect(new Set(controlled.map((t) => t.clientId)).size).toBe(1);
+    expect(all().filter((t) => t.type === "control" && t.reason === "busy")).toHaveLength(1);
+  });
+
+  it("refuses takeover when the input lane cannot open", async () => {
+    const h = await start({ inputOpenError: "no free port" });
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.reason === "error"));
+    expect(a.texts.some((t) => t.type === "control" && t.state === "controlled")).toBe(false);
+  });
+
+  it("routes pointer, key, text and matrix input from the controller", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "input", action: "down", x: 10, y: 20 });
+    a.send({ type: "input", action: "move", x: 11, y: 21 });
+    a.send({ type: "input", action: "up", x: 11, y: 21 });
+    a.send({ type: "input", action: "key", key: "back" });
+    a.send({ type: "input", action: "text", text: "abc", x: 5, y: 6 });
+    a.send({ type: "input", action: "pinch", cx: 100, cy: 200, half: 60 });
+    a.send({ type: "input", action: "wheel", x: 10, y: 20, dy: 100 });
+    const lane = h.lanes()[0]!;
+    await until(() => lane.ops("scroll").length === 1);
+    expect(lane.ops("touchDown")).toEqual([[10, 20]]);
+    expect(lane.ops("touchMove")).toEqual([[11, 21]]);
+    expect(lane.ops("touchUp")).toEqual([[11, 21]]);
+    expect(lane.ops("key")).toEqual([[2]]);
+    expect(lane.ops("text")).toEqual([[5, 6, "abc", "typing"]]);
+    expect(lane.ops("pinch")).toEqual([]); // first pinch is the baseline
+    expect(lane.ops("scroll")).toEqual([[10, 20, true, 1]]);
+  });
+
+  it("ignores input from a tab that does not control", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    const b = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    b.send({ type: "input", action: "down", x: 1, y: 1 });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(h.lanes()[0]!.ops("touchDown")).toEqual([]);
+  });
+
+  it("releases control and lifts the pointer when the controller disconnects", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    const b = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => h.lanes()[0]!.ops("touchDown").length === 1);
+    a.close();
+    await until(() => b.texts.some((t) => t.type === "control" && t.state === "readonly"));
+    expect(h.lanes()[0]!.ops("touchUp")).toEqual([[10, 20]]);
+  });
+
+  it("returns to read-only when the input lane fails", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    h.lanes()[0]!.fail = true;
+    a.send({ type: "input", action: "down", x: 1, y: 1 });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "readonly" && t.reason === "error"));
+  });
+
+  it("re-opens the input lane on the next takeover", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    h.lanes()[0]!.fail = true;
+    a.send({ type: "input", action: "down", x: 1, y: 1 });
+    await until(() => a.texts.some((t) => t.type === "control" && t.reason === "error"));
+    // The failed lane is retried after a short backoff.
+    await new Promise((r) => setTimeout(r, 520));
+    a.send({ type: "control", action: "take" });
+    await until(() => h.openInputs() === 2);
+    await until(() => a.texts.filter((t) => t.type === "control" && t.state === "controlled").length >= 2);
+  });
+
+  it("lifts a held pointer after the watchdog timeout", async () => {
+    const h = await start({ watchdogMs: 40 });
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => h.lanes()[0]!.ops("touchUp").length === 1);
+  });
+
+  it("cancels and closes the input lane when the server closes", async () => {
+    const h = await start();
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => h.lanes()[0]!.ops("touchDown").length === 1);
+    await h.server.close();
+    expect(h.lanes()[0]!.ops("touchUp").length).toBeGreaterThan(0);
+    expect(h.lanes()[0]!.closed).toBe(true);
   });
 });
