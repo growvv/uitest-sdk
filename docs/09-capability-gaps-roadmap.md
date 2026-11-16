@@ -366,7 +366,7 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 
 ### P1 · 可做，收益明确
 
-状态按 0.8.0 的实际交付物核对过一遍：✅ 是「已经能用」，⏳ 是「还差一截」。
+状态按 0.9.0 的实际交付物核对过一遍：✅ 是「已经能用」，⏳ 是「还差一截」。
 
 | 能力 | 他们怎么做 | 我们的现状 |
 |---|---|---|
@@ -376,6 +376,8 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 | **实时帧率显示** | 客户端统计帧间隔 | ✅ `live` 页头的 fps 读数（浏览器侧按解码后的帧计）；SDK 侧另有 `FpsMeter` 供调用方自己统计 |
 | **码率上限 120 Mibps** | `-bitRate` 透传 | ✅ `CastOptions.bitRate` / `CastConfig.bitRate` 原样透传给 `OH_MD_KEY_BITRATE`，无上限限制；`live` 暂无 `--bit-rate` 旗标，走配置或 API |
 | **截图/录屏按钮** | `snapshot_display` / casting `-m 1` | ✅ `live` 页头的 Shot / Record 按钮。截图走 `Session.observe({ out })`，所以隐私遮罩与节点表同一套；录屏起一个独立的 record daemon（grpc 用自己的 socket、ws 用端口 +1），不打断画面 |
+| **触摸注入（点击 / 长按 / 拖动 / 滚动 / 双指）** | scrcpy 控制协议：`down/move/up`、多指 pointer id | ✅ `live` 页「接管」后的画布；独立写通道，实测点击 p50 3.2 ms、p95 24 ms，整轮混合输入 p50 290 ms。见 [13](13-stage-log.md) |
+| **键盘输入与系统键** | `injectText` + 按键映射 | ✅ 写通道的 `text` / `key`：停顿 300 ms 整段落字，拼音组合期间不上屏；`back` 只弹一层，`home` 回桌面 |
 | **剪贴板粘贴** | `Ctrl+V` → 读本机剪贴板 → `Driver.inputText` | ✅ `type --paste` / `Session.type(…, { paste: true })`。实测 36 字符 1325 ms 对逐字符 2761 ms，中文与 emoji 完整。注意 `InputTextMode.addition` 在 `Driver.inputText` 路径上是空操作（只在 `Component.inputText` 上追加），所以没有对外暴露 |
 
 ### P2 · 有工作量，看需求
@@ -415,7 +417,7 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 2. ~~**布局检查 + 节点高亮**（P1）~~ —— ✅ 已完成（0.7.0 的 `inspect` 与 `live`）。
 3. ~~**文件管理器 / 配置持久化 / 帧率显示**（P1）~~ —— ✅ 已完成（0.7.0，`dev.files` / `CastConfig` / `FpsMeter`）。
 4. ~~**`live` 页的截图与录屏按钮**（P1 余项）~~ —— ✅ 已完成（0.8.0）。截图复用了会话的遮罩规则；录屏必须另起一个 daemon，因为 `onStart` 在一个进程里只能开一次。
-5. **`live` 页的点击交互**（P1 余项）—— 画布上点一下就等于在设备上点一下。要先想清楚它与租约/接管的规则怎么配合：`live` 进程持有租约期间 Agent 命令本来就以 `lease_held` 停下，所以页面上的点击天然是「持租约的人」在操作，但页面必须把这件事说出来，否则同一块屏幕会出现两种操作来源。
+5. ~~**`live` 页的点击交互**（P1 余项）~~ —— ✅ 已完成（0.9.0）。默认只读、点「接管」才注入；输入走第二条通道（独立 fport 与 agent 连接），不排在读布局后面。点击 / 长按 / 拖动 / 滚动 / 双指 / 键盘 / 返回 / Home 全部对齐 scrcpy。第二个页面会被明确拒绝，10 s 无输入或出错自动回只读。见 [13](13-stage-log.md)。
 6. ~~**多设备同时投屏**（P1 余项）~~ —— ✅ 已完成（0.8.0）。每台设备一个 `live` 进程、端口分开；`pidof` 按 target 走，状态文件按设备 tag 分。顺带修了两个同设备多实例的真问题：daemon 归因改用 `ps -ef` 的 argv（不再盲杀别人的进程），租约的同名 task 重入要求 pid 相同。见 [13](13-stage-log.md)。
 7. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。
 8. **模拟器自建扩展**（探索性）—— 模拟器无 XPM，可以在这里做虚拟屏 / AAMS 的原型验证，但结论不能平移到真机。

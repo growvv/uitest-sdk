@@ -728,6 +728,12 @@ npx uitest-sdk live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
 - 页头的 **Record** 录 MP4 到 `<state-dir>/shots/`。它另起一个 record daemon（grpc 用自己的
   socket `uitest_live_record`，ws 用 stream 端口 +1），所以画面不会停。同一时间只能有一个
   录屏；页面关闭时正在录的那一个会被停掉并写盘。
+- 页头的 **接管**（`{type:"control", action:"take"}`）把页面从只读切到可操作：点击、长按、
+  拖动、滚动、双指缩放、键盘输入、`back` / `home` 都落到设备上。输入走第二条通道
+  （`device.openInputLane()` 预开的独立 fport + agent 连接），不排在读布局后面。控制权是
+  独占的：另一个页面 `take` 会收到 `busy by <clientId>`；控制者离开、10 s 无输入或输入出错
+  时广播 `readonly`。实测点击 p50 3.2 ms、整轮混合输入 p50 290 ms，报告在
+  `docs/acceptance/live/report.md`。
 - 详细协议与实测数字见 [6. 投流与录制](#6-投流与录制) 的 `LiveServer` 一节。
 
 ### 跨进程状态
@@ -859,4 +865,4 @@ try {
 
 ---
 
-生成于 2026-11-16。行为与数字对应的源码版本：`0.8.0`。
+生成于 2026-11-17。行为与数字对应的源码版本：`0.9.0`。

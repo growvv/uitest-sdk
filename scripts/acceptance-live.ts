@@ -357,33 +357,43 @@ function pickField(nodes: NodeInfo[]): NodeInfo | null {
 }
 
 /**
- * Large unlabeled clickable boxes: the feed's and an answer's content images.
+ * Result cards on a search page: wide clickable boxes that carry a title and
+ * an excerpt. The page also has full-width containers whose labels are the
+ * container id or a `Block:` marker; those navigate nowhere on a tap.
  *
- * The screen model turns a clickable image into a `button` (its role map has
- * no Image entry), so the type is gone by the time the page sees it. What
- * survives is the shape: a content image is a big clickable box with no text
- * of its own, while a card is a big clickable box full of text.
+ * The demo frames land on the site, so the card known to carry the HarmonyOS
+ * 7 diagram is tried first. Which result a query returns is not fixed — the
+ * same search landed on three different articles across runs — and a random
+ * article can be a chat screenshot, which shows nothing worth watching.
  */
-function pickImageBoxes(nodes: NodeInfo[], minW: number, minH: number): NodeInfo[] {
-  // The label is the image's own source URL: that is what tells an image apart
-  // from a card, which carries its title and excerpt as text.
+const DEMO_CARD = /鸿蒙开发还有出路吗/;
+
+function pickResultCards(nodes: NodeInfo[]): NodeInfo[] {
   return nodes
-    .filter(
-      (n) =>
+    .filter((n) => {
+      const label = n.label.trim();
+      return (
         n.clickable &&
         !n.masked &&
-        /^https?:\/\//.test(n.label.trim()) &&
-        n.w >= minW &&
-        n.h >= minH &&
-        n.cy > 300 &&
-        n.cy < 2400,
-    )
-    .sort((a, b) => a.cy - b.cy);
+        n.w >= 500 &&
+        n.cy > 500 &&
+        n.cy < 2200 &&
+        label.length > 6 &&
+        !/^Block(:|$)/.test(label) &&
+        !/^\d+$/.test(label)
+      );
+    })
+    .sort((a, b) => {
+      const pa = DEMO_CARD.test(a.label) ? 0 : 1;
+      const pb = DEMO_CARD.test(b.label) ? 0 : 1;
+      return pa - pb || a.cy - b.cy;
+    });
 }
 
-/** Feed images the app itself treats as tappable (a tap opens their viewer). */
-function pickFeedImages(nodes: NodeInfo[]): NodeInfo[] {
-  return pickImageBoxes(nodes, 200, 200);
+/** The search page's result tabs, which no other Zhihu page carries. */
+function isSearchResults(nodes: NodeInfo[]): boolean {
+  const labels = nodes.map((n) => n.label.trim());
+  return labels.includes("综合") && labels.some((l) => /^AI ?搜索$/.test(l));
 }
 
 /**
@@ -392,7 +402,9 @@ function pickFeedImages(nodes: NodeInfo[]): NodeInfo[] {
  * Unlike a feed image, an answer's image has no source URL as its label — the
  * page gets an empty label for it. What it keeps is the shape: a large
  * clickable box with no text of its own, while every card-like box on an
- * answer page carries its title or body.
+ * answer page carries its title or body. The width floor is what separates an
+ * inline image from a search page's small unlabeled icon modules (325 px),
+ * which also have empty labels.
  */
 function pickInlineImages(nodes: NodeInfo[]): NodeInfo[] {
   return nodes
@@ -401,8 +413,8 @@ function pickInlineImages(nodes: NodeInfo[]): NodeInfo[] {
         n.clickable &&
         !n.masked &&
         n.label.trim() === "" &&
-        n.w >= 300 &&
-        n.h >= 150 &&
+        n.w >= 500 &&
+        n.h >= 300 &&
         n.cy > 300 &&
         n.cy < 2400,
     )
@@ -1397,15 +1409,20 @@ async function main(): Promise<number> {
 
     results.push(
       await scenario("pinch", async () => {
-        // The pinch needs the full-screen viewer, and reaching it takes two
-        // taps: a feed card's image opens the answer at that image, and the
-        // answer's own image opens the viewer. Which card does that is not
-        // predictable — a card can be a video channel, whose page has no
-        // viewer — so the scenario walks candidates until one lands and
-        // checks each landing by what the screen becomes, not by its labels.
+        // The pinch needs the full-screen viewer, and reaching it takes three
+        // steps: search, a result card, then that answer's own image. The
+        // route is search rather than the feed because the demo frames land
+        // on the site, and the feed's top card is whatever the recommendation
+        // service returns — a celebrity answer on the run that was tried. A
+        // query keeps the frames on the release's own subject.
+        //
+        // Which result carries an image is not predictable: a card can be a
+        // video channel, whose page has no viewer. So the walk tries the
+        // results in order and checks each landing by what the screen becomes
+        // — a viewer is black behind its toolbar, an answer is white.
         const openViewer = async (): Promise<{ cx: number; cy: number; dark: number }> => {
-          // A cold start resets the tab and the scroll position: the tap
-          // scenario leaves the device on 知识, which need not carry cards.
+          // A cold start resets the tab and the scroll position: the previous
+          // scenario leaves the device wherever Home sent it.
           await new HdcRunner({ deviceId: target })
             .shell(`aa force-stop ${ZHIHU_BUNDLE}`)
             .catch(() => undefined);
@@ -1413,27 +1430,58 @@ async function main(): Promise<number> {
           await relaunchZhihu();
           await a!.until(() => a!.nodes().bundle === ZHIHU_BUNDLE, 12_000, "Zhihu after restart");
           await settle(a!);
-          const tab = a!.nodes().nodes.find((n) => n.clickable && n.label.trim() === "推荐");
-          if (tab) {
-            const beforeTab = labelKey(a!.nodes().nodes);
-            await tap(a!, tab.cx, tab.cy);
-            await labelsChanged(a!, beforeTab, 6000);
-            await settle(a!);
+          const entry = pickSearchEntry(a!.nodes().nodes);
+          if (!entry) throw new Error("no search entry in the top bar");
+          const feedKey = labelKey(a!.nodes().nodes);
+          await tap(a!, entry.cx, entry.cy);
+          if (!(await labelsChanged(a!, feedKey, 6000))) {
+            throw new Error("the search entry did not open");
           }
+          await settle(a!);
+          const field = pickField(a!.nodes().nodes) ?? pickSearchEntry(a!.nodes().nodes);
+          if (!field) throw new Error("no search field on the search page");
+          await tap(a!, field.cx, field.cy);
+          await sleep(800);
+          const beforeQuery = labelKey(a!.nodes().nodes);
+          a!.sendInput({ action: "text", text: QUERY, x: field.cx, y: field.cy });
+          await sleep(1200);
+          a!.sendInput({ action: "key", key: "enter" });
+          if (!(await labelsChanged(a!, beforeQuery, 8000))) {
+            throw new Error(`the search for ${QUERY} did not open a results page`);
+          }
+          await settle(a!);
+
           const display = a!.nodes().display;
           if (!display) throw new Error("no display size in the layout");
-          // Walk down the feed for image cards. Each round re-reads the list,
-          // because a tap moves the page and the next candidate is new.
-          for (let round = 0; round < 5; round++) {
-            const candidates = pickFeedImages(a!.nodes().nodes);
-            for (const card of candidates) {
-              const feedKey = labelKey(a!.nodes().nodes);
+          const shotViewer = async (): Promise<number> => {
+            await shot(a!, "08-pinch-before");
+            return meanBrightness(join(SHOT_DIR, "08-pinch-before.jpg"));
+          };
+          // Walk the result cards, and on each page scroll for an image. A
+          // result can also be a hot-topic module rather than an article, so
+          // an article without a usable image is a miss, not a failure.
+          for (let round = 0; round < 3; round++) {
+            const cards = pickResultCards(a!.nodes().nodes);
+            for (const card of cards) {
+              const resultsKey = labelKey(a!.nodes().nodes);
               await tap(a!, card.cx, card.cy);
-              if (!(await labelsChanged(a!, feedKey, 8000))) continue;
+              if (!(await labelsChanged(a!, resultsKey, 8000))) continue;
               await settle(a!);
-              // The answer opens at the top; its image may be below.
-              let inline = pickInlineImages(a!.nodes().nodes)[0];
-              for (let i = 0; i < 4 && !inline; i++) {
+              for (let scroll = 0; scroll < 4; scroll++) {
+                const inline = pickInlineImages(a!.nodes().nodes)[0];
+                if (inline) {
+                  const pageKey = labelKey(a!.nodes().nodes);
+                  await tap(a!, inline.cx, inline.cy);
+                  if (await labelsChanged(a!, pageKey, 8000)) {
+                    await sleep(1500);
+                    const dark = await shotViewer();
+                    if (dark <= 120) return { cx: inline.cx, cy: inline.cy, dark };
+                  }
+                  // Not a viewer (or the tap missed): back to the answer.
+                  a!.sendInput({ action: "key", key: "back" });
+                  await sleep(1200);
+                  await settle(a!);
+                }
                 await swipe(
                   a!,
                   608,
@@ -1442,30 +1490,12 @@ async function main(): Promise<number> {
                   Math.round(display.height * 0.35),
                 );
                 await sleep(1500);
-                inline = pickInlineImages(a!.nodes().nodes)[0];
               }
-              if (inline) {
-                const pageKey = labelKey(a!.nodes().nodes);
-                await tap(a!, inline.cx, inline.cy);
-                if (await labelsChanged(a!, pageKey, 8000)) {
-                  await sleep(1500);
-                  await shot(a!, "08-pinch-before");
-                  const dark = await meanBrightness(join(SHOT_DIR, "08-pinch-before.jpg"));
-                  // A viewer is black behind its toolbar; an answer or a
-                  // channel is white. That strip is the only reliable tell —
-                  // the viewer's picture can be a bright screenshot.
-                  if (dark <= 120) {
-                    return { cx: inline.cx, cy: inline.cy, dark };
-                  }
-                }
-                // Not a viewer: back to the answer, then to the feed.
-                a!.sendInput({ action: "key", key: "back" });
-                await sleep(1200);
-              }
+              // Back to the results; the next card is tried from there.
               a!.sendInput({ action: "key", key: "back" });
               await sleep(1500);
               await settle(a!);
-              if (!isFeed(a!.nodes().nodes)) return await openViewer();
+              if (!isSearchResults(a!.nodes().nodes)) return await openViewer();
             }
             await swipe(
               a!,
@@ -1477,12 +1507,13 @@ async function main(): Promise<number> {
             await sleep(1500);
             await settle(a!);
           }
-          throw new Error("no card led to an image viewer");
+          throw new Error("no result led to an image viewer");
         };
 
         const viewer = await openViewer();
-        // The answer page behind it is the article the site's animation uses;
-        // it is captured before the next back, from the viewer's own stack.
+        // The viewer before the pinch is the site's last frame: a still of
+        // the zoom cannot be faked by scaling the un-zoomed one, because the
+        // picture inside the viewer really is rendered larger.
         const demo = await demoSave(a!, "4-image");
         // Three segments: the first only records the baseline, the next two
         // are the real injections (LiveInput's contract). The viewer fills the
@@ -1496,6 +1527,7 @@ async function main(): Promise<number> {
         }
         await sleep(1200);
         const after = await shot(a!, "09-pinch-after");
+        const demoZoomed = await demoSave(a!, "5-zoomed");
         const changed = await meanDiff(
           join(SHOT_DIR, "08-pinch-before.jpg"),
           join(SHOT_DIR, "09-pinch-after.jpg"),
@@ -1512,6 +1544,7 @@ async function main(): Promise<number> {
             "docs/acceptance/live/screenshots/08-pinch-before.jpg",
             after,
             demo,
+            demoZoomed,
             demoArticle,
           ],
         };
