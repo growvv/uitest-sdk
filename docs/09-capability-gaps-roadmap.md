@@ -414,18 +414,47 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 1. ~~**7.0 WebSocket 通道**（P0）~~ —— ✅ 已完成（0.6.0，`transport: "ws"`）。7.0 SO 不打包，由调用方提供路径。
 2. ~~**布局检查 + 节点高亮**（P1）~~ —— ✅ 已完成（0.7.0 的 `inspect` 与 `live`）。
 3. ~~**文件管理器 / 配置持久化 / 帧率显示**（P1）~~ —— ✅ 已完成（0.7.0，`dev.files` / `CastConfig` / `FpsMeter`）。
-4. ~~**`live` 页的截图与录屏按钮**（P1 余项）~~ —— ✅ 已完成（未发版）。截图复用了会话的遮罩规则；录屏必须另起一个 daemon，因为 `onStart` 在一个进程里只能开一次。
+4. ~~**`live` 页的截图与录屏按钮**（P1 余项）~~ —— ✅ 已完成（0.8.0）。截图复用了会话的遮罩规则；录屏必须另起一个 daemon，因为 `onStart` 在一个进程里只能开一次。
 5. **`live` 页的点击交互**（P1 余项）—— 画布上点一下就等于在设备上点一下。要先想清楚它与租约/接管的规则怎么配合：`live` 进程持有租约期间 Agent 命令本来就以 `lease_held` 停下，所以页面上的点击天然是「持租约的人」在操作，但页面必须把这件事说出来，否则同一块屏幕会出现两种操作来源。
-6. ~~**多设备同时投屏**（P1 余项）~~ —— ✅ 已完成（未发版）。每台设备一个 `live` 进程、端口分开；`pidof` 按 target 走，状态文件按设备 tag 分。顺带修了两个同设备多实例的真问题：daemon 归因改用 `ps -ef` 的 argv（不再盲杀别人的进程），租约的同名 task 重入要求 pid 相同。见 [13](13-stage-log.md)。
+6. ~~**多设备同时投屏**（P1 余项）~~ —— ✅ 已完成（0.8.0）。每台设备一个 `live` 进程、端口分开；`pidof` 按 target 走，状态文件按设备 tag 分。顺带修了两个同设备多实例的真问题：daemon 归因改用 `ps -ef` 的 argv（不再盲杀别人的进程），租约的同名 task 重入要求 pid 相同。见 [13](13-stage-log.md)。
 7. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。
 8. **模拟器自建扩展**（探索性）—— 模拟器无 XPM，可以在这里做虚拟屏 / AAMS 的原型验证，但结论不能平移到真机。
 
-## 五、发版计划
+## 五、发版记录与下一次的计划
 
-下一个版本号是 **0.8.0**。已进这一版的：`live` 页的截图与录屏按钮、`test/` 与 `scripts/` 纳入类型检查、`type --paste`、验收报告去掉明文设备序列号、多实例归因与租约修复。发版前要做的三件事：
+### 0.8.0（已发，2026-11-16）
 
-1. `npm version 0.8.0`，并把 `docs/13-stage-log.md` 里所有 `（未发版）` 改成 `（0.8.0）`。
+npm `uitest-sdk@0.8.0`、tag `v0.8.0`、GitHub Release 与官网同一时间上线。进这一版的：
+`live` 页的截图与录屏按钮、`CastOptions.durationMs` 生效、`test/` 与 `scripts/` 纳入类型检查、
+`type --paste`、验收报告去掉明文设备序列号、多实例归因与租约修复。
+
+发版过程本身抓出三个问题，都已修掉并留了测试：`resume` 放不掉人的 hold（pid 规则误伤没有
+所属进程的租约）、`triggerKey` 按电源键锁屏导致后续截图全是通知栏、以及第一次把它归因成
+「没清通知栏」的错误诊断。细节见 [13](13-stage-log.md)。
+
+### 下一次发版的步骤
+
+1. `npm version <x.y.z>`，并把 `docs/13-stage-log.md` 里所有 `（未发版）` 改成 `（x.y.z）`；
+   顺带检查本文件里有没有同样过期的「未发版」。
 2. 在真机上跑一遍验收，两个脚本都要过：
+   - `npm run acceptance:handoff` —— 接管闭环（handoff → `lease_held` → `resume` → 续跑）。
+   - `npx tsx scripts/acceptance.ts --targets <id>` —— 全部能力表，重写 `docs/acceptance/`。
+     它会覆盖 51 个已入库的证据文件（截图、日志、`report.md`），这是有意的：报告是生成物，
+     不是手写的，版本之间必须能复现。
+
+   **跑之前先把设备收拾干净**，截图是会公开发布的：
+   - 解锁、屏幕常亮（否则 `streamScreen` 收不到帧，卡在 `cropToWindow` 之后）。
+   - 打开一个中性的公开页面（设置首页、知乎热榜这类），别停在聊天界面或通知栏。
+   - 0.8.0 起脚本自己会挡一道：每个能力截图前检查屏幕是否锁着，能解锁就解锁，解不开
+     （有 PIN）就中止。根因是 `triggerKey` 那一步按电源键会锁屏，之后所有截图都拍在锁屏上
+     ——2026-11-16 两次验收都栽在这里，第二次截到的是账户变动与个人消息，整个目录回滚。
+   - 但页面内容脚本管不了：跑完把截图逐张看过再提交，这一步不能省。
+
+   跑完 `git diff --stat docs/acceptance/`：`scripts/` 下的 `.ts` 只应有行尾差异
+   （`--ignore-cr-at-eol` 后为空），`report.md` 的差异应只有耗时与节点数。
+3. `npm publish`（用 bypass 2FA 的 granular token，npmrc 放仓库外，用完删）。
+   注意 PUT 会返回 **202 Accepted** 而不是 201：那是 staged publishing，元数据先出现、
+   tarball 晚几十秒才可下载，`npm view` 一开始查不到属正常。
    - `npm run acceptance:handoff` —— 接管闭环（handoff → `lease_held` → `resume` → 续跑）。
    - `npx tsx scripts/acceptance.ts --targets <id>` —— 全部能力表，重写 `docs/acceptance/`。
      它会覆盖 51 个已入库的证据文件（截图、日志、`report.md`），这是有意的：报告是生成物，
