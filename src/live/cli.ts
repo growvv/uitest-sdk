@@ -173,6 +173,11 @@ export async function startLive(
 
   const source: LiveServerOptions["source"] = {
     createCast: () => device.createCast(streamCast),
+    // Takeover is always offered: a read-only viewer never triggers it, and
+    // the server opens the lane at startup so the first take does not wait on
+    // an fport. A second forward and socket keep input out of the layout
+    // queue, which is what makes a tap land in tens of milliseconds.
+    openInput: () => device.openInputLane(),
     ...(opts.layout ? { readScreen } : {}),
     capture,
     startRecording: () => recording.start(),
