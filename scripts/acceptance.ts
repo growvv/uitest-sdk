@@ -106,8 +106,11 @@ const CAPABILITIES: Capability[] = [
   {
     name: "triggerKey",
     async run(dev, ev) {
-      await dev.agent.triggerKey(26); // power
-      await ev.log("triggerKey 26 (power) sent");
+      // Pressing the power key on an awake phone locks it. Without putting the
+      // screen back, this screenshot — and every one after it — is the lock
+      // screen, with the person's notifications on it.
+      await pressPowerKey(dev.hypium);
+      await ev.log("triggerKey 26 (power) sent, screen restored");
       await ev.screenshot(await dev.agent.captureScreen());
       return "ok";
     },
@@ -302,6 +305,47 @@ function countNodes(n: { children?: unknown[] }): number {
   return 1 + kids.reduce((acc, c) => acc + countNodes(c), 0);
 }
 
+/** The part of `dev.hypium` this guard needs, so a test can stand in for it. */
+export interface DisplayLike {
+  isDisplayLocked(): Promise<boolean>;
+  unlock(): Promise<void>;
+}
+
+/**
+ * Makes sure the screen is worth photographing before evidence is written.
+ *
+ * The lock screen is where a real person's messages, bank alerts and delivery
+ * notices live, and every screenshot here is committed and published. Two ways
+ * it gets captured anyway: the phone sleeps mid-run (the `triggerKey(26)` step
+ * presses the power key on purpose), or it was left locked before the run.
+ * A swipe cannot clear a PIN, so a phone that stays locked stops the run
+ * rather than writing someone's notifications into the repository.
+ */
+export async function assertCapturable(display: DisplayLike): Promise<void> {
+  if (!(await display.isDisplayLocked())) return;
+  await display.unlock();
+  if (await display.isDisplayLocked()) {
+    throw new Error(
+      "the phone is still on its lock screen: unlock it (a PIN cannot be swiped away) and run again",
+    );
+  }
+}
+
+/**
+ * Sends the power key and then puts the screen back where it was.
+ *
+ * The capability exists to prove key events reach the device. Pressing it on an
+ * awake phone locks the phone, and every later capture is then the lock screen
+ * — which is where a person's notifications are. Pressing it again restores
+ * the screen, so the run continues on the app it started on.
+ */
+export async function pressPowerKey(
+  dev: DisplayLike & { pressKey(code: number): Promise<unknown> },
+): Promise<void> {
+  await dev.pressKey(26);
+  await assertCapturable(dev);
+}
+
 /** First bundleName in the tree that also has parsable bounds. */
 function findBundle(n: {
   attributes: Record<string, string>;
@@ -361,6 +405,10 @@ async function runTarget(target: string): Promise<{ results: Result[]; info: Env
       }
       const t0 = performance.now();
       try {
+        // `triggerKey(26)` presses the power key, so from that capability on
+        // the phone may be asleep; every capture after it would otherwise be
+        // the lock screen.
+        await assertCapturable(dev.hypium);
         const detail = await cap.run(dev, ev);
         results.push({
           capability: cap.name,
