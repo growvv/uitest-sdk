@@ -13,9 +13,10 @@
     <div class="nav-links">
       <a href="#features">能力</a>
       <a href="#cli">命令行</a>
+      <a href="#showcase">实拍</a>
+      <a href="#bench">实测</a>
       <a href="#compare">对比</a>
       <a href="#codec">传输与解码</a>
-      <a href="#bench">实测</a>
       <a href="#video">视频</a>
       <a href="api.html">API</a>
       <a href="docs.html">文档</a>
@@ -262,6 +263,97 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
             <tr><td><code>stale</code></td><td>4</td><td>等待审批期间页面变了</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="showcase" class="section showcase reveal">
+      <h2>实拍：投屏与布局检查</h2>
+      <p class="section-lede">两张都是真实页面截下来的，没有重画。图上的黄色高亮由页面自己按节点坐标播放：选中的那一行和手机画面上对应的框同时亮起，就是你在 <code>live</code> 里点一行时看到的样子。</p>
+
+      <figure class="shot" data-shot>
+        <div class="shot-scroll">
+          <div class="shot-frame">
+            <img src="assets/showcase/live.jpg" alt="uitest-phone live 页面：左侧是手机画面与节点框，右侧是节点表" width="1020" height="900">
+            <div class="shot-overlay" aria-hidden="true">
+              <span class="hl hl-row is-on" style="left:47%;top:35.47%;width:53%;height:3.55%"></span>
+              <span class="hl hl-box is-on" style="left:8.2%;top:36.23%;width:30.5%;height:4.96%"></span>
+              <span class="hl hl-row" style="left:47%;top:39.02%;width:53%;height:3.55%"></span>
+              <span class="hl hl-box" style="left:8.2%;top:43.27%;width:30.5%;height:4.96%"></span>
+              <span class="hl hl-row" style="left:47%;top:49.67%;width:53%;height:3.55%"></span>
+              <span class="hl hl-box" style="left:8.2%;top:60.36%;width:30.5%;height:4.96%"></span>
+            </div>
+          </div>
+        </div>
+        <p class="shot-scroll-hint">左右滑动看完整页面</p>
+        <figcaption>
+          <p class="shot-title"><code>uitest-phone live</code> · 浏览器里投屏 + 节点表</p>
+          <p class="shot-step">
+            <span class="is-on">[100] button 个人热点</span>
+            <span>[101] button 流量管理</span>
+            <span>[104] button VPN</span>
+          </p>
+        </figcaption>
+      </figure>
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>画面和节点是同一次读屏</h3>
+          <ul>
+            <li>节点框按读屏时的 <code>bounds</code> 画，和设备分辨率同一个坐标系，不会随窗口缩放错位。</li>
+            <li>帧走一条 WebSocket，浏览器自己用 <code>VideoDecoder</code> 解码；页面上写着它此刻的 fps 和距上一帧的时间。</li>
+            <li>画面在动、UI 静止时只出一帧——采集是脏区驱动的，不是卡住。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>遮罩在读屏时就生效</h3>
+          <ul>
+            <li>打开 <code>mask credentials</code>，账号、验证码这类文本在布局被读出来的那一刻就被替换，不是给视频打码。</li>
+            <li>所以截图、节点表、复制出来的 JSON 三处看到的是同一个遮罩结果。</li>
+            <li>同一台设备上所有页面都关掉遮罩，才会真的露出原文。</li>
+          </ul>
+        </article>
+      </div>
+
+      <figure class="shot" data-shot>
+        <div class="shot-scroll">
+          <div class="shot-frame">
+            <img src="assets/showcase/inspect-panel.jpg" alt="inspect --html 面板：左侧是带编号框的手机截图，右侧是编号、ref、角色、bounds 表格" width="1280" height="1132">
+            <div class="shot-overlay" aria-hidden="true">
+              <span class="hl hl-row is-on" style="left:39.53%;top:24.16%;width:58.59%;height:2.55%"></span>
+              <span class="hl hl-box is-on" style="left:3.88%;top:19.77%;width:32.09%;height:5.21%"></span>
+              <span class="hl hl-row" style="left:39.53%;top:38.48%;width:58.59%;height:2.55%"></span>
+              <span class="hl hl-box" style="left:3.88%;top:43%;width:32.09%;height:5.21%"></span>
+              <span class="hl hl-row" style="left:39.53%;top:46.12%;width:58.59%;height:2.55%"></span>
+              <span class="hl hl-box" style="left:3.88%;top:60.94%;width:32.09%;height:5.21%"></span>
+            </div>
+          </div>
+        </div>
+        <p class="shot-scroll-hint">左右滑动看完整页面</p>
+        <figcaption>
+          <p class="shot-title"><code>inspect --html</code> · 单文件布局面板</p>
+          <p class="shot-step">
+            <span class="is-on">#4 · ref 96 · button 飞行模式</span>
+            <span>#9 · ref 101 · button 流量管理</span>
+            <span>#12 · ref 104 · button VPN</span>
+          </p>
+        </figcaption>
+      </figure>
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3>图上的数字就是 ref</h3>
+          <ul>
+            <li>每个框角上的编号对应表里的 <code>#</code> 行；那一行的 <code>ref</code> 可以直接交给 <code>tap --ref</code>。</li>
+            <li>框的颜色按角色固定：button 绿、text 蓝、list 紫、toggle 青，两次读同一屏结果一致。</li>
+            <li>表格给出 <code>bounds</code> 与状态（focused / scrollable），排版问题不用靠猜。</li>
+          </ul>
+        </article>
+        <article class="bench-card">
+          <h3>一个 HTML 文件，不联网</h3>
+          <ul>
+            <li>截图以 data URI 内嵌，没有外部图片、字体或脚本请求，丢到任何机器上双击就能看。</li>
+            <li>悬停表格某一行，图上对应的框会加亮；点一下也能固定住。</li>
+            <li>同一份数据还以 <code>--json</code> 输出，报告和面板用的是同一个结构。</li>
+          </ul>
+        </article>
       </div>
     </section>
 

@@ -373,6 +373,129 @@ td:nth-child(3) {
   color: var(--fg);
 }
 
+/* ------------------------------------------------------------- showcase */
+
+.showcase h2 {
+  margin: 0;
+  font-size: clamp(28px, 3.4vw, 42px);
+  letter-spacing: -0.01em;
+}
+
+/* The two screenshots are wide (1020 and 1280 px of real UI). Shrinking them
+   to phone width would make every label a smudge, so below 760 px the frame
+   scrolls sideways instead — same choice as the pipeline diagram. */
+.shot {
+  margin: 32px 0 0;
+}
+
+.shot-scroll {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.shot-frame {
+  position: relative;
+  line-height: 0;
+}
+
+.shot-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* One absolutely-positioned layer over the real screenshot. The rectangles
+   are percentages measured from the live DOM, so they land on the row and the
+   box that the picture shows at any width. */
+.shot-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hl {
+  position: absolute;
+  border-radius: 4px;
+  opacity: 0;
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+  transition: opacity 0.3s ease;
+}
+
+.hl.is-on {
+  opacity: 1;
+}
+
+.hl-box {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 2px;
+}
+
+.shot-scroll-hint {
+  display: none;
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.shot figcaption {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+}
+
+.shot-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.shot-title code {
+  color: var(--fg);
+  font-size: 0.95em;
+}
+
+.shot-step {
+  display: grid;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* All steps occupy the same grid cell, so the caption never reflows while the
+   highlights cycle. Only the active one is painted. */
+.shot-step span {
+  display: block;
+  grid-area: 1 / 1;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.shot-step span.is-on {
+  opacity: 1;
+}
+
+@media (max-width: 760px) {
+  .shot-scroll {
+    overflow-x: auto;
+  }
+
+  .shot-frame {
+    min-width: 720px;
+  }
+
+  .shot-scroll-hint {
+    display: block;
+  }
+}
+
 /* ------------------------------------------------------------ card grid */
 
 .cards {

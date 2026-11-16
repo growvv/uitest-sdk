@@ -41,7 +41,7 @@ const pages = [
 ];
 
 // ------------------------------------------------------------------- anchors
-const sections = ["hero", "terminal", "cli", "bench", "compare", "codec", "features", "arch", "video", "limits"];
+const sections = ["hero", "terminal", "cli", "showcase", "bench", "compare", "codec", "features", "arch", "video", "limits"];
 for (const id of sections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(html)) fail(`index.html is missing id="${id}"`);
 }
@@ -232,6 +232,76 @@ for (const lane of ["设备编码器", "WebCodecs", "VideoToolbox", "Python 桥�
 }
 const accentNodes = (codec.match(/class="node node-accent"/g) ?? []).length;
 if (accentNodes !== 2) fail(`#codec 的图有 ${accentNodes} 个高亮节点，应为 2 个（WebSocket 与 WebCodecs）`);
+
+// The showcase section sells the two features that are hard to describe in
+// prose: live mirroring and the layout inspector. The screenshots must be the
+// real pages, each overlay must pair a table row with a box on the picture,
+// and the pairs must line up (equal counts) or the animation desynchronises.
+const showcase = sectionHtml("showcase");
+for (const needle of [
+  "uitest-phone live",
+  "inspect --html",
+  "assets/showcase/live.jpg",
+  "assets/showcase/inspect-panel.jpg",
+  "tap --ref",
+  "VideoDecoder",
+  "mask credentials",
+]) {
+  if (!showcase.includes(needle)) fail(`#showcase 缺少「${needle}」`);
+}
+const shots = showcase.match(/<figure class="shot"[^>]*>/g) ?? [];
+if (shots.length !== 2) fail(`#showcase 有 ${shots.length} 张 .shot，应为 2 张（投屏、布局面板）`);
+for (const name of ["live.jpg", "inspect-panel.jpg"]) {
+  const p = join(SITE, "assets", "showcase", name);
+  if (!existsSync(p)) fail(`missing site/assets/showcase/${name}`);
+  // A still that got replaced by a placeholder would be tiny; the real pages
+  // are 1020 and 1280 px wide UI.
+  if (statSync(p).size < 30 * 1024) fail(`assets/showcase/${name} is only ${Math.round(statSync(p).size / 1024)} KB`);
+}
+// The overlay rectangles are measured percentages of the screenshot. Replace
+// the image and they silently point at the wrong pixels, so the declared
+// width/height must match the file's real dimensions.
+function jpegSize(path) {
+  const b = readFileSync(path);
+  let i = 2;
+  while (i < b.length - 9) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const marker = b[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { height: b.readUInt16BE(i + 5), width: b.readUInt16BE(i + 7) };
+    }
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return null;
+}
+for (const [, src, w, h] of showcase.matchAll(/<img src="(assets\/showcase\/[^"]+)"[^>]*\bwidth="(\d+)"[^>]*\bheight="(\d+)"/g)) {
+  const size = jpegSize(join(SITE, src));
+  if (!size) fail(`cannot read the dimensions of ${src}`);
+  if (size.width !== Number(w) || size.height !== Number(h)) {
+    fail(`${src} is ${size.width}x${size.height} but the markup says ${w}x${h}; the highlight percentages would be off`);
+  }
+}
+const hlRows = (showcase.match(/class="hl hl-row/g) ?? []).length;
+const hlBoxes = (showcase.match(/class="hl hl-box/g) ?? []).length;
+if (hlRows < 3 || hlRows !== hlBoxes) {
+  fail(`#showcase 的高亮不成对：${hlRows} 个行、${hlBoxes} 个框；每步需要一个行和一个框`);
+}
+// Every overlay rectangle is a measured percentage; a px value would not
+// survive the responsive width change.
+for (const [, style] of showcase.matchAll(/class="hl hl-(?:row|box)[^"]*" style="([^"]*)"/g)) {
+  if (!/%/.test(style)) fail(`#showcase 的高亮用了非百分比坐标：${style}`);
+}
+// The caption steps and the highlight pairs must be the same length, or the
+// last step shows a label with nothing lit.
+for (const [, caption] of showcase.matchAll(/<p class="shot-step">([\s\S]*?)<\/p>/g)) {
+  const steps = (caption.match(/<span/g) ?? []).length;
+  if (steps < 3) fail(`#showcase 的说明只有 ${steps} 步，至少 3 步`);
+}
+const stepTotal = (showcase.match(/<p class="shot-step">[\s\S]*?<\/p>/g) ?? []).reduce(
+  (n, block) => n + (block.match(/<span/g) ?? []).length,
+  0,
+);
+if (stepTotal !== hlRows) fail(`#showcase 的说明共 ${stepTotal} 步，但高亮有 ${hlRows} 组`);
 
 const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
@@ -525,6 +595,20 @@ if (!apiHtml.includes(`<strong>${VERSION}</strong>`)) {
 // that but Chrome blocks them on file://, which the spec requires to work.
 if (/^\s*export\s/m.test(js)) {
   fail("main.js has a top-level export; it is loaded as a classic script and cannot use module syntax");
+}
+// The showcase animation is the only moving part added without a build step.
+// Assert it exists and degrades: the first step is lit in the markup, so a
+// visitor with no JS sees a correct static pair rather than nothing.
+if (!/function initShowcase/.test(js)) fail("main.js has no initShowcase; the showcase would never animate");
+if (!/prefers-reduced-motion/.test(js)) fail("main.js does not honour prefers-reduced-motion in the showcase");
+// Each figure must have its first step lit in the markup: without JS (or with
+// reduced motion) a visitor sees one correct row+box+label, not an empty
+// overlay. Asserting it globally is not enough — one lit figure would hide an
+// unlit one.
+for (const [figure] of showcase.matchAll(/<figure class="shot"[\s\S]*?<\/figure>/g)) {
+  for (const part of ['class="hl hl-row is-on"', 'class="hl hl-box is-on"', '<span class="is-on">']) {
+    if (!figure.includes(part)) fail(`#showcase 有一张图没有默认点亮首步（缺少 ${part}）`);
+  }
 }
 
 const chromePath = [

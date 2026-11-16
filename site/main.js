@@ -107,6 +107,67 @@ function initTyping() {
   for (const term of groups.keys()) observer.observe(term);
 }
 
+/**
+ * Steps the highlight pairs on each showcase screenshot.
+ *
+ * The overlay's rectangles were measured from the real page (row in the node
+ * table, box on the phone), so this only has to turn them on in order. Each
+ * figure is its own cycle and starts when it scrolls into view; without JS,
+ * or with reduced motion, the first step simply stays lit.
+ */
+const STEP_MS = 2000;
+
+function initShowcase() {
+  const figures = [...document.querySelectorAll("[data-shot]")];
+  if (!figures.length) return;
+
+  const cycles = figures.map((fig) => {
+    const rows = [...fig.querySelectorAll(".hl-row")];
+    const boxes = [...fig.querySelectorAll(".hl-box")];
+    const labels = [...fig.querySelectorAll(".shot-step span")];
+    return { fig, rows, boxes, labels, index: 0, timer: null };
+  });
+
+  const paint = (cycle) => {
+    const i = cycle.index;
+    cycle.rows.forEach((el, n) => el.classList.toggle("is-on", n === i));
+    cycle.boxes.forEach((el, n) => el.classList.toggle("is-on", n === i));
+    cycle.labels.forEach((el, n) => el.classList.toggle("is-on", n === i));
+  };
+
+  const start = (cycle) => {
+    if (cycle.timer) return;
+    cycle.timer = setInterval(() => {
+      cycle.index = (cycle.index + 1) % Math.max(cycle.rows.length, 1);
+      paint(cycle);
+    }, STEP_MS);
+  };
+
+  for (const cycle of cycles) paint(cycle);
+
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!("IntersectionObserver" in window)) {
+    cycles.forEach(start);
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const cycle = cycles.find((c) => c.fig === entry.target);
+        if (!cycle) continue;
+        if (entry.isIntersecting) start(cycle);
+        else if (cycle.timer) {
+          clearInterval(cycle.timer);
+          cycle.timer = null;
+        }
+      }
+    },
+    { threshold: 0.35 },
+  );
+  for (const cycle of cycles) observer.observe(cycle.fig);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // A motion-independent marker that the script actually ran; check-site.mjs
   // asserts it in a headless browser, because a plain text check cannot.
@@ -114,4 +175,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initCopyButton();
   initReveal();
   initTyping();
+  initShowcase();
 });
