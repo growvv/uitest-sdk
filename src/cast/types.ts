@@ -7,8 +7,30 @@ export interface JpegFrame {
 
 export interface CastOptions {
   mode: "stream" | "record";
+  /**
+   * Which transport to use. Chosen explicitly and never inferred from what
+   * happens to work: `"grpc"` needs the 6.8 extension, `"ws"` needs the 7.0
+   * one, and asking for a transport whose extension is not on the device is an
+   * error rather than a silent downgrade.
+   *
+   * Defaults to `"grpc"` — that is the build bundled in `assets/`.
+   */
+  transport?: "grpc" | "ws";
   /** Overrides the abstract socket name; the only way to run casts concurrently. */
   socketName?: string;
+  /**
+   * WebSocket transport only: the device TCP port the extension listens on
+   * (`-p`). One port per concurrent cast; defaults to 5000.
+   */
+  port?: number;
+  /**
+   * WebSocket transport only: local path to the 7.0 extension. It is pushed to
+   * `/data/local/tmp/<basename>` and loaded by that name, so it can sit next to
+   * the bundled 6.8 build without either overwriting the other.
+   *
+   * Required for `transport: "ws"` — the SDK does not bundle the 7.0 build.
+   */
+  wsExtension?: string;
   frameRate?: 15 | 30 | 60 | 120;
   /** Integer shrink factor. 2 -> half width/height. Values outside 1..5 are rejected. */
   scale?: 1 | 2 | 3 | 4 | 5;

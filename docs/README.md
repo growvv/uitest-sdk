@@ -6,7 +6,7 @@
 
 | 文档 | 内容 |
 |---|---|
-| [api.md](api.md) | **SDK API 文档**：Device / AgentClient / 投流录制 / `dev.hypium` 118 个方法 / 错误码（官网版：[api.html](https://growvv.github.io/uitest-sdk/api.html)） |
+| [api.md](api.md) | **SDK API 文档**：Device / AgentClient / 投流录制（gRPC 与 7.0 WebSocket）/ `dev.hypium` 118 个方法 / 错误码（官网版：[api.html](https://growvv.github.io/uitest-sdk/api.html)） |
 | [01-extension-abi.md](01-extension-abi.md) | uitest 扩展 ABI、加载器行为、注入的低层函数 |
 | [02-agent-so.md](02-agent-so.md) | `agent.so`（1.1.10）—— 完整 hypium API 面 + RPC 协议 |
 | [03-libscreen-casting.md](03-libscreen-casting.md) | `libscreen_casting.z.so` —— gRPC H.264 推流 / 录屏 |

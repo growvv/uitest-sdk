@@ -125,10 +125,12 @@ uitest start-daemon singleness --extension-name libscreen_casting.z.so \
 | 传输 | Unix abstract socket `@scrcpy_grpc_socket` | **TCP 5000**（`netstat` 可见 `0.0.0.0:5000 LISTEN`） |
 | 协议 | gRPC + protobuf（需 nghttp2 / HTTP/2） | **RFC6455 WebSocket**（文本命令 + 二进制帧） |
 | 客户端依赖 | gRPC 运行时、protobuf 代码生成 | **零依赖**，裸 TCP + 手写帧编解码 |
-| 端口隔离 | socket 名固定 → 只能改名并发 | **`-p` 参数隔离，多实例天然支持** |
+| 端口隔离 | socket 名固定 → 只能改名并发 | **`-p` 参数隔离** |
 | 握手延迟 | 7.8~11.0 ms（gRPC channel ready） | `{"type":"started"}` **1.5~5.0 ms** |
 | 首帧延迟 | 90.6~102.5 ms | **62.2~114.1 ms** |
 | 并发推流 | 需改 socket 名 | ✅ **5000 + 5001 两路同时出流**（8 s 内 352 / 233 帧） |
+
+> **⚠️ 多实例的边界（2026-11-16 修正）**：`-p` 端口隔离确实让两个 daemon 各占一个端口，但**同一个 daemon 上不能并发两个客户端**。实测：两个 WebSocket 客户端能同时出流（113/113 帧），但 `stop` 是**进程级**的 —— 任一客户端 stop，另一路立刻 0 帧；stop 之后监听 socket 关闭，新客户端永远连不上。所以「多实例」指的是**多个 daemon**，和 6.8 改 socket 名是同一个粒度。SDK 里一个 `WsCastClient` 独占一个 daemon。
 
 #### 同条件帧率对照（2026-11-15，同一台真机、同一段滑动、同一批参数）
 
@@ -146,18 +148,21 @@ uitest start-daemon singleness --extension-name libscreen_casting.z.so \
 协议（`strings` + 实测逐条验证）：
 
 ```
-握手:  ws://host:port，无子协议（lws 实现，二进制里 lws_* 符号 88 处）
+握手:  GET / + Upgrade: websocket + Sec-WebSocket-Protocol: scrcpy → 101
+       （子协议头是必需的，不带会被拒）
 文本:  {"type":"start"}       → {"type":"started"}
-       {"type":"requestIDR"}  → {"type":"idrResponse","result":0}
-       {"type":"stop"}        → {"type":"stopped","frameCount":389}   ← 6.8 没有，要额外调 onEnd
-       {"type":"cpd","result":"<base64 SPS/PPS>"}                     ← 7.0 新增，6.8 没有
+       {"type":"requestIDR"}  → {"type":"idrResponse","result":0}   实测 9 ms
+       {"type":"stop"}        → {"type":"stopped","frameCount":N}   ← 6.8 没有，要额外调 onEnd
 二进制: 4 字节大端长度前缀 + H.264 Annex-B payload
+       （前缀 = payload 长度 − 4，118/118 帧实测一致）
 ```
+
+NAL 类型实测：`{1:114, 5:2, 7:2, 8:2}` —— SPS/PPS 在带内，和 6.8 一样跟着关键帧走。
 
 **两个 7.0 独有的协议改进**：
 
 1. **`stop` 直接返回 `frameCount`** —— 6.8 的 `onEnd` 是独立 RPC，且**有粘性副作用**（调用后该进程永远出不了帧）。7.0 的 `stop` 把帧数和停止合成一条消息，语义更干净。
-2. **`cpd` 单独下发 SPS/PPS** —— 6.8 把 SPS/PPS 混在第一个二进制帧里（`flags=8`），7.0 用文本消息单独给出，客户端可以在收到任何视频帧之前就初始化解码器。
+2. **`cpd` 单独下发 SPS/PPS** —— ⚠️ **格式串在二进制里，但实测收不到**。10 s 有画面变化、195 个二进制帧的过程中只收到过 `started`；start-then-idr / idr-before-start / 空闲 12 s 三种顺序都试过，`cpd` 一次都没出现。**不要依赖它**，解码器初始化照旧看第一个关键帧。
 
 #### `-m 1` 录制在 7.0 上同样可用
 
@@ -177,9 +182,11 @@ stop  → {"type":"stopped","frameCount":1}     ← 这个 1 是假的，见下
 OpenCV → 1216×2688, 1318 帧, 可正常解码
 ```
 
-**⚠️ 7.0 的 `frameCount` 上报有 bug**：录制 1,318 帧却报 `frameCount: 1`。6.8 的 `onEnd` 返回的是真实帧数（实测 97）。**做录制时不要用 7.0 的 frameCount 判断成败**，要检查文件大小或解析 `stsz.sample_count`。
+**⚠️ 7.0 的 `frameCount` 在录制模式下有 bug**：录制 1,318 帧却报 `frameCount: 1`（多次复现：193 / 1,318 帧都报 1）。推流模式下上报正常。**做录制时不要用 7.0 的 frameCount 判断成败**，要检查文件大小或解析 `stsz.sample_count`。
 
-> 这也说明 7.0 的录制是**真的在录**（11.64 s 连续画面），不是 6.8 那种「靠画面变化驱动、静止就 0 帧」。7.0 在 `-m 1` 下 muxer 持续写帧。
+**⚠️ 录制也不是「持续写帧」**（2026-11-16 修正）：8 s 不动屏，6.8 和 7.0 **都是 259 B / 0 帧 / 无 sample**。两者都是脏区驱动。之前「7.0 的 muxer 持续写帧」的结论是错的 —— 那次测的 11.64 s 全程有滑动。
+
+**⚠️ 录制文件的写入时机**：`start` 之后 muxer 立刻创建 259 B 的头，样本在 `stop` 时才落盘（实测 140 KB）。所以**不能看到文件非零就 pull**，要等大小稳定（SDK 的 `waitForFile` 就是这么做的）。
 
 > **对方案的影响**：真机上有 7.0 SO 时，应把它作为 H.264 的首选通道 —— 少一层 HTTP/2 栈，多实例免费，客户端实现量从「gRPC 运行时」降到「一个 WebSocket 帧编解码器」。
 >
@@ -349,8 +356,8 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 
 | 能力 | 他们怎么做 | 我们的现状 | 判断 |
 |---|---|---|---|
-| **7.0 WebSocket 投流** | RFC6455 + 4B 长度前缀 H.264 | 只有 6.8 gRPC | ⏳ **已跑通，帧率与 6.8 持平，但多实例免费、客户端零依赖**。见 1.4 |
-| **投流多实例** | 7.0 用 `-p` 端口隔离 | 6.8 要改 socket 名 | ⏳ 7.0 SO 下 5000/5001 双路已验证 |
+| **7.0 WebSocket 投流** | RFC6455 + 4B 长度前缀 H.264 | ✅ **SDK 0.6.0 已支持**（`transport: "ws"`），客户端零 gRPC 依赖。见 1.4 |
+| **投流多实例** | 7.0 用 `-p` 端口隔离 | 6.8 要改 socket 名 | ⏳ 5000/5001 双 daemon 已验证；**同一 daemon 不能并发**（stop 是进程级） |
 | 单张截图 | agent MJPEG | 已实现 178 ms | ✅ 已覆盖 |
 | UI 树 / 布局 | `captureLayout` | 已实现 473 ms | ✅ 已覆盖 |
 | 触摸输入 | HarmonyAgent uinput（<2ms，但真机跑不起来） | agent `Gestures` 2.9~3.85 ms | ✅ 同一量级，且更稳 |
@@ -402,7 +409,7 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 
 ## 四、如果要做，先后顺序
 
-1. **7.0 WebSocket 通道**（P0）—— 已经实测跑通，客户端实现比 gRPC 简单得多，且解锁投流多实例。要先确认第三方二进制的来源可接受性。
+1. ~~**7.0 WebSocket 通道**（P0）~~ —— ✅ 已完成（0.6.0，`transport: "ws"`）。7.0 SO 不打包，由调用方提供路径。
 2. **布局检查 + 节点高亮**（P1）—— 纯客户端，零设备风险，调试体验提升最大。
 3. **文件管理器 / 配置持久化 / 帧率显示**（P1）—— 都是薄封装。
 4. **音频转发**（P2）—— 需要用户华为账号签 HAP，走 hscrcpy 已验证的路。

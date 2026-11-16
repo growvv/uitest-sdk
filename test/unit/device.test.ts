@@ -24,6 +24,8 @@ const hdcState = {
   extDir: "",
   /** Port the fake agent listens on; FakeHdc forwards to it. */
   agentPort: 0,
+  /** Port the fake casting extension listens on; cast forwards go here. */
+  castPort: 0,
   /** Extra lines for the fake `cat /proc/net/tcp`, beyond the listener. */
   sockets: [] as string[],
   /**
@@ -79,6 +81,74 @@ async function startSilentAgent(): Promise<{ port: number; close(): Promise<void
   };
 }
 
+/** Minimal 7.0 extension: upgrades, answers start/stop, never sends frames. */
+async function startFakeWsExtension(): Promise<{
+  port: number;
+  sawStart: boolean;
+  close(): Promise<void>;
+}> {
+  const sockets = new Set<net.Socket>();
+  const state = { sawStart: false };
+  const server = net.createServer((sock) => {
+    sockets.add(sock);
+    sock.on("close", () => sockets.delete(sock));
+    sock.on("error", () => undefined);
+    let buf = Buffer.alloc(0);
+    let upgraded = false;
+    const send = (text: string) => {
+      const payload = Buffer.from(text, "utf8");
+      sock.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
+    };
+    sock.on("data", (d: Buffer) => {
+      buf = Buffer.concat([buf, d]);
+      if (!upgraded) {
+        const end = buf.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        sock.write(
+          "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+            "Sec-WebSocket-Protocol: scrcpy\r\n\r\n",
+        );
+        buf = buf.subarray(end + 4);
+        upgraded = true;
+      }
+      for (;;) {
+        if (buf.length < 2) break;
+        const len = buf[1]! & 0x7f;
+        const off = 2;
+        if (len >= 126 || buf.length < off + 4 + len) break;
+        const mask = buf.subarray(off, off + 4);
+        const masked = buf.subarray(off + 4, off + 4 + len);
+        const plain = Buffer.alloc(masked.length);
+        for (let i = 0; i < masked.length; i++) plain[i] = masked[i]! ^ mask[i % 4]!;
+        buf = buf.subarray(off + 4 + len);
+        const cmd = plain.toString("utf8");
+        if (cmd.includes("start")) {
+          state.sawStart = true;
+          send('{"type":"started"}');
+          // One IDR frame so `stream()` has something to yield.
+          const annexB = Buffer.concat([Buffer.from([0, 0, 0, 1, 0x65]), Buffer.alloc(16, 0x11)]);
+          const head = Buffer.alloc(4);
+          head.writeUInt32BE(annexB.length);
+          const payload = Buffer.concat([head, annexB]);
+          sock.write(Buffer.concat([Buffer.from([0x82, 126, payload.length >> 8, payload.length & 0xff]), payload]));
+        } else if (cmd.includes("stop")) send('{"type":"stopped","frameCount":1}');
+      }
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  return {
+    port: (server.address() as net.AddressInfo).port,
+    get sawStart() {
+      return state.sawStart;
+    },
+    close: () =>
+      new Promise<void>((r) => {
+        for (const s of sockets) s.destroy();
+        server.close(() => r());
+      }),
+  };
+}
+
 function makeExtDir(abi: "arm64" | "x86_64", withCasting: boolean): string {
   const dir = mkdtempSync(join(tmpdir(), "ext-"));
   mkdirSync(join(dir, abi));
@@ -120,7 +190,15 @@ vi.mock("../../src/hdc.js", () => {
     async push(local: string, remote: string) { hdcState.pushed.push(`${local}->${remote}`); }
     async pull() {}
     async readLocal() { return ""; }
-    async fportAdd(port: number) { return hdcState.agentPort || port; }
+    async fportAdd(port: number, remote?: string) {
+      // The agent forward must keep going to the fake agent; a cast forward
+      // (any other device TCP port) goes to the fake casting extension, so one
+      // test can have both servers running.
+      if (remote?.startsWith("tcp:") && remote !== "tcp:8012" && hdcState.castPort) {
+        return hdcState.castPort;
+      }
+      return hdcState.agentPort || port;
+    }
     async fportRemove(port: number) { hdcState.removedPorts.push(port); }
     async listTargets() { return hdcState.targets; }
     async listTargetDetails() {
@@ -144,6 +222,7 @@ beforeEach(() => {
   hdcState.pidofAfterStart = "1000 2000";
   hdcState.extDir = makeExtDir("arm64", true);
   hdcState.agentPort = 0;
+  hdcState.castPort = 0;
   hdcState.sockets = [];
   hdcState.stuck = false;
   hdcState.killed = [];
@@ -317,6 +396,61 @@ describe("Device.connect", () => {
       .rejects.toThrow(ExtensionMissingError);
     await dev.dispose();
     await agent.close();
+  });
+
+  it("refuses the ws transport when no 7.0 extension is installed", async () => {
+    // Choosing a transport is explicit. The bundled assets/ only ship the 6.8
+    // build, so asking for ws without pointing at a 7.0 .so is a setup error
+    // the caller must see, not a silent fallback to gRPC.
+    hdcState.listening = true;
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    await expect(dev.createCast({ mode: "stream", transport: "ws" }))
+      .rejects.toThrow(ExtensionMissingError);
+    expect(hdcState.shellCalls.some((c) => c.includes("-p 5000"))).toBe(false);
+    await dev.dispose();
+    await agent.close();
+  });
+
+  it("starts the ws daemon when a 7.0 extension path is supplied", async () => {
+    hdcState.listening = true;
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+    // `-p 5001` is 0x1389; the client waits for a LISTEN line before dialing.
+    hdcState.sockets = ["  9: 00000000:1389 00000000:0000 0A"];
+    const ws = await startFakeWsExtension();
+    hdcState.castPort = ws.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    const wsPath = join(hdcState.extDir, "arm64", "libscreen_casting_ws.z.so");
+    writeFileSync(wsPath, "fake 7.0 build");
+
+    const cast = await dev.createCast({
+      mode: "stream",
+      transport: "ws",
+      wsExtension: wsPath,
+      port: 5001,
+    });
+    expect(cast.castKind).toBe("h264");
+
+    const spawn = hdcState.shellCalls.find((c) => c.includes("start-daemon") && c.includes("-p 5001"));
+    // The extension name is the local basename: that is what selects the 7.0
+    // build without overwriting the bundled 6.8 file.
+    expect(spawn).toContain("--extension-name libscreen_casting_ws.z.so");
+    expect(hdcState.pushed.some((p) => p.endsWith("->/data/local/tmp/libscreen_casting_ws.z.so"))).toBe(true);
+    // `start` goes out when the stream is iterated, not at construction.
+    const it = cast.stream()[Symbol.asyncIterator]();
+    const first = await it.next();
+    expect(ws.sawStart).toBe(true);
+    expect((first.value as { data: Buffer }).data.subarray(0, 5)).toEqual(
+      Buffer.from([0, 0, 0, 1, 0x65]),
+    );
+
+    await cast.dispose();
+    expect(hdcState.shellCalls).toContain("kill -9 2000");
+    await dev.dispose();
+    await agent.close();
+    await ws.close();
   });
 
   it("reconnects before the next call by default", async () => {

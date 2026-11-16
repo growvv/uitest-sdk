@@ -73,6 +73,21 @@ shell 往返与 uitest 启动——也就是手敲命令时真正付出的时间
 走 MJPEG。用 `cast.castKind`（`"h264"` / `"mjpeg"`）读出实际路径 —— 这是同一能力的两种实现，
 不是失败降级。
 
+H.264 有两条传输可选：默认的 6.8 gRPC（内置），或 7.0 WebSocket：
+
+```ts
+const cast = await dev.createCast({
+  mode: "stream",
+  transport: "ws",                                    // 默认 "grpc"
+  wsExtension: "./libscrcpy_server_unix_7.0-20260930.z.so",
+  port: 5000,
+});
+```
+
+7.0 扩展不随包分发，需要自己提供；它按文件名推到 `/data/local/tmp`，与内置的 6.8 扩展
+同时存在、互不覆盖。帧率两者持平（实测 20.8~23.2 fps），ws 的收益是客户端不再需要 gRPC 运行时。
+一个客户端独占一个 daemon —— `stop` 是进程级的，并发投流靠多个 `port`。
+
 ### 录制
 
 ```ts

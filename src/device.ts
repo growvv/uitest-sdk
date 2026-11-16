@@ -8,6 +8,7 @@ import { HdcRunner } from "./hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
 import { deviceTag } from "./trace.js";
 import { H264CastClient } from "./cast/client.js";
+import { WsCastClient } from "./cast/ws-client.js";
 import { MjpegCastClient } from "./cast/mjpeg.js";
 import { CASTING_EXTENSION, resolveCastingExtension } from "./cast/resolve.js";
 import type { CastClient, CastOptions } from "./cast/types.js";
@@ -277,12 +278,25 @@ export class Device {
   }
 
   /**
-   * Chooses the cast transport explicitly: H.264 where the extension exists,
+   * Chooses the cast transport explicitly: H.264 where an extension exists,
    * MJPEG where it cannot (x86_64 has no build). The choice is reported through
    * `castKind`; it is never a silent downgrade after a failure.
+   *
+   * `transport: "ws"` picks the 7.0 WebSocket build and requires `wsExtension`;
+   * anything else uses the bundled 6.8 gRPC build. The two can coexist on the
+   * device because `--extension-name` is a filename lookup.
    */
   async createCast(opts: CastOptions): Promise<CastClient> {
     this.assertConnected();
+    if (opts.transport === "ws") {
+      if (this.abi === "x86_64") {
+        throw new ExtensionMissingError(
+          `the 7.0 casting extension has no ${this.abi} build`,
+          "ENOCAST",
+        );
+      }
+      return WsCastClient.start(this.hdc, opts);
+    }
     if (this.resolveCastExtension() !== null) {
       return H264CastClient.start(this.hdc, opts);
     }

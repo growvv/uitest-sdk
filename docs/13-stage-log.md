@@ -174,7 +174,80 @@ CI 会在 `catalog.js is missing` 处失败。已在工作流中补 `setup-node`
 
 ### F. 下一阶段候选
 
-1. 7.0 casting（WebSocket 分支）实验支持；
+1. ~~7.0 casting（WebSocket 分支）实验支持~~ → 已在 0.6.0 完成，见下节；
 2. `perfmonitor.so`（HTTP 9999）性能指标接入；
 3. 录制参数设备侧可配置；
 4. （可选）接管期间的线性「人的操作」时间线。
+
+---
+
+## 2026-11-16 · 7.0 WebSocket 投流（0.6.0）
+
+用户的要求是「先做 7.0 casting 的 WebSocket 传输」，同时要核实一个旧结论：早先的调查说 7.0
+相对 6.8 缺能力。**核实结果是旧结论有三条是错的**，本阶段先修正认知，再落实现。
+
+### A. 重新实测（真机 BRA-AL00 / uitest 7.0.0.1 / 7.0 SO `48bb6ccb…`）
+
+| 旧结论 | 实测 |
+|---|---|
+| 7.0 muxer 持续写帧，静止也录 | ❌ 8 s 静止画面：6.8 与 7.0 **都是 259 B / 0 sample**，都是脏区驱动 |
+| 7.0 用 `cpd` 单独下发 SPS/PPS，可提前初始化解码器 | ❌ 格式串在二进制里，但 10 s / 195 帧 / 三种命令顺序都**没收到过 `cpd`** |
+| 多实例天然隔离，一个 daemon 服务多客户端 | ⚠️ 半对：两个客户端能同时出流（113/113 帧），但 `stop` 是**进程级**的 —— 一路 stop 另一路立刻停；stop 后监听 socket 关闭，新客户端 `closed before 101`；不 stop 直接断开则留下「接受连接、回 started、0 帧」的僵尸 |
+| `frameCount` 上报有 bug | ✅ 成立，但**只在录制模式**（1,318 帧报 1）；推流模式正常 |
+
+其它已确认的协议事实（用于实现）：
+
+```
+握手   GET / + Upgrade: websocket + Sec-WebSocket-Protocol: scrcpy → 101（子协议头必需）
+文本   start→started；requestIDR→idrResponse（实测 9 ms）；stop→stopped
+二进制 4 字节大端长度前缀 + Annex-B；前缀 == payload.length − 4（118/118 帧一致）
+NAL    实测 {1:114, 5:2, 7:2, 8:2} —— SPS/PPS 在带内，跟关键帧走
+opcode 只有 1 和 2，无分片、无 ping
+```
+
+**结论：两版本能力对等，选型只看客户端成本。** 因此决定**两个版本都支持**，按 cast 显式选择，
+不做自动回退（[工具选型两原则](../../../.claude/projects/-E-CodeE-vibe51-uitest-agent/memory/uitest-tooling-selection-principles.md)）。
+
+### B. 交付
+
+| 文件 | 内容 |
+|---|---|
+| `src/cast/ws.ts` | RFC6455 子集：握手构造、帧编解码、Annex-B NAL 解析、关键帧判定 |
+| `src/cast/ws-client.ts` | `WsCastClient`：spawn daemon → `hdc fport tcp:<port>` → 101 → start/stop；一个客户端独占一个 daemon |
+| `src/cast/types.ts` | `CastOptions` 新增 `transport` / `wsExtension` / `port` |
+| `src/device.ts` | `createCast` 按 `transport` 路由；ws 无扩展或 x86_64 时抛 `ExtensionMissingError`，**不降级** |
+| `src/index.ts` | 导出 `WsCastClient` 与 `buildHandshake` / `decodeFrames` / `encodeTextFrame` / `isKeyFrame` / `nalTypes` |
+| 测试 | `cast-ws.test.ts`（13）、`cast-ws-client.test.ts`（9）、`device.test.ts` +2；单元 **525 通过**，真机 18 通过 / 1 跳过 |
+
+7.0 SO **不打包**（来源与再分发条款未声明，见 [09](09-capability-gaps-roadmap.md) §1.6）。
+`wsExtension` 由调用方提供，按 basename 推到 `/data/local/tmp/<name>`，与内置 6.8 共存。
+
+### C. 实现中发现并修掉的三个缺陷
+
+1. **录制模式从未发 `start`** —— `start` 只在 `stream()` 里发，而录制调用方从不迭代它，
+   于是 muxer 从未打开，`stop` 写不出东西。改为 `start()` 里录制模式立即发 `start`。
+2. **`dispose()` 先置 `disposed` 再发 `stop`** —— `command()` 见到 `disposed` 直接拒绝，
+   `stop` 根本没发出去。改为先发 `stop` 再置位。
+3. **`waitForFile` 看到非零就返回** —— 7.0 muxer 在 `start` 时就建好 259 B 的头，
+   样本到 `stop` 才落盘。实测拉到 259 B 空壳而设备上是 140 KB。改为「大小稳定且 > 1 KB」才返回。
+
+三个缺陷都有先失败后通过的测试。
+
+### D. 真机验收（`Device.createCast` 端到端）
+
+```
+stream  startMs 924~1268, firstFrame 82~137 ms, 112~116 帧 / 5 s (20.8~23.2 fps),
+        requestIDR 7~9 ms, dispose 187~196 ms
+record  MP4 156,320 B / stsz.sample_count 128（约 6 s 连续滑动）
+```
+
+设备侧 `/data/local/tmp/libscreen_casting.z.so` 已恢复为内置 6.8（md5 `8c8df9a9…`）；
+7.0 只以 `libscreen_casting_ws.z.so` 的名字存在，测试结束即删除。
+
+### E. 文档与版本
+
+- `docs/api.md` §6：`CastOptions` 新字段、7.0 传输小节、录制写入时机
+- `docs/09-capability-gaps-roadmap.md`：修正 §1.4 三条旧结论，P0 表标记完成
+- `site/`：changelog 新增 0.6.0、docs.html 投流小节与版本、index.html 版本与导出数
+- `scripts/check-site.mjs`：新增 `transport: "ws"` / `wsExtension` / 单客户端规则三条断言
+- 版本 `0.5.0 → 0.6.0`

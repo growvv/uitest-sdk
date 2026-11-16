@@ -302,7 +302,12 @@ for (const needle of [
   "0.4.0",
   // The docs page states the version it documents; a release that forgets to
   // bump it leaves the page claiming an older package than npm has.
-  "0.5.0",
+  "0.6.0",
+  // The 7.0 WebSocket transport is a user-visible option, not an internal
+  // detail: the docs must name the flag and the one-daemon-per-client rule.
+  'transport: "ws"',
+  "wsExtension",
+  "一个客户端独占一个 daemon",
   // The CLI half of the package is documented here, not only on the home page.
   "Session.open",
   "TraceRecorder",

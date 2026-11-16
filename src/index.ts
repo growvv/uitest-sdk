@@ -135,6 +135,8 @@ export { CliRunner } from "./cli.js";
 export type { DumpLayoutOptions } from "./cli.js";
 
 export { H264CastClient, loadScrcpyService } from "./cast/client.js";
+export { WsCastClient } from "./cast/ws-client.js";
+export { buildHandshake, decodeFrames, encodeTextFrame, isKeyFrame, nalTypes } from "./cast/ws.js";
 export { MjpegCastClient } from "./cast/mjpeg.js";
 export { resolveCastingExtension, CASTING_EXTENSION } from "./cast/resolve.js";
 export type { CastClient, CastOptions, JpegFrame } from "./cast/types.js";

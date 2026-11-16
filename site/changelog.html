@@ -24,6 +24,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-6-0">0.6.0 · 7.0 WebSocket 投流</a>
       <a href="#v0-5-0">0.5.0 · 完整 hypium API</a>
       <a href="#v0-4-0">0.4.0 · 脱敏、设备状态与审批</a>
       <a href="#v0-3-0">0.3.0 · 默认值、接管与交接</a>
@@ -36,6 +37,29 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-6-0">
+        <div class="release-head">
+          <h2>0.6.0</h2>
+          <span class="release-date">2026-11-16</span>
+          <span class="release-tag">7.0 WebSocket 投流</span>
+        </div>
+
+        <h3>可选的 WebSocket 传输</h3>
+        <ul>
+          <li>新增 <code>createCast({ transport: "ws" })</code>：走 7.0 扩展的 RFC6455 通道，客户端不再需要 gRPC 运行时。帧率与 6.8 持平（真机实测 20.8–23.2 fps），首帧 82–137 ms，<code>requestIDR</code> 7–9 ms。</li>
+          <li><code>wsExtension</code> 指向本地的 7.0 <code>.so</code>；SDK 按文件名推到 <code>/data/local/tmp</code>，与内置的 6.8 扩展同时存在、互不覆盖。<code>port</code> 选设备侧端口（默认 5000）。</li>
+          <li>传输是显式选择的：要 <code>ws</code> 却没给 <code>wsExtension</code>，或设备是 x86_64（没有 7.0 构建），直接抛 <code>ExtensionMissingError</code>，不会静默退回 gRPC。</li>
+          <li>SDK 不打包 7.0 二进制（来源与再分发条款见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/09-capability-gaps-roadmap.md">能力差异文档</a> §1.6）。</li>
+        </ul>
+
+        <h3>实测推翻的三条旧结论</h3>
+        <ul>
+          <li><strong>多实例有边界</strong>：同一 daemon 上两个客户端能同时出流，但 <code>stop</code> 是进程级的 —— 任一客户端 stop，另一路立刻停；stop 后监听 socket 关闭，新客户端连不上。并发只能靠多个端口、各自一个 daemon。</li>
+          <li><strong>7.0 的 <code>cpd</code> 收不到</strong>：格式串在二进制里，但 10 s、195 帧、三种命令顺序都没触发过。不要靠它初始化解码器。</li>
+          <li><strong>静止画面两个版本都录不到帧</strong>：8 s 不动屏，6.8 和 7.0 都是 259 B 空文件。「7.0 muxer 持续写帧」是错的。另外 7.0 在 <code>start</code> 时就建好 259 B 的头，样本到 <code>stop</code> 才落盘，所以拉取前必须等文件大小稳定。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-5-0">
         <div class="release-head">
@@ -280,7 +304,6 @@
           <span class="release-tag">未发布 · 不是承诺</span>
         </div>
         <ul>
-          <li>7.0 casting（WebSocket 分支）实验支持：与 6.8 能力对等，作为可选传输。</li>
           <li><code>perfmonitor.so</code>（HTTP 9999）性能指标接入。</li>
           <li>录制参数在设备侧可配置（目前文件路径写死在扩展里）。</li>
           <li>接管期间的线性「人的操作」时间线（<code>captureLayout</code> 轮询写 JSONL；<code>uiRecord</code> 与 daemon 互斥，不可用）。</li>

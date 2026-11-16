@@ -110,7 +110,7 @@ const dev = await Device.connect(options?: DeviceOptions);
 | `dev.state` | `"connected" \| "disconnected"` | `dispose()` 后变为 `disconnected`，再调用会抛 `EDISPOSED` |
 | `dev.ownsDaemon` | `boolean` | 本次连接是否由自己拉起 daemon |
 | `dev.resolveCastExtension()` | `string \| null` | 该 ABI 的 casting 扩展路径；`null` 表示没有 |
-| `dev.createCast(opts)` | `Promise<CastClient>` | 见第 6 节 |
+| `dev.createCast(opts)` | `Promise<CastClient>` | 见第 6 节（`transport` 选 gRPC 或 WebSocket） |
 | `dev.dispose()` | `Promise<void>` | 关连接、撤销自己的 fport；`ownDaemon: true` 时再杀掉自己的 daemon |
 
 ## 5. AgentClient：UI 自动化
@@ -218,7 +218,10 @@ await cast.dispose();
 | `bitRate` | `number` | `8_000_000` | 编码码率 |
 | `iFrameInterval` | `number` | `2000` | 关键帧间隔 |
 | `screenId` | `number` | `0` | |
-| `socketName` | `string` | 内部常量 | 覆盖抽象 socket 名；这是同机跑多个投流的唯一方式 |
+| `transport` | `"grpc" \| "ws"` | `"grpc"` | `grpc` 用内置 6.8 扩展；`ws` 用 7.0 WebSocket 扩展（需 `wsExtension`） |
+| `wsExtension` | `string` | — | `ws` 必填：本地 7.0 `.so` 路径，按文件名推到 `/data/local/tmp` |
+| `port` | `number` | `5000` | `ws` 专用：设备侧监听端口（`-p`），每个 daemon 一个端口 |
+| `socketName` | `string` | 内部常量 | `grpc` 专用：覆盖抽象 socket 名，同机跑多个投流的方式 |
 | `durationMs` | `number` | — | `record`：录制时长 |
 
 ### `CastClient`
@@ -232,9 +235,27 @@ await cast.dispose();
 
 ### 选择规则
 
-- `resolveCastExtension()` 非空 → H.264（gRPC over Unix abstract socket，实测 15–89 fps）。
+- `transport: "ws"` → 7.0 WebSocket 扩展（`WsCastClient`）。没有 `wsExtension` 或文件不存在时抛 `ExtensionMissingError`；x86_64 没有 7.0 构建，同样抛错。**不会退回 gRPC。**
+- 否则 `resolveCastExtension()` 非空 → 6.8 gRPC（`H264CastClient`）。
 - 为空（x86_64 模拟器）→ MJPEG（`castKind === "mjpeg"`，10–16 fps）。
 - x86_64 上请求 `mode: "record"` 直接抛 `ExtensionMissingError`，不会返回一个「录不到东西」的客户端。
+
+### 7.0 WebSocket 传输
+
+```ts
+const cast = await dev.createCast({
+  mode: "stream",
+  transport: "ws",
+  wsExtension: "./libscrcpy_server_unix_7.0-20260930.z.so",
+  port: 5000,
+});
+```
+
+SDK **不打包 7.0 扩展**（来源见 [09](09-capability-gaps-roadmap.md) §1.6），需要自己提供 `.so`。它按 basename 推到 `/data/local/tmp/<name>`，用 `--extension-name <name>` 加载，因此可以和内置 6.8 扩展**同时存在**、互不覆盖。
+
+实测（真机 BRA-AL00 / uitest 7.0.0.1）：启动 0.9–1.3 s，首帧 82–137 ms，`requestIDR` 7–9 ms，`-frameRate 30` 下 20.8–23.2 fps。与 6.8 持平，优势是客户端零 gRPC 依赖。
+
+**一个客户端独占一个 daemon**。实测 `stop` 是进程级的：任一客户端 stop，同 daemon 上另一路立刻停止出流；stop 后监听 socket 关闭，新客户端无法再连。所以并发投流靠多个 `port`（各自一个 daemon），而不是一个 daemon 多客户端。
 
 ### 录制
 
@@ -246,6 +267,9 @@ await cast.dispose(); // 关闭 muxer → 等待设备写完 → 拉回 out.mp4
 
 设备侧文件路径写死在扩展里（`/data/local/tmp/mytest.mp4`），不可改。
 编码器是**起停驱动**的：`createCast` 返回时已经在录，`dispose()` 后才完成。
+
+两种传输都只录**画面变化**：静止画面下 6.8 和 7.0 都是 0 帧（8 s 实测 259 B 空文件）。
+`dispose()` 会等设备侧文件大小稳定后再拉取 —— 7.0 的 muxer 在 `start` 时就建好 259 B 的头，样本到 `stop` 才落盘，看到非零就 pull 会拿到空壳。
 
 ## 7. UI 树与窗口
 
@@ -674,4 +698,4 @@ try {
 
 ---
 
-生成于 2026-11-16。行为与数字对应的源码版本：`0.5.0`。
+生成于 2026-11-16。行为与数字对应的源码版本：`0.6.0`。
