@@ -39,3 +39,5 @@ export class LaunchError extends UitestError {}
 export class ElementNotFoundError extends UitestError {}
 /** Another task holds the device lease. */
 export class LeaseHeldError extends UitestError {}
+/** The device or host cannot serve this API, and no fallback is offered. */
+export class UnsupportedError extends UitestError {}

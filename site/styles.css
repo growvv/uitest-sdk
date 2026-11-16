@@ -908,6 +908,77 @@ td:nth-child(3) {
   margin-top: 26px;
 }
 
+/* API page: generated method tables, status pills and the diagrams above them. */
+.api-count {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.api-py {
+  color: var(--muted);
+}
+
+.api-note {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.api-status {
+  display: inline-block;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.api-status-verified {
+  border-color: rgba(126, 231, 135, 0.45);
+  color: #7ee787;
+}
+
+.api-status-device {
+  border-color: rgba(255, 210, 63, 0.4);
+  color: var(--accent);
+}
+
+.api-status-host {
+  color: var(--muted);
+}
+
+.api-status-hardware {
+  border-color: rgba(158, 178, 255, 0.4);
+  color: #9eb2ff;
+}
+
+.api-status-unsupported {
+  border-color: rgba(255, 122, 122, 0.4);
+  color: #ff7a7a;
+}
+
+.api-figure {
+  margin: 26px 0 0;
+  padding: 22px 20px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.api-figure figcaption {
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+/* The method tables are wide; the wrapper scrolls them on a phone. */
+.doc-table td:first-child code {
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .doc-main {
     grid-template-columns: minmax(0, 1fr);

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { DaemonStartError, DeviceNotConnectedError } from "./errors.js";
 
 export interface HdcOptions {
@@ -71,13 +71,13 @@ export class HdcRunner {
   }
 
   /** Runs `hdc <args>` and resolves with stdout; rejects with stderr in the message. */
-  private exec(args: string[], label: string): Promise<RunResult> {
+  private exec(args: string[], label: string, timeoutMs = this.timeoutMs): Promise<RunResult> {
     const full = this.deviceId ? ["-t", this.deviceId, ...args] : args;
     return new Promise<RunResult>((resolve, reject) => {
       execFile(
         this.hdcPath,
         full,
-        { timeout: this.timeoutMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+        { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
         (err, stdout, stderr) => {
           if (err) {
             const detail = `${stderr}${stdout}`.trim();
@@ -96,13 +96,29 @@ export class HdcRunner {
     });
   }
 
-  async shell(cmd: string): Promise<string> {
-    const { stdout } = await this.exec(["shell", cmd], `shell ${cmd}`);
+  async shell(cmd: string, timeoutMs?: number): Promise<string> {
+    const { stdout } = await this.exec(["shell", cmd], `shell ${cmd}`, timeoutMs);
     return stdout;
   }
 
+  /**
+   * Runs an hdc connector command as an argument vector. Unlike `shell`, this
+   * is the hdc client's own subcommand surface (`install`, `list targets`,
+   * `file send`, ...), so paths with spaces stay one argument.
+   */
+  async command(args: string[], timeoutMs?: number): Promise<string> {
+    const { stdout, stderr } = await this.exec(args, args.join(" "), timeoutMs);
+    return stdout || stderr;
+  }
+
+  /**
+   * `file send` is given an absolute local path on purpose: measured, a
+   * relative one is read as a directory tree, and hdc then creates a *folder*
+   * at the remote path with the file inside it instead of writing the file.
+   */
   async push(local: string, remote: string): Promise<void> {
-    await this.exec(["file", "send", local, remote], `file send ${local} ${remote}`);
+    const source = resolve(local);
+    await this.exec(["file", "send", source, remote], `file send ${source} ${remote}`);
   }
 
   async pull(remote: string, local: string): Promise<void> {

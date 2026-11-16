@@ -197,6 +197,66 @@ export class Gestures {
     return { elapsedMs: Date.now() - started, points: steps };
   }
 
+  /**
+   * Several fingers tapping at once. The matrix holds every finger at the same
+   * point for two samples; the second argument to the injection is the hold
+   * time, which is what makes it a tap rather than a zero-length gesture.
+   */
+  async multiTap(points: Point[], opts: GestureOptions = {}): Promise<GestureResult> {
+    if (points.length === 0) {
+      throw new UitestError("multiTap needs at least one point", "EINVALIDGESTURE");
+    }
+    const started = Date.now();
+    const holdMs = Math.max(1, Math.round(opts.holdMs ?? opts.durationMs ?? 100));
+    const matrix = await this.createMatrix(points.length, 2);
+    for (let finger = 0; finger < points.length; finger++) {
+      const p = { x: Math.round(points[finger]!.x), y: Math.round(points[finger]!.y) };
+      for (let step = 0; step < 2; step++) {
+        await this.device.hypium("PointerMatrix.setPoint", matrix, [finger, step, p]);
+      }
+    }
+    await this.device.hypium("Driver.injectMultiPointerAction", "Driver#0", [matrix, holdMs]);
+    return { elapsedMs: Date.now() - started, points: holdMs };
+  }
+
+  /**
+   * Injects fully sampled paths, one array per finger. Shorter paths are held
+   * at their last point so every finger is released together.
+   */
+  async injectPaths(paths: Point[][], opts: GestureOptions = {}): Promise<GestureResult> {
+    if (paths.length === 0 || paths.some((p) => p.length === 0)) {
+      throw new UitestError("injectPaths needs a non-empty path per finger", "EINVALIDGESTURE");
+    }
+    const started = Date.now();
+    const steps = Math.max(...paths.map((p) => p.length));
+    const duration = assertDuration(opts, 300);
+    const matrix = await this.createMatrix(paths.length, steps);
+    for (let finger = 0; finger < paths.length; finger++) {
+      const path = paths[finger]!;
+      for (let step = 0; step < steps; step++) {
+        const point = path[Math.min(step, path.length - 1)]!;
+        await this.device.hypium("PointerMatrix.setPoint", matrix, [
+          finger,
+          step,
+          { x: Math.round(point.x), y: Math.round(point.y) },
+        ]);
+      }
+    }
+    await this.device.hypium("Driver.injectMultiPointerAction", "Driver#0", [matrix, Math.round(duration)]);
+    return { elapsedMs: Date.now() - started, points: steps };
+  }
+
+  private async createMatrix(fingers: number, steps: number): Promise<string> {
+    const matrix = await this.device.hypium("PointerMatrix.create", "PointerMatrix#seed", [
+      fingers,
+      steps,
+    ]);
+    if (typeof matrix !== "string" || matrix === "") {
+      throw new UitestError("the device did not return a PointerMatrix reference", "EGESTURE");
+    }
+    return matrix;
+  }
+
   private async pressAndRelease(
     from: Point,
     to: Point,

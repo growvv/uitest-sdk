@@ -22,7 +22,7 @@ function fail(msg) {
 }
 
 // ---------------------------------------------------------------- the files
-const files = ["index.html", "docs.html", "changelog.html", "styles.css", "main.js"];
+const files = ["index.html", "docs.html", "changelog.html", "api.html", "styles.css", "main.js"];
 for (const f of files) {
   const p = join(SITE, f);
   if (!existsSync(p) || !statSync(p).isFile()) fail(`missing site/${f}`);
@@ -30,12 +30,14 @@ for (const f of files) {
 const html = readFileSync(join(SITE, "index.html"), "utf8");
 const docsHtml = readFileSync(join(SITE, "docs.html"), "utf8");
 const logHtml = readFileSync(join(SITE, "changelog.html"), "utf8");
+const apiHtml = readFileSync(join(SITE, "api.html"), "utf8");
 const css = readFileSync(join(SITE, "styles.css"), "utf8");
 const js = readFileSync(join(SITE, "main.js"), "utf8");
 const pages = [
   ["index.html", html],
   ["docs.html", docsHtml],
   ["changelog.html", logHtml],
+  ["api.html", apiHtml],
 ];
 
 // ------------------------------------------------------------------- anchors
@@ -298,6 +300,9 @@ for (const needle of [
   "UitestError",
   "0.2.0",
   "0.4.0",
+  // The docs page states the version it documents; a release that forgets to
+  // bump it leaves the page claiming an older package than npm has.
+  "0.5.0",
   // The CLI half of the package is documented here, not only on the home page.
   "Session.open",
   "TraceRecorder",
@@ -343,7 +348,7 @@ for (const needle of [
   "mcp",
   "--read-only",
   "同一毫秒",
-  // Unreleased: the default approval set, the takeover, and one-step connect.
+  // The roadmap must stay visibly labelled as not-a-promise.
   "未发布",
   "删除与发送默认要审批",
   "held by a person",
@@ -362,11 +367,64 @@ for (const needle of [
   "--approval-scope task",
   "升级后 Skill 自己跟上",
   ".uitest-skill.json",
+  // 0.5.0: the complete hypium surface.
+  "0.5.0",
+  "完整 hypium API：118 个方法",
+  "HYPIIUM_CATALOG",
+  "UnsupportedError",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
 }
-for (const href of ['href="docs.html"', 'href="changelog.html"']) {
+for (const href of ['href="docs.html"', 'href="changelog.html"', 'href="api.html"']) {
   if (!html.includes(href)) fail(`index.html 没有链接到 ${href}`);
+}
+
+// ------------------------------------------- the complete hypium API page
+// Every one of the 118 methods must be on the page under its TypeScript name,
+// with the Python name it came from and an honest status. The table is
+// generated from src/hypium/catalog.ts, so this check is really "did you
+// regenerate after changing the facade".
+const { HYPIIUM_CATALOG } = await import(
+  pathToFileURL(join(ROOT, "dist", "hypium", "catalog.js")).href
+).catch(() => fail("dist/hypium/catalog.js is missing; run npm run build first"));
+if (HYPIIUM_CATALOG.length !== 118) {
+  fail(`catalog has ${HYPIIUM_CATALOG.length} entries, expected 118`);
+}
+for (const entry of HYPIIUM_CATALOG) {
+  if (!apiHtml.includes(`<code>${entry.ts}</code>`)) {
+    fail(`api.html is missing the method ${entry.ts}; regenerate with scripts/gen-api-page.mjs`);
+  }
+  if (!apiHtml.includes(`<code class="api-py">${entry.python}</code>`)) {
+    fail(`api.html is missing the hypium name ${entry.python} for ${entry.ts}`);
+  }
+}
+for (const status of ["verified", "device", "hardware", "unsupported"]) {
+  if (!apiHtml.includes(`api-status-${status}`)) fail(`api.html never shows the ${status} status`);
+}
+// The four things the page promises beyond the table: the call path, the
+// coordinate forms, the injection channels, and the differences from hypium.
+for (const needle of [
+  "<svg",
+  "dev.hypium",
+  "PointerMatrix",
+  "Component.click",
+  "Target",
+  "UnsupportedError",
+  "setDisplayRotation",
+  "SIFT",
+  "118",
+]) {
+  if (!apiHtml.includes(needle)) fail(`api.html 缺少「${needle}」`);
+}
+if (apiHtml.length < 12000) fail(`api.html is only ${apiHtml.length} bytes; expected the full API reference`);
+// The page states which package version it documents. A release that bumps
+// package.json but forgets the generator leaves the page advertising the
+// previous version — the same drift src/version.ts exists to prevent.
+const { VERSION } = await import(
+  pathToFileURL(join(ROOT, "dist", "version.js")).href
+).catch(() => fail("dist/version.js is missing; run npm run build first"));
+if (!apiHtml.includes(`<strong>${VERSION}</strong>`)) {
+  fail(`api.html does not show the package version ${VERSION}; regenerate with scripts/gen-api-page.mjs`);
 }
 
 // ----------------------------------------------- task 10: the script runs

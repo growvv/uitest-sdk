@@ -1,6 +1,42 @@
 import { UitestError } from "../errors.js";
 
 /**
+ * The device's string matching modes. The numbers are the enum the extension
+ * accepts as the optional second argument to `On.text` and friends.
+ */
+export type MatchMode =
+  | "exact"
+  | "contains"
+  | "starts_with"
+  | "ends_with"
+  | "regex"
+  | "regex_i";
+
+const MATCH_MODES: Record<MatchMode, number> = {
+  exact: 0,
+  contains: 1,
+  starts_with: 2,
+  ends_with: 3,
+  regex: 4,
+  regex_i: 5,
+};
+
+function matchArg(mode: MatchMode): number {
+  const value = MATCH_MODES[mode];
+  if (value === undefined) {
+    throw new UitestError(
+      `unknown match mode ${JSON.stringify(mode)}; use exact, contains, starts_with, ends_with, regex or regex_i`,
+      "EINVALIDSELECTOR",
+    );
+  }
+  return value;
+}
+
+function matchSymbol(mode: MatchMode): string {
+  return mode === "exact" ? "=" : "~=";
+}
+
+/**
  * A device-side `On` predicate, as the extension expects it: an API name, its
  * arguments, and the object to call it on.
  *
@@ -19,10 +55,9 @@ export class On {
     readonly text: string,
   ) {}
 
-  /** Text exactly equal to `value` (match mode 0). */
-  static text(value: string, mode: "exact" | "contains" = "exact", parent?: On): On {
-    const args = [value, mode === "contains" ? 1 : 0];
-    return On.make("On.text", args, `text${mode === "contains" ? "~=" : "="}${JSON.stringify(value)}`, parent);
+  /** Text matching `value`. Exact by default. */
+  static text(value: string, mode: MatchMode = "exact", parent?: On): On {
+    return On.make("On.text", [value, matchArg(mode)], `text${matchSymbol(mode)}${JSON.stringify(value)}`, parent);
   }
 
   /**
@@ -33,9 +68,56 @@ export class On {
     return On.make("On.type", [value], `type=${value}`, parent);
   }
 
-  /** Component id. Exact by default; `contains` matches a fragment. */
-  static id(value: string, mode: "exact" | "contains" = "exact", parent?: On): On {
-    return On.make("On.id", [value, mode === "contains" ? 1 : 0], `id${mode === "contains" ? "~=" : "="}${JSON.stringify(value)}`, parent);
+  /** Component id. Exact by default. */
+  static id(value: string, mode: MatchMode = "exact", parent?: On): On {
+    return On.make("On.id", [value, matchArg(mode)], `id${matchSymbol(mode)}${JSON.stringify(value)}`, parent);
+  }
+
+  /** Accessibility description. */
+  static description(value: string, mode: MatchMode = "exact", parent?: On): On {
+    return On.make(
+      "On.description",
+      [value, matchArg(mode)],
+      `description${matchSymbol(mode)}${JSON.stringify(value)}`,
+      parent,
+    );
+  }
+
+  /** Placeholder / hint text. */
+  static hint(value: string, mode: MatchMode = "exact", parent?: On): On {
+    return On.make("On.hint", [value, matchArg(mode)], `hint${matchSymbol(mode)}${JSON.stringify(value)}`, parent);
+  }
+
+  /** Accessibility id, as reported by the device. */
+  static accessibilityId(value: string, mode: MatchMode = "exact", parent?: On): On {
+    return On.make(
+      "On.accessibilityId",
+      [value, matchArg(mode)],
+      `accessibilityId${matchSymbol(mode)}${JSON.stringify(value)}`,
+      parent,
+    );
+  }
+
+  /** The text before any formatter or obfuscation was applied. */
+  static originalText(value: string, mode: MatchMode = "exact", parent?: On): On {
+    return On.make(
+      "On.originalText",
+      [value, matchArg(mode)],
+      `originalText${matchSymbol(mode)}${JSON.stringify(value)}`,
+      parent,
+    );
+  }
+
+  static selected(value = true, parent?: On): On {
+    return On.make("On.selected", [value], `selected=${value}`, parent);
+  }
+
+  static longClickable(value = true, parent?: On): On {
+    return On.make("On.longClickable", [value], `longClickable=${value}`, parent);
+  }
+
+  static checkable(value = true, parent?: On): On {
+    return On.make("On.checkable", [value], `checkable=${value}`, parent);
   }
 
   static clickable(value = true, parent?: On): On {
@@ -159,10 +241,31 @@ function applyPredicate(name: string, value: string | null, parent?: On, contain
       return On.checked(flag(value), parent);
     case "focused":
       return On.focused(flag(value), parent);
+    case "description":
+      if (value === null) throw new UitestError("description= needs a value", "EINVALIDSELECTOR");
+      return On.description(value, mode, parent);
+    case "hint":
+      if (value === null) throw new UitestError("hint= needs a value", "EINVALIDSELECTOR");
+      return On.hint(value, mode, parent);
+    case "accessibilityid":
+    case "accessibility_id":
+      if (value === null) throw new UitestError("accessibilityId= needs a value", "EINVALIDSELECTOR");
+      return On.accessibilityId(value, mode, parent);
+    case "originaltext":
+    case "original_text":
+      if (value === null) throw new UitestError("originalText= needs a value", "EINVALIDSELECTOR");
+      return On.originalText(value, mode, parent);
+    case "selected":
+      return On.selected(flag(value), parent);
+    case "longclickable":
+      return On.longClickable(flag(value), parent);
+    case "checkable":
+      return On.checkable(flag(value), parent);
     default:
       throw new UitestError(
         `unknown predicate "${name}"; use text=, text~=, type=, id=, ` +
-          `clickable, scrollable, enabled, checked or focused`,
+          `description=, hint=, accessibilityId=, originalText=, clickable, ` +
+          `longClickable, scrollable, enabled, focused, selected, checked or checkable`,
         "EINVALIDSELECTOR",
       );
   }
@@ -237,9 +340,21 @@ const KEYS: Record<string, number> = {
   power: 26,
   camera: 19,
   mute: 23,
+  alt_left: 2045,
+  alt_right: 2046,
+  shift_left: 2047,
+  shift_right: 2048,
   tab: 2049,
   space: 2050,
   enter: 2054,
+  page_up: 2068,
+  page_down: 2069,
+  ctrl_left: 2072,
+  ctrl_right: 2073,
+  meta_left: 2076,
+  meta_right: 2077,
+  move_home: 2081,
+  insert: 2083,
   del: 2055,
   backspace: 2055,
   menu: 2067,
@@ -253,6 +368,9 @@ const KEYS: Record<string, number> = {
   dpad_left: 2014,
   dpad_right: 2015,
 };
+
+// Letters A–Z are 2017–2042 in oh_key_code.h; useful for shortcuts like META+A.
+for (let i = 0; i < 26; i++) KEYS[String.fromCharCode(97 + i)] = 2017 + i;
 
 export type KeyName = keyof typeof KEYS;
 

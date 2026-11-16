@@ -4,7 +4,7 @@
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org/)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[官网](https://growvv.github.io/uitest-sdk/) · [使用文档](https://growvv.github.io/uitest-sdk/docs.html) · [更新日志](https://growvv.github.io/uitest-sdk/changelog.html) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
+[官网](https://growvv.github.io/uitest-sdk/) · [使用文档](https://growvv.github.io/uitest-sdk/docs.html) · [完整 API](https://growvv.github.io/uitest-sdk/api.html) · [更新日志](https://growvv.github.io/uitest-sdk/changelog.html) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
 
 把鸿蒙 `uitest` 的设备侧扩展（`agent.so` / `libscreen_casting.z.so`）封装成 TypeScript SDK：
 一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。包里同时带一个给人和 Agent 用的命令行。
@@ -182,6 +182,43 @@ try {
 以及 `steps`（本会话已记录的步数）与 `record()`（记录不经过动作路径的命令）。
 被别的任务占用时 `Session.open` 抛 `LeaseHeldError`，此时设备还没被读写。
 
+## 完整 hypium API（`dev.hypium`）
+
+上面那张表是 SDK 自己抽象出来的能力。如果要从鸿蒙 `uitest` 的角度看，`dev.hypium` 把
+hypium 6.1.0.210 的 **118 个方法**（`OHOSDriver` 106 + 兼容接口 12）原样铺平，方法名改成
+TypeScript 驼峰，参数和返回值都做了类型：
+
+```ts
+import { Device, On } from "uitest-sdk";
+
+const dev = await Device.connect();
+const h = dev.hypium;
+
+await h.click([540, 1200]);                    // 坐标：点 / 比例对 / Rect / On / 组件
+await h.swipe("up", { durationMs: 300 });      // 或 h.drag([540, 2000], [540, 600])
+await h.inputText(On.id("search"), "WLAN");    // On 选择器直接当 Target
+await h.setDisplayRotation(1);                 // 只收 0|1|2|3，设备拒绝字符串
+await h.waitForComponent(On.text("WLAN"), { timeoutMs: 5000 });
+```
+
+注入通道有四种，按目标选：单指手势（`Gestures`）、多指（`PointerMatrix`）、
+鼠标/笔（Driver RPC）、组件自带动作（`Component.click`）。`HYPIIUM_CATALOG` 导出全部
+118 条映射（hypium 原名 → TS 名 → 分类 → 状态），单元测试会校验它和门面一一对应，不会漂移。
+
+每条方法都带一个诚实的实测状态，真机（BRA-AL00 / uitest 7.0.0.1）逐条跑过：
+
+| 状态 | 数量 | 含义 |
+|---|---|---|
+| `verified` | 106 | 真机跑通 |
+| `device` | 4 | 已实现但没做成功验收（`installApp` / `uninstallApp` / `clearAppData` / `takeScreenshot`） |
+| `hardware` | 3 | 需要手写笔 / 表冠 / 触控板，没有硬件时报明确错误 |
+| `unsupported` | 5 | Toast 与 UI 事件：`UIEventObserver` 在裸 RPC 通道上从不回包 |
+
+逐条说明、示例和图示见官网的独立页面
+[**完整 hypium API**](https://growvv.github.io/uitest-sdk/api.html)（由 `scripts/gen-api-page.mjs`
+从 `src/hypium/catalog.ts` 生成，`node scripts/check-site.mjs` 会校验 118 条都在页面上）。
+Markdown 版本在 [`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md) 第 8 节。
+
 ## 多实例
 
 多个进程可以同时连同一台设备：
@@ -256,7 +293,7 @@ npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 
 | 文档 | 内容 |
 |---|---|
-| [api](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md) | **完整 API 文档**：Device / AgentClient / 投流录制 / 错误码 / 并发与生命周期 |
+| [api](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md) | **完整 API 文档**：Device / AgentClient / 投流录制 / `dev.hypium` 118 个方法 / 错误码 / 并发与生命周期 |
 | [benchmarks](https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks.md) | 与 hdc CLI、`snapshot_display` 的可复现实测对比 |
 | [01](https://github.com/growvv/uitest-sdk/blob/master/docs/01-extension-abi.md) | uitest 扩展 ABI 与加载器 |
 | [02](https://github.com/growvv/uitest-sdk/blob/master/docs/02-agent-so.md) | agent.so 的完整 RPC 方法表 |

@@ -139,3 +139,40 @@ describe("Gestures", () => {
     expect(r.points).toBe(2);
   });
 });
+
+describe("Gestures · multi-finger primitives", () => {
+  it("injects several taps at once", async () => {
+    const dev = fakeDevice();
+    const g = new Gestures(dev, { sleep: async () => undefined });
+    await g.multiTap(
+      [
+        { x: 10, y: 10 },
+        { x: 20, y: 20 },
+      ],
+      { holdMs: 120 },
+    );
+    expect(dev.calls[0]).toMatchObject({ api: "PointerMatrix.create", args: [2, 2] });
+    const inject = dev.calls.at(-1)!;
+    expect(inject.api).toBe("Driver.injectMultiPointerAction");
+    expect(inject.args[1]).toBe(120);
+  });
+
+  it("injects arbitrary sampled paths", async () => {
+    const dev = fakeDevice();
+    const g = new Gestures(dev, { sleep: async () => undefined });
+    await g.injectPaths(
+      [
+        [
+          { x: 0, y: 0 },
+          { x: 5, y: 5 },
+          { x: 10, y: 10 },
+        ],
+      ],
+      { durationMs: 240 },
+    );
+    expect(dev.calls[0]).toMatchObject({ api: "PointerMatrix.create", args: [1, 3] });
+    expect(dev.calls.filter((c) => c.api === "PointerMatrix.setPoint")).toHaveLength(3);
+    const inject = dev.calls.at(-1)!;
+    expect(inject.args[1]).toBe(240);
+  });
+});

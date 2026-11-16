@@ -6,6 +6,11 @@
 
 > 为什么以 `hypium` 为准而不是 DevEco Testing 的 GUI：GUI 是这套 API 的消费者，能力不会超出它。而且 GUI 里的「用例录制器」只是把这些调用编排成脚本。
 
+> **状态（2026-11-16）**：本文的规划已全部落地，`dev.hypium` 是 118 个方法的门面。真机逐条实测结果：
+> 106 `verified` / 4 `device` / 3 `hardware` / 5 `unsupported`（Toast 与 UI 事件，设备侧不回包）。
+> 权威表格是 `src/hypium/catalog.ts` 的 `HYPIIUM_CATALOG`，下面是当初的规划，保留作决策记录。
+> 逐条说明见 [api.md](api.md) 第 8 节和官网 [api.html](https://growvv.github.io/uitest-sdk/api.html)。
+
 ---
 
 ## 一、总体进度

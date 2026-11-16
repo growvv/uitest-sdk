@@ -109,3 +109,60 @@ trace）全在磁盘。但**设备侧**仍有一个 `uitest start-daemon singlen
 
 - 能力与协议：[01](01-extension-abi.md)、[02](02-agent-so.md)、[08](08-missing-capabilities.md)、[09](09-capability-gaps-roadmap.md)
 - SDK 行为与命令：[api.md](api.md)
+
+---
+
+## 2026-11-16 · 完整 hypium API（未发版）
+
+本阶段把 hypium 6.1.0.210 的公开 API 全部铺平成 SDK 门面，并为它单开一个官网页面。
+**这一阶段只在 master 上，没有发 npm、没有打 tag。**
+
+### A. 交付
+
+| 内容 | 位置 |
+|---|---|
+| `HypiumDriver` 门面：118 个方法（`OHOSDriver` 106 + 兼容层 12），驼峰命名、类型化参数 | `src/hypium/driver.ts` |
+| 目录表：hypium 原名 → TS 名 → 分类 → 状态，单测校验与门面一一对应 | `src/hypium/catalog.ts`、`test/unit/hypium-catalog.test.ts` |
+| `Gesture` / `sampleGesture`、JPEG 模板匹配（`findTemplate` / `decodeJpeg` / `cropRaster`） | `src/hypium/types.ts`、`src/hypium/image.ts` |
+| `Device.hypium` 惰性 getter；`dispose()` 一并关闭 | `src/device.ts` |
+| 官网独立页：118 条方法表 + 4 张 SVG 图示 + 分类示例 | `site/api.html`（`scripts/gen-api-page.mjs` 生成） |
+| 页面校验：118 个 TS 名、hypium 原名、四种状态、图示文字、体积 | `scripts/check-site.mjs` |
+| Markdown 版第 8 节；站点 docs 第 9 节；README 新增一节 | `docs/api.md`、`site/docs.html`、`README.md` |
+
+### B. 真机实测状态（BRA-AL00 / 1216×2688 / uitest 7.0.0.1）
+
+| 状态 | 数量 | 说明 |
+|---|---|---|
+| `verified` | 106 | 逐条在真机上跑过 |
+| `device` | 4 | `installApp` / `uninstallApp` / `clearAppData` / `takeScreenshot`：已实现，没做成功验收（后三个有副作用或产物落在 shell 读不到的位置） |
+| `hardware` | 3 | `touchpadSwipe` / `touchpadSwipeAndHold` / `rotateCrown`：没有对应硬件，设备直接拒绝 |
+| `unsupported` | 5 | Toast 与 UI 事件：`UIEventObserver` 从 `start` 返回，但对后续查询永不回包 |
+
+验证脚本留在 `.work-bench/hypium-accept*.mjs`（gitignored），102 个独立探针、99 条通过记录；
+6 条失败里 4 条是预期内的（3 个无硬件能力、1 个卸载不存在的 bundle），
+2 条是真实问题：`pushFile` 的路径缺陷（见 C）和 `inputText` 用例引用了点击后失效的控件引用（用例问题，已重解析）。
+
+### C. 实测中发现并修掉的缺陷
+
+| 缺陷 | 根因 | 修复 |
+|---|---|---|
+| `isDisplayLocked()` 解锁时返回 `true` | `hidumper` 表格按空白切分，字段名与值被拆到不同 token | 逐行读第二个字段 |
+| `pushFile()` 相对路径在设备上建出同名目录 | `hdc file send` 相对路径按目录树处理 | `HdcRunner.push` 先 `resolve(local)` |
+| `setDisplayRotation("left")` 被设备拒绝 | 设备参数校验器只收整数 | `Rotation` 收窄为 `0 \| 1 \| 2 \| 3`，错误信息说明原因 |
+
+### D. 文档与发布状态
+
+- 站点 `changelog.html` 新增「未发布」区（master 有、npm 没有），`docs.html` 第 9 节加 `未发布` 标签。
+- `scripts/check-site.mjs` 现在依赖 `dist/hypium/catalog.js`。`dist/` 被 gitignore，
+  所以 `.github/workflows/pages.yml` 增加了 `setup-node` + `npm ci` + `npm run build` 三步；
+  否则 Pages 构建会在「catalog.js is missing」处失败。
+- `package.json` 的 `bin` 仍写成 `./dist/bin.js`，npm 11 会警告并自动修正；发版前顺手去掉 `./`。
+
+### E. 下一阶段候选
+
+1. 把这一阶段发成 `0.5.0`：需要更新 `site/docs.html` 的版本号、`changelog.html` 的「未发布」区转为正式版本、
+   `docs/api.md` 的版本行，并重新跑一遍完整验收；
+2. 7.0 casting（WebSocket 分支）实验支持；
+3. `perfmonitor.so`（HTTP 9999）性能指标接入；
+4. 录制参数设备侧可配置；
+5. （可选）接管期间的线性「人的操作」时间线。

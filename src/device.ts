@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { AgentClient, isBusyException } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
 import { HdcRunner } from "./hdc.js";
+import { HypiumDriver } from "./hypium/driver.js";
+import { deviceTag } from "./trace.js";
 import { H264CastClient } from "./cast/client.js";
 import { MjpegCastClient } from "./cast/mjpeg.js";
 import { CASTING_EXTENSION, resolveCastingExtension } from "./cast/resolve.js";
@@ -82,6 +84,7 @@ export class Device {
   readonly deviceId: string;
 
   private _state: "connected" | "disconnected" = "connected";
+  private _hypium: HypiumDriver | null = null;
 
   private constructor(
     hdc: HdcRunner,
@@ -253,6 +256,21 @@ export class Device {
     return this.ownPid !== null;
   }
 
+  /**
+   * The complete hypium-compatible surface, built lazily so constructing it
+   * never touches the device. Actions go through the same agent connection as
+   * `Session`, so both share one wire and one lock.
+   */
+  get hypium(): HypiumDriver {
+    this.assertConnected();
+    this._hypium ??= new HypiumDriver({
+      agent: this.agent,
+      hdc: this.hdc,
+      deviceTag: deviceTag(this.deviceId),
+    });
+    return this._hypium;
+  }
+
   /** Path of the casting extension for this device's ABI, or null when none exists. */
   resolveCastExtension(): string | null {
     return resolveCastingExtension(this.abi, this.extDir);
@@ -283,6 +301,8 @@ export class Device {
     if (this._state === "disconnected") return;
     this._state = "disconnected";
 
+    this._hypium?.close();
+    this._hypium = null;
     this.agent.close();
     await this.hdc.fportRemove(this.localPort).catch(() => undefined);
 

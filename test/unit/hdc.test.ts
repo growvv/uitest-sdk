@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { resolve } from "node:path";
 import { HdcRunner } from "../../src/hdc.js";
 
 const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
@@ -79,5 +80,48 @@ describe("HdcRunner", () => {
       { id: "dev3", state: "offline" },
     ]);
     expect(await r.listTargets()).toEqual(["dev1", "dev2", "dev3"]);
+  });
+});
+
+describe("HdcRunner file transfer", () => {
+  it("sends the local file by absolute path", async () => {
+    // Measured: `hdc file send` with a relative local path creates a directory
+    // at the remote path and puts the file inside it, so the remote ends up a
+    // folder rather than the file the caller named.
+    const seen: string[][] = [];
+    fakeHdc((_file, args) => {
+      seen.push(args);
+      return { stdout: "FileTransfer finish" };
+    });
+    const r = new HdcRunner({ hdcPath: "C:/fake/hdc.exe" });
+    await r.push(".work-bench/t.txt", "/data/local/tmp/t.txt");
+    expect(seen[0]![0]).toBe("file");
+    expect(seen[0]![1]).toBe("send");
+    expect(seen[0]![2]).toBe(resolve(".work-bench/t.txt"));
+    expect(seen[0]![3]).toBe("/data/local/tmp/t.txt");
+  });
+
+  it("receives to the local path as given", async () => {
+    const seen: string[][] = [];
+    fakeHdc((_file, args) => {
+      seen.push(args);
+      return { stdout: "FileTransfer finish" };
+    });
+    const r = new HdcRunner({ hdcPath: "C:/fake/hdc.exe" });
+    await r.pull("/data/local/tmp/t.txt", ".work-bench/back.txt");
+    expect(seen[0]).toEqual(["file", "recv", "/data/local/tmp/t.txt", ".work-bench/back.txt"]);
+  });
+});
+
+describe("HdcRunner.command", () => {
+  it("runs arbitrary hdc connector commands as an argument vector", async () => {
+    const seen: string[][] = [];
+    fakeHdc((_file, args) => {
+      seen.push(args);
+      return { stdout: "ok" };
+    });
+    const r = new HdcRunner({ hdcPath: "C:/fake/hdc.exe" });
+    expect(await r.command(["list", "targets"])).toBe("ok");
+    expect(seen[0]).toEqual(["list", "targets"]);
   });
 });

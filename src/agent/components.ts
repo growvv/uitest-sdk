@@ -1,6 +1,6 @@
 import { On, selectorText } from "./selector.js";
 import { ElementNotFoundError, UitestError } from "../errors.js";
-import type { Rect } from "../model.js";
+import type { InputTextMode, Rect, WindowFilter } from "../model.js";
 
 /** The device-side calls a component handle makes; AgentClient satisfies this. */
 export interface HypiumSource {
@@ -103,7 +103,14 @@ export class Components {
    * The extension has no window enumeration — `Driver.findWindows` does not
    * exist (measured) — so a window is always addressed by filter.
    */
-  async window(filter: { focused?: boolean; bundleName?: string } = {}): Promise<UiWindowHandle | null> {
+  async window(filter: WindowFilter = {}): Promise<UiWindowHandle | null> {
+    if (Object.values(filter).every((v) => v === undefined)) {
+      throw new UitestError(
+        "findWindow needs at least one condition (title, bundleName, focused or actived); " +
+          "the device rejects an empty filter",
+        "EWINDOWFILTER",
+      );
+    }
     const ref = await this.device.hypium("Driver.findWindow", DRIVER, [filter]);
     if (typeof ref !== "string" || ref === "") return null;
     return new UiWindowHandle(this.device, ref, filter);
@@ -124,6 +131,11 @@ export class ComponentHandle {
 
   private call(api: string, args: unknown[] = []): Promise<unknown> {
     return this.device.hypium(api, this.ref, args);
+  }
+
+  private async stringCall(api: string): Promise<string> {
+    const v = await this.call(api);
+    return v === null || v === undefined ? "" : String(v);
   }
 
   async bounds(): Promise<Rect> {
@@ -148,13 +160,117 @@ export class ComponentHandle {
     return v === null || v === undefined ? "" : String(v);
   }
 
+  async id(): Promise<string> {
+    const v = await this.call("Component.getId");
+    return v === null || v === undefined ? "" : String(v);
+  }
+
+  /**
+   * The compatibility `key` property. The extension has no `Component.getKey`
+   * (measured: "No handler found"), and on OpenHarmony the key is the id.
+   */
+  async key(): Promise<string> {
+    return this.id();
+  }
+
   async type(): Promise<string> {
     const v = await this.call("Component.getType");
     return v === null || v === undefined ? "" : String(v);
   }
 
+  async description(): Promise<string> {
+    return this.stringCall("Component.getDescription");
+  }
+
+  async hint(): Promise<string> {
+    return this.stringCall("Component.getHint");
+  }
+
+  async accessibilityId(): Promise<string> {
+    return this.stringCall("Component.getAccessibilityId");
+  }
+
+  async originalText(): Promise<string> {
+    return this.stringCall("Component.getOriginalText");
+  }
+
+  async displayId(): Promise<number> {
+    const v = await this.call("Component.getDisplayId");
+    return Number(v ?? 0);
+  }
+
+  async boundsCenter(): Promise<{ x: number; y: number }> {
+    const raw = (await this.call("Component.getBoundsCenter")) as
+      | { x?: number; y?: number }
+      | null;
+    if (!raw || typeof raw !== "object") {
+      throw new UitestError(`getBoundsCenter returned ${JSON.stringify(raw)}`, "ENOBOUNDS");
+    }
+    return { x: Number(raw.x ?? 0), y: Number(raw.y ?? 0) };
+  }
+
+  async allProperties(): Promise<Record<string, string>> {
+    const raw = await this.call("Component.getAllProperties");
+    const out: Record<string, string> = {};
+    if (raw && typeof raw === "object") {
+      for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+        out[key] = value === null || value === undefined ? "" : String(value);
+      }
+    }
+    return out;
+  }
+
+  async isEnabled(): Promise<boolean> {
+    return (await this.call("Component.isEnabled")) === true;
+  }
+
+  async isFocused(): Promise<boolean> {
+    return (await this.call("Component.isFocused")) === true;
+  }
+
+  async isSelected(): Promise<boolean> {
+    return (await this.call("Component.isSelected")) === true;
+  }
+
   async isClickable(): Promise<boolean> {
     return (await this.call("Component.isClickable")) === true;
+  }
+
+  async isLongClickable(): Promise<boolean> {
+    return (await this.call("Component.isLongClickable")) === true;
+  }
+
+  async isScrollable(): Promise<boolean> {
+    return (await this.call("Component.isScrollable")) === true;
+  }
+
+  async isCheckable(): Promise<boolean> {
+    return (await this.call("Component.isCheckable")) === true;
+  }
+
+  async isChecked(): Promise<boolean> {
+    return (await this.call("Component.isChecked")) === true;
+  }
+
+  async scrollToTop(): Promise<void> {
+    await this.call("Component.scrollToTop");
+  }
+
+  async scrollToBottom(): Promise<void> {
+    await this.call("Component.scrollToBottom");
+  }
+
+  async pinchIn(scale = 0.5): Promise<void> {
+    await this.call("Component.pinchIn", [scale]);
+  }
+
+  async pinchOut(scale = 1.5): Promise<void> {
+    await this.call("Component.pinchOut", [scale]);
+  }
+
+  /** Drags this component to a point on screen. */
+  async dragTo(point: { x: number; y: number }): Promise<void> {
+    await this.call("Component.dragTo", [point]);
   }
 
   async click(): Promise<void> {
@@ -169,8 +285,8 @@ export class ComponentHandle {
     await this.call("Component.doubleClick");
   }
 
-  async inputText(text: string): Promise<void> {
-    await this.call("Component.inputText", [text]);
+  async inputText(text: string, mode?: InputTextMode): Promise<void> {
+    await this.call("Component.inputText", mode ? [text, mode] : [text]);
   }
 
   async clearText(): Promise<void> {
@@ -195,7 +311,7 @@ export class UiWindowHandle {
   constructor(
     private readonly device: HypiumSource,
     readonly ref: string,
-    readonly filter: { focused?: boolean; bundleName?: string } = {},
+    readonly filter: WindowFilter = {},
   ) {}
 
   private call(api: string, args: unknown[] = []): Promise<unknown> {
@@ -219,12 +335,53 @@ export class UiWindowHandle {
     return v === null || v === undefined ? "" : String(v);
   }
 
+  async title(): Promise<string> {
+    const v = await this.call("UiWindow.getTitle");
+    return v === null || v === undefined ? "" : String(v);
+  }
+
+  async windowMode(): Promise<number> {
+    return Number((await this.call("UiWindow.getWindowMode")) ?? 0);
+  }
+
+  async displayId(): Promise<number> {
+    return Number((await this.call("UiWindow.getDisplayId")) ?? 0);
+  }
+
   async isFocused(): Promise<boolean> {
     return (await this.call("UiWindow.isFocused")) === true;
   }
 
+  async isActive(): Promise<boolean> {
+    return (await this.call("UiWindow.isActive")) === true;
+  }
+
   async focus(): Promise<void> {
     await this.call("UiWindow.focus");
+  }
+
+  async moveTo(x: number, y: number): Promise<void> {
+    await this.call("UiWindow.moveTo", [x, y]);
+  }
+
+  async resize(width: number, height: number): Promise<void> {
+    await this.call("UiWindow.resize", [width, height]);
+  }
+
+  async split(): Promise<void> {
+    await this.call("UiWindow.split");
+  }
+
+  async maximize(): Promise<void> {
+    await this.call("UiWindow.maximize");
+  }
+
+  async resume(): Promise<void> {
+    await this.call("UiWindow.resume");
+  }
+
+  async minimize(): Promise<void> {
+    await this.call("UiWindow.minimize");
   }
 
   async close(): Promise<void> {

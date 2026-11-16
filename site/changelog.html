@@ -15,6 +15,7 @@
       <a href="index.html#cli">命令行</a>
       <a href="index.html#compare">对比</a>
       <a href="index.html#bench">实测</a>
+      <a href="api.html">API</a>
       <a href="docs.html">文档</a>
       <a href="changelog.html">更新</a>
       <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
@@ -23,6 +24,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-5-0">0.5.0 · 完整 hypium API</a>
       <a href="#v0-4-0">0.4.0 · 脱敏、设备状态与审批</a>
       <a href="#v0-3-0">0.3.0 · 默认值、接管与交接</a>
       <a href="#v0-2-0">0.2.0 · 命令行与 Agent</a>
@@ -34,6 +36,31 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-5-0">
+        <div class="release-head">
+          <h2>0.5.0</h2>
+          <span class="release-date">2026-11-16</span>
+          <span class="release-tag">完整 hypium API</span>
+        </div>
+
+        <h3>完整 hypium API：118 个方法</h3>
+        <ul>
+          <li>新增 <code>dev.hypium</code>（<code>HypiumDriver</code>）：把 hypium 6.1.0.210 的 <code>OHOSDriver</code> 106 个方法与兼容层 12 个方法逐个铺平成 TypeScript 驼峰方法，参数与返回值都有类型。</li>
+          <li>位置参数统一为 <code>Target</code>：绝对坐标、屏幕比例 <code>[0.5, 0.5]</code>、矩形、<code>On</code> 选择器或已解析的 <code>ComponentHandle</code> 可以互换。</li>
+          <li>按动作选注入通道：单指手势、<code>PointerMatrix</code> 多指、鼠标/笔 Driver RPC、组件侧动作（<code>Component.click</code> 等）。</li>
+          <li><code>HYPIIUM_CATALOG</code> 导出 118 条映射（hypium 原名 → TS 名 → 分类 → 状态）；单元测试核对它与门面一一对应。</li>
+          <li>真机逐条实测（BRA-AL00 / uitest 7.0.0.1）：106 <code>verified</code>、4 <code>device</code>、3 <code>hardware</code>、5 <code>unsupported</code>。不可用的路径抛 <code>UnsupportedError</code>，不会挂起到超时。</li>
+          <li>新增官网独立页面 <a href="api.html">完整 API</a>：118 条方法表、参数说明、分类示例与四张调用路径图，由 catalog 生成。</li>
+        </ul>
+
+        <h3>实测中发现并修掉的三个缺陷</h3>
+        <ul>
+          <li><code>isDisplayLocked()</code> 在解锁状态下报 <code>true</code>：<code>hidumper</code> 表格按空白切分会把字段名与值拆开，改为逐行读第二个字段。</li>
+          <li><code>pushFile()</code> 用相对路径时在设备上建出一个同名目录：<code>hdc file send</code> 需要绝对路径，改为先 <code>resolve()</code>。</li>
+          <li><code>setDisplayRotation()</code> 传字符串被设备拒绝：类型收窄为 <code>0 | 1 | 2 | 3</code>，错误信息说明设备只收整数。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-4-0">
         <div class="release-head">
@@ -256,7 +283,7 @@
           <li>7.0 casting（WebSocket 分支）实验支持：与 6.8 能力对等，作为可选传输。</li>
           <li><code>perfmonitor.so</code>（HTTP 9999）性能指标接入。</li>
           <li>录制参数在设备侧可配置（目前文件路径写死在扩展里）。</li>
-          <li>更多 hypium 方法的一等封装（当前可用 <code>agent.hypium()</code> 直调）。</li>
+          <li>接管期间的线性「人的操作」时间线（<code>captureLayout</code> 轮询写 JSONL；<code>uiRecord</code> 与 daemon 互斥，不可用）。</li>
         </ul>
         <p class="note">版本节奏以实测为准：每个版本都会更新本页、README 与 npm 包内文档。</p>
       </section>

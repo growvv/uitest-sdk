@@ -1,0 +1,592 @@
+#!/usr/bin/env node
+/**
+ * Renders site/api.html from the catalog in `dist/hypium/catalog.js`.
+ *
+ * The page's method table is generated rather than typed by hand: 118 rows is
+ * more than a person keeps in sync with the facade, and the unit test already
+ * pins the catalog to the driver's own members. Run after `npm run build`.
+ *
+ * Usage: node scripts/gen-api-page.mjs
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const ROOT = resolve(import.meta.dirname, "..");
+const OUT = join(ROOT, "site", "api.html");
+
+const { HYPIIUM_CATALOG } = await import(
+  pathToFileURL(join(ROOT, "dist", "hypium", "catalog.js")).href
+);
+const { VERSION } = await import(
+  pathToFileURL(join(ROOT, "dist", "version.js")).href
+);
+
+const CATEGORY_LABELS = {
+  display: "屏幕、电源与锁屏",
+  tap: "点击",
+  gesture: "滑动与路径",
+  multi: "多指",
+  mouse: "鼠标",
+  pen: "手写笔",
+  keyboard: "文本与键盘",
+  keys: "系统按键",
+  component: "控件",
+  window: "窗口",
+  screen: "屏幕与坐标",
+  image: "图像识别",
+  events: "Toast 与 UI 事件",
+  app: "应用管理",
+  file: "hdc 与文件",
+  wait: "等待",
+  ime: "输入法",
+  hardware: "特殊硬件",
+  device: "设备信息、日志与钩子",
+};
+
+const STATUS_LABELS = {
+  verified: ["已验证", "真机逐条跑过"],
+  device: ["已实现", "接口在，真机验收未覆盖"],
+  host: ["宿主侧", "主机上执行或别名，不单独发设备请求"],
+  hardware: ["需硬件", "手写笔 / 表冠 / 触控板，无硬件时明确报错"],
+  unsupported: ["不可用", "设备扩展无法提供，调用立即抛 UnsupportedError"],
+};
+
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS);
+
+/** The catalog's notes are English (they live in code); the page is Chinese. */
+const NOTES_ZH = {
+  unlock: "上滑解锁；设了 PIN 或图案时仍需人来解",
+  setDisplayRotation: "调用成功；这台手机的自动旋转关着，所以方向不变",
+  takeScreenshot: "模拟音量下 + 电源；文件进媒体库，shell 读不到",
+  findImage: "模板匹配；SIFT 需要主机侧 OpenCV",
+  touchImage: "模板匹配；SIFT 需要主机侧 OpenCV",
+  checkImageExist: "模板匹配；SIFT 需要主机侧 OpenCV",
+  startListenToast: "UIEventObserver 在原始 RPC 上永不回复",
+  getLatestToast: "UIEventObserver 在原始 RPC 上永不回复",
+  checkToast: "UIEventObserver 在原始 RPC 上永不回复",
+  startListenUiEvent: "UIEventObserver 在原始 RPC 上永不回复",
+  getLatestUiEvent: "UIEventObserver 在原始 RPC 上永不回复",
+  installApp: "坏路径会被报出；未做过一次成功的安装",
+  uninstallApp: "不存在的包会被报出；未做过一次成功的卸载",
+  clearAppData: "破坏性操作，未在真实应用上执行",
+  touchpadSwipe: "二合一设备的触控板",
+  touchpadSwipeAndHold: "二合一设备的触控板",
+  rotateCrown: "手表表冠",
+  sn: "返回序列号的 8 位哈希，原始序列号不外泄",
+};
+
+// ---------------------------------------------------------------- examples
+/** Per-category example, kept short enough to read on the page. */
+const EXAMPLES = {
+  display: `await dev.hypium.wakeUpDisplay();
+if (await dev.hypium.isDisplayLocked()) await dev.hypium.unlock();
+await dev.hypium.setDisplayRotationEnabled(true);
+await dev.hypium.setDisplayRotation(1);   // 只接受 0/1/2/3`,
+  tap: `await dev.hypium.click({ x: 608, y: 1344 });        // 绝对坐标
+await dev.hypium.click([0.5, 0.5]);                 // 屏幕比例
+await dev.hypium.longClick(On.text("复制"), { pressTime: 1.2 });
+await dev.hypium.touch(On.type("Button"), { mode: "double" });`,
+  gesture: `await dev.hypium.swipe("up", { distance: 40, durationMs: 200 });
+await dev.hypium.fling("up", { speed: "fast" });
+await dev.hypium.drag(On.text("卡片"), { x: 900, y: 300 }, { pressMs: 800 });
+await dev.hypium.pinchOut(On.type("Swiper"), { scale: 1.5 });
+await dev.hypium.injectGesture(
+  new Gesture().start([0.5, 0.8]).moveTo([0.5, 0.4], 0.2).pause(0.1),
+);`,
+  multi: `await dev.hypium.multiFingerTouch([[0.3, 0.5], [0.7, 0.5]], { durationMs: 80 });
+await dev.hypium.twoFingerSwipe([0.3, 0.7], [0.3, 0.4], [0.7, 0.7], [0.7, 0.4]);`,
+  mouse: `await dev.hypium.mouseClick({ x: 400, y: 300 }, { button: "right" });
+await dev.hypium.mouseScroll({ x: 400, y: 300 }, "down", 3);
+await dev.hypium.mouseMove({ x: 100, y: 100 }, { x: 400, y: 300 }, { speed: 3000 });`,
+  pen: `await dev.hypium.penClick({ x: 300, y: 800 });
+await dev.hypium.penLongClick({ x: 300, y: 800 }, { pressure: 0.4 });
+await dev.hypium.penInjectGesture(
+  new Gesture().start([0.3, 0.6]).moveTo([0.7, 0.6], 0.3),
+  { pressure: 0.5 },
+);`,
+  keyboard: `await dev.hypium.inputText(On.type("SearchField"), "wlan");
+await dev.hypium.clearText(On.type("SearchField"));
+await dev.hypium.pressKey("enter");
+await dev.hypium.pressCombinationKey("ctrl_left", "a");`,
+  keys: `await dev.hypium.pressBack();
+await dev.hypium.goHome();
+await dev.hypium.pressPower();`,
+  component: `const handle = await dev.hypium.findComponent(On.text("WLAN"));
+if (handle) {
+  console.log(await dev.hypium.getComponentProperty(handle, "bounds"));
+  await dev.hypium.checkComponent(handle, { enabled: true });
+  await dev.hypium.switchComponentStatus(handle, true);
+}`,
+  window: `const win = await dev.hypium.findWindow({ bundleName: "com.huawei.hmos.settings" });
+if (win) console.log(await dev.hypium.checkWindow(win, { title: "设置" }));`,
+  screen: `const { width, height } = await dev.hypium.getDisplaySize();
+const jpeg = await dev.hypium.captureScreen({ scale: 0.5 });   // Buffer
+await dev.hypium.captureScreen({ savePath: "shot.jpeg" });      // 存到主机`,
+  image: `const rect = await dev.hypium.findImage("button.jpeg", { similarity: 0.92 });
+await dev.hypium.touchImage("button.jpeg");
+await dev.hypium.checkImageExist("toast.jpeg", { timeoutMs: 2000 });`,
+  events: `// 设备侧的 UIEventObserver 在原始 RPC 上永不回复，下面这些调用立即抛错：
+try {
+  await dev.hypium.getLatestToast();
+} catch (e) {
+  if (e instanceof UnsupportedError) console.log("这台设备给不了 Toast");
+}`,
+  app: `await dev.hypium.startApp("com.huawei.hmos.settings");
+console.log(await dev.hypium.currentApp());   // ["com.huawei.hmos.settings", "MainAbility"]
+await dev.hypium.stopApp("com.huawei.hmos.settings");`,
+  file: `await dev.hypium.pushFile("local.txt", "/data/local/tmp/local.txt");
+console.log(await dev.hypium.hasFile("/data/local/tmp/local.txt"));
+await dev.hypium.pullFile("/data/local/tmp/local.txt", "back.txt");
+console.log(await dev.hypium.hdc("list targets"));`,
+  wait: `await dev.hypium.waitForIdle({ idleMs: 300, timeoutMs: 5000 });
+await dev.hypium.waitForComponent(On.text("完成"), { timeoutMs: 3000 });
+await dev.hypium.setImplicitWaitTime(2);   // findComponent 会等这么久`,
+  ime: `await dev.hypium.inputTextOnCurrentCursor("hello");`,
+  hardware: `// 没有对应硬件时抛 UnsupportedError，而不是静默失败：
+await dev.hypium.rotateCrown(2);       // 手表表冠
+await dev.hypium.touchpadSwipe("up");  // 二合一触控板`,
+  device: `console.log(await dev.hypium.getDeviceType(), await dev.hypium.sn());
+dev.hypium.addHook("ui_action_start", "log", (e) => console.log(e.operate_type));
+await dev.hypium.click({ x: 10, y: 10 });`,
+};
+
+/** One line per method: what it does, not that it was tested. */
+const DESCRIPTIONS = {
+  // display
+  closeDisplay: "熄屏（power-shell suspend）",
+  unlock: "上滑解锁；PIN 仍需人解",
+  setSleepTime: "设置休眠秒数",
+  restoreSleepTime: "恢复默认休眠时间",
+  isDisplayOn: "读电源服务判断是否亮屏",
+  isDisplayLocked: "读锁屏服务判断是否上锁",
+  wakeUpDisplay: "点亮屏幕",
+  getDisplayRotation: "读当前旋转 0–3",
+  setDisplayRotation: "设旋转角度，只收整数",
+  setDisplayRotationEnabled: "开/关自动旋转",
+  // tap
+  click: "点一下；坐标或选择器",
+  doubleClick: "连点两下",
+  longClick: "按住 pressTime 秒",
+  touch: "按 mode 选点/长按/双击",
+  // gesture
+  drag: "先按住再拖，用于排序",
+  slide: "两点之间匀速滑动",
+  swipe: "按方向滑动，可给距离",
+  fling: "快速甩动，松手带惯性",
+  swipeToHome: "上滑回桌面",
+  swipeToBack: "从屏幕边缘滑回",
+  swipeToRecentTask: "上滑停住进多任务",
+  pinchIn: "双指收拢缩小",
+  pinchOut: "双指张开放大",
+  injectGesture: "回放自定义手势路径",
+  // multi
+  injectMultiFingerGesture: "多指同时回放不同路径",
+  twoFingerSwipe: "两指同向滑动",
+  multiFingerTouch: "多指同时点按",
+  // mouse
+  mouseDoubleClick: "鼠标双击",
+  mouseLongClick: "鼠标长按",
+  mouseClick: "鼠标点击，可带按键",
+  mouseScroll: "滚轮上/下滚 N 格",
+  mouseMoveTo: "鼠标移到某点",
+  mouseMove: "鼠标沿轨迹移动",
+  mouseDrag: "按住鼠标拖动",
+  // pen
+  penClick: "手写笔点一下",
+  penDoubleClick: "手写笔双击",
+  penLongClick: "手写笔长按，可带压感",
+  penSwipe: "手写笔按方向划",
+  penSlide: "手写笔两点之间划",
+  penDrag: "手写笔按住拖动",
+  penInjectGesture: "回放手写笔手势，带压感",
+  // keyboard
+  inputText: "向控件或坐标输入文本",
+  clearText: "清空输入框",
+  moveCursor: "移动光标或跳到行首行尾",
+  pressKey: "按一个键，可长按/连按",
+  pressCombinationKey: "组合键，如 Ctrl+A",
+  // keys
+  pressHome: "按 Home 键",
+  goHome: "回桌面；桌面形态走 Meta+D",
+  goBack: "返回；手机形态走边缘滑动",
+  pressBack: "按返回键",
+  pressPower: "按电源键",
+  takeScreenshot: "模拟截屏组合键",
+  // component
+  getComponentPos: "取控件中心点",
+  getComponentBound: "取控件矩形",
+  getComponentProperty: "按属性名读值",
+  findComponent: "按选择器找控件",
+  findAllComponents: "找全部，可按序号取一个",
+  switchComponentStatus: "把勾选状态切到目标值",
+  checkExist: "断言控件存在与否",
+  checkComponentExist: "同上，可等可滚动查找",
+  checkComponent: "断言多个属性值",
+  waitForComponent: "设备侧等到控件出现",
+  waitForComponentDisappear: "宿主轮询等到消失",
+  // window
+  findWindow: "按标题/包名/焦点找窗口",
+  getWindowSize: "取当前窗口尺寸",
+  getCurrentWindow: "取激活窗口，退回焦点窗口",
+  checkCurrentWindow: "断言当前窗口",
+  checkWindow: "断言指定窗口的标题/包名",
+  checkWindowExist: "断言窗口存在与否",
+  // screen
+  getDisplaySize: "显示尺寸，坐标基准",
+  captureScreen: "截图；Buffer 或存文件",
+  toAbsolutePosition: "比例坐标换成像素",
+  toAbsPos: "同上",
+  // image
+  findImage: "在截图里找模板，返回矩形",
+  touchImage: "找到模板并点击中心",
+  checkImageExist: "轮询断言图像是否出现",
+  // events
+  startListenToast: "不可用：观察者不回复",
+  getLatestToast: "不可用：观察者不回复",
+  checkToast: "不可用：观察者不回复",
+  startListenUiEvent: "不可用：观察者不回复",
+  getLatestUiEvent: "不可用：观察者不回复",
+  // app
+  startApp: "aa start 拉起应用",
+  stopApp: "强制结束应用",
+  hasApp: "判断应用是否安装",
+  currentApp: "取前台包名与 Ability",
+  installApp: "hdc install 安装 hap",
+  uninstallApp: "bm uninstall 卸载",
+  clearAppData: "清除应用数据",
+  // file
+  hdc: "执行任意 hdc 子命令",
+  shell: "在设备上执行 shell",
+  pullFile: "从设备取文件",
+  pushFile: "向设备推文件",
+  hasFile: "判断设备上文件存在",
+  // wait
+  wait: "宿主侧等待 N 秒",
+  waitForIdle: "设备侧等到画面静止",
+  setImplicitWaitTime: "设置隐式等待秒数",
+  getImplicitWaitTime: "读隐式等待秒数",
+  // ime
+  inputTextOnCurrentCursor: "向当前光标输入",
+  // hardware
+  touchpadSwipe: "触控板多指滑动",
+  touchpadSwipeAndHold: "触控板滑动并停住",
+  rotateCrown: "转动手表表冠",
+  // device
+  logDebug: "打 debug 日志",
+  logInfo: "打 info 日志",
+  logWarning: "打 warning 日志",
+  logError: "打 error 日志",
+  executeShellCommand: "同 shell，超时更长",
+  executeConnectorCommand: "同 hdc，超时更长",
+  deviceType: "设备形态，同 getDeviceType",
+  sn: "序列号的 8 位哈希",
+  osType: "固定 OHOS",
+  screenLock: "锁屏对象，读 isLocked()",
+  log: "日志器，可注入",
+  getDeviceType: "读 product.devicetype",
+  getOsType: "固定 OHOS",
+  close: "清掉宿主侧钩子",
+  addHook: "注册动作前钩子",
+  removeHook: "移除一个钩子",
+  removeAllHooks: "移除某类全部钩子",
+};
+
+const esc = (s) =>
+  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const counts = {};
+for (const entry of HYPIIUM_CATALOG) counts[entry.category] = (counts[entry.category] ?? 0) + 1;
+const statusCounts = {};
+for (const entry of HYPIIUM_CATALOG) statusCounts[entry.status] = (statusCounts[entry.status] ?? 0) + 1;
+
+const toc = CATEGORY_ORDER.map(
+  (cat) => `      <a href="#api-${cat}">${esc(CATEGORY_LABELS[cat])} <span class="api-count">${counts[cat]}</span></a>`,
+).join("\n");
+
+const sections = CATEGORY_ORDER.map((cat) => {
+  const rows = HYPIIUM_CATALOG.filter((e) => e.category === cat)
+    .map(
+      (e) => `            <tr>
+              <td><code>${esc(e.ts)}</code></td>
+              <td><code class="api-py">${esc(e.python)}</code></td>
+              <td><span class="api-status api-status-${e.status}">${STATUS_LABELS[e.status][0]}</span></td>
+              <td>${esc(DESCRIPTIONS[e.ts] ?? e.note ?? STATUS_LABELS[e.status][1])}${NOTES_ZH[e.ts] ? `<br><span class="api-note">${esc(NOTES_ZH[e.ts])}</span>` : ""}</td>
+            </tr>`,
+    )
+    .join("\n");
+  return `      <h2 id="api-${cat}">${esc(CATEGORY_LABELS[cat])}<span class="doc-tag">${counts[cat]} 个</span></h2>
+      <pre><code>${esc(EXAMPLES[cat])}</code></pre>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>TypeScript</th><th>hypium 原名</th><th>状态</th><th>说明</th></tr></thead>
+          <tbody>
+${rows}
+          </tbody>
+        </table>
+      </div>`;
+}).join("\n\n");
+
+const statusRows = Object.keys(STATUS_LABELS)
+  .map(
+    (s) => `          <tr><td><span class="api-status api-status-${s}">${STATUS_LABELS[s][0]}</span></td><td><code>${s}</code></td><td>${statusCounts[s] ?? 0}</td><td>${STATUS_LABELS[s][1]}</td></tr>`,
+  )
+  .join("\n");
+
+const page = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>完整 API · uitest-sdk</title>
+  <meta name="description" content="uitest-sdk 的 HypiumDriver：hypium 6.1.0.210 全部 118 个方法的 TypeScript 封装，逐条标注真机状态，附示例与调用路径图。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
+      <a href="index.html#compare">对比</a>
+      <a href="index.html#bench">实测</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">文档</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="目录">
+      <a href="#overview">概览</a>
+      <a href="#path">调用路径</a>
+      <a href="#target">坐标与目标</a>
+      <a href="#channels">四种注入通道</a>
+      <a href="#status">状态含义</a>
+      <a href="#methods">全部方法</a>
+${toc}
+    </aside>
+
+    <article class="doc-body">
+      <h1>完整 API</h1>
+      <p class="doc-meta">uitest-sdk <strong>${VERSION}</strong> · hypium <strong>6.1.0.210</strong> · <strong>${HYPIIUM_CATALOG.length}</strong> 个方法</p>
+      <p>DevEco Testing 的 hypium 驱动在设备上公开 ${HYPIIUM_CATALOG.length} 个方法（<code>OHOSDriver</code> 106 个 + 兼容层 12 个）。<code>dev.hypium</code> 把它们逐个映射成 TypeScript 的同名 camelCase 方法，参数与返回值按设备实际行为定，不是照着文档猜的：每一条都在真机（BRA-AL00 / uitest 7.0.0.1）上跑过，状态标在表里。</p>
+
+      <pre><code>import { Device, On, Gesture, UnsupportedError } from "uitest-sdk";
+
+const dev = await Device.connect();
+try {
+  await dev.hypium.click(On.text("设置"));
+  await dev.hypium.waitForComponent(On.text("WLAN"), { timeoutMs: 3000 });
+} finally {
+  await dev.dispose();
+}</code></pre>
+
+      <h2 id="overview">一眼看全</h2>
+      <figure class="api-figure">
+        <svg class="arch-svg" viewBox="0 0 720 470" role="img" aria-label="118 个方法按类别分布">
+          <text x="0" y="16" font-size="14">${HYPIIUM_CATALOG.length} 个方法 · 19 个类别</text>
+          <text x="0" y="36" font-size="11" class="sub">条长为该类的方法数，右侧是数量</text>
+${CATEGORY_ORDER.map((cat, i) => {
+  const y = 52 + i * 21;
+  const max = Math.max(...Object.values(counts));
+  const w = Math.max(3, (counts[cat] / max) * 420);
+  return `          <text x="0" y="${(y + 11).toFixed(1)}" font-size="11" class="sub">${esc(CATEGORY_LABELS[cat])}</text>
+          <rect x="180" y="${(y + 3).toFixed(1)}" width="${w.toFixed(1)}" height="10" rx="2" fill="#ffd23f" opacity="0.75"></rect>
+          <text x="${(186 + w).toFixed(1)}" y="${(y + 12).toFixed(1)}" font-size="11" class="sub">${counts[cat]}</text>`;
+}).join("\n")}
+        </svg>
+        <figcaption>同一份清单也被单元测试用来核对：目录里少一个方法、多一个方法、或方法名对不上驱动，测试都会失败。</figcaption>
+      </figure>
+
+      <h2 id="path">调用路径</h2>
+      <figure class="api-figure">
+        <svg class="arch-svg" viewBox="0 0 720 300" role="img" aria-label="从 HypiumDriver 到设备的调用路径">
+          <rect class="node" x="8" y="20" width="150" height="245" rx="10"></rect>
+          <text x="83" y="132" text-anchor="middle" font-size="13">dev.hypium</text>
+          <text x="83" y="152" text-anchor="middle" font-size="10" class="sub">HypiumDriver</text>
+
+          <rect class="node" x="196" y="20" width="150" height="64" rx="10"></rect>
+          <text x="271" y="46" text-anchor="middle" font-size="13">AgentClient</text>
+          <text x="271" y="66" text-anchor="middle" font-size="10" class="sub">一条 TCP · 串行队列</text>
+
+          <rect class="node" x="384" y="20" width="150" height="64" rx="10"></rect>
+          <text x="459" y="46" text-anchor="middle" font-size="13">agent.so</text>
+          <text x="459" y="66" text-anchor="middle" font-size="10" class="sub">uitest daemon · :8012</text>
+
+          <rect class="node" x="572" y="20" width="140" height="64" rx="10"></rect>
+          <text x="642" y="46" text-anchor="middle" font-size="13">设备</text>
+          <text x="642" y="66" text-anchor="middle" font-size="10" class="sub">触摸 / 布局 / 截图</text>
+
+          <rect class="node" x="196" y="115" width="150" height="60" rx="10"></rect>
+          <text x="271" y="140" text-anchor="middle" font-size="13">Gestures</text>
+          <text x="271" y="159" text-anchor="middle" font-size="10" class="sub">touchDown/Move/Up</text>
+
+          <rect class="node" x="196" y="205" width="150" height="60" rx="10"></rect>
+          <text x="271" y="230" text-anchor="middle" font-size="13">HdcRunner</text>
+          <text x="271" y="249" text-anchor="middle" font-size="10" class="sub">shell / file / fport</text>
+
+          <rect class="node" x="384" y="205" width="150" height="60" rx="10"></rect>
+          <text x="459" y="230" text-anchor="middle" font-size="13">hdc</text>
+          <text x="459" y="249" text-anchor="middle" font-size="10" class="sub">命令行工具</text>
+
+          <rect class="node" x="572" y="205" width="140" height="60" rx="10"></rect>
+          <text x="642" y="230" text-anchor="middle" font-size="13">设备</text>
+          <text x="642" y="249" text-anchor="middle" font-size="10" class="sub">应用 / 文件 / 系统状态</text>
+
+          <path class="link" d="M158 52 H196" marker-end="url(#arrow)"></path>
+          <path class="link" d="M158 145 H196" marker-end="url(#arrow)"></path>
+          <path class="link" d="M158 235 H196" marker-end="url(#arrow)"></path>
+          <path class="link" d="M271 115 V84" marker-end="url(#arrow)"></path>
+          <path class="link" d="M346 52 H384" marker-end="url(#arrow)"></path>
+          <path class="link" d="M534 52 H572" marker-end="url(#arrow)"></path>
+          <path class="link" d="M346 235 H384" marker-end="url(#arrow)"></path>
+          <path class="link" d="M534 235 H572" marker-end="url(#arrow)"></path>
+
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="#9aa0aa"></path>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption>点击、滑动与手势先落到 <code>Gestures</code>，再走 <code>AgentClient</code> 的同一条长连接——和 <code>Session</code> 共用，因此不会多开隧道，也不会互抢设备锁。应用管理、文件传输与系统状态才读 <code>hdc</code>。</figcaption>
+      </figure>
+
+      <h2 id="target">坐标与目标</h2>
+      <p>接受位置的参数统一叫 <code>Target</code>，四种写法可以互换：</p>
+      <figure class="api-figure">
+        <svg class="arch-svg" viewBox="0 0 720 300" role="img" aria-label="Target 的四种写法如何解析成显示坐标">
+          <rect class="node" x="8" y="14" width="180" height="54" rx="8"></rect>
+          <text x="98" y="37" text-anchor="middle" font-size="12">绝对坐标</text>
+          <text x="98" y="55" text-anchor="middle" font-size="10" class="sub">{ x, y }</text>
+
+          <rect class="node" x="8" y="82" width="180" height="54" rx="8"></rect>
+          <text x="98" y="105" text-anchor="middle" font-size="12">屏幕比例</text>
+          <text x="98" y="123" text-anchor="middle" font-size="10" class="sub">[0.5, 0.5]</text>
+
+          <rect class="node" x="8" y="150" width="180" height="54" rx="8"></rect>
+          <text x="98" y="173" text-anchor="middle" font-size="12">矩形</text>
+          <text x="98" y="191" text-anchor="middle" font-size="10" class="sub">{ x, y, width, height }</text>
+
+          <rect class="node" x="8" y="218" width="180" height="54" rx="8"></rect>
+          <text x="98" y="241" text-anchor="middle" font-size="12">选择器 / 控件</text>
+          <text x="98" y="259" text-anchor="middle" font-size="10" class="sub">On · ComponentHandle</text>
+
+          <rect class="node" x="300" y="60" width="170" height="166" rx="10"></rect>
+          <text x="385" y="120" text-anchor="middle" font-size="12">解析成整数像素</text>
+          <text x="385" y="144" text-anchor="middle" font-size="9.5" class="sub">比例 × 显示尺寸</text>
+          <text x="385" y="160" text-anchor="middle" font-size="9.5" class="sub">控件取 bounds 中心</text>
+          <text x="385" y="176" text-anchor="middle" font-size="9.5" class="sub">矩形取中心 + offset</text>
+
+          <rect class="node" x="560" y="100" width="150" height="86" rx="10"></rect>
+          <text x="635" y="130" text-anchor="middle" font-size="12">显示坐标</text>
+          <text x="635" y="152" text-anchor="middle" font-size="9.5" class="sub">1216 × 2688</text>
+          <text x="635" y="168" text-anchor="middle" font-size="9.5" class="sub">点 (x, y)</text>
+
+          <path class="link" d="M188 41 C 245 41, 250 110, 300 110" marker-end="url(#arrow2)"></path>
+          <path class="link" d="M188 109 H300" marker-end="url(#arrow2)"></path>
+          <path class="link" d="M188 177 C 245 177, 250 166, 300 166" marker-end="url(#arrow2)"></path>
+          <path class="link" d="M188 245 C 245 245, 250 200, 300 200" marker-end="url(#arrow2)"></path>
+          <path class="link" d="M470 143 H560" marker-end="url(#arrow2)"></path>
+
+          <defs>
+            <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="#9aa0aa"></path>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption>比例坐标相对整个屏幕；给 <code>opts.area</code> 时相对那个区域。<code>opts.offset</code> 取控件内的相对位置，默认中心。</figcaption>
+      </figure>
+
+      <h2 id="channels">四种注入通道</h2>
+      <p>同样是「点一下」，设备上有四条路。SDK 按动作类型选最快的可用通道，而不是统一调 <code>Driver.swipe</code>：</p>
+      <figure class="api-figure">
+        <svg class="arch-svg" viewBox="0 0 720 230" role="img" aria-label="四种注入通道">
+          <rect class="node" x="8" y="14" width="170" height="196" rx="10"></rect>
+          <text x="93" y="40" text-anchor="middle" font-size="12">单指</text>
+          <text x="93" y="60" text-anchor="middle" font-size="9.5" class="sub">touchDown/Move/Up</text>
+          <text x="93" y="84" text-anchor="middle" font-size="10">click · swipe</text>
+          <text x="93" y="102" text-anchor="middle" font-size="10">drag · fling</text>
+          <text x="93" y="120" text-anchor="middle" font-size="10">longClick · slide</text>
+          <text x="93" y="152" text-anchor="middle" font-size="9.5" class="sub">实测最快</text>
+          <text x="93" y="170" text-anchor="middle" font-size="9.5" class="sub">8–30 ms / 次</text>
+
+          <rect class="node" x="190" y="14" width="170" height="196" rx="10"></rect>
+          <text x="275" y="40" text-anchor="middle" font-size="12">PointerMatrix</text>
+          <text x="275" y="60" text-anchor="middle" font-size="9.5" class="sub">多条同时轨迹</text>
+          <text x="275" y="84" text-anchor="middle" font-size="10">pinchIn / pinchOut</text>
+          <text x="275" y="102" text-anchor="middle" font-size="10">multiFingerTouch</text>
+          <text x="275" y="120" text-anchor="middle" font-size="10">twoFingerSwipe</text>
+          <text x="275" y="138" text-anchor="middle" font-size="10">injectGesture</text>
+          <text x="275" y="168" text-anchor="middle" font-size="9.5" class="sub">单指通道表达不了</text>
+
+          <rect class="node" x="372" y="14" width="170" height="196" rx="10"></rect>
+          <text x="457" y="40" text-anchor="middle" font-size="12">鼠标 / 手写笔</text>
+          <text x="457" y="60" text-anchor="middle" font-size="9.5" class="sub">Driver.mouse* / pen*</text>
+          <text x="457" y="84" text-anchor="middle" font-size="10">mouseClick / Scroll</text>
+          <text x="457" y="102" text-anchor="middle" font-size="10">penClick / penSwipe</text>
+          <text x="457" y="120" text-anchor="middle" font-size="10">带按键与压感</text>
+          <text x="457" y="152" text-anchor="middle" font-size="9.5" class="sub">桌面形态专用</text>
+
+          <rect class="node" x="554" y="14" width="158" height="196" rx="10"></rect>
+          <text x="633" y="40" text-anchor="middle" font-size="12">控件自身</text>
+          <text x="633" y="60" text-anchor="middle" font-size="9.5" class="sub">Component.click 等</text>
+          <text x="633" y="84" text-anchor="middle" font-size="10">touch(On…)</text>
+          <text x="633" y="102" text-anchor="middle" font-size="10">switchComponentStatus</text>
+          <text x="633" y="120" text-anchor="middle" font-size="10">inputText(On…)</text>
+          <text x="633" y="152" text-anchor="middle" font-size="9.5" class="sub">设备侧判定命中</text>
+          <text x="633" y="170" text-anchor="middle" font-size="9.5" class="sub">不受遮挡影响</text>
+        </svg>
+        <figcaption>选择器（<code>On</code>）作为目标时，动作直接交给设备侧的控件对象：它知道自己被点在哪，而坐标点击只是往屏幕上打一个点。</figcaption>
+      </figure>
+
+      <h2 id="status">状态含义</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>标记</th><th>catalog</th><th>数量</th><th>含义</th></tr></thead>
+          <tbody>
+${statusRows}
+          </tbody>
+        </table>
+      </div>
+      <p class="note">状态不是宣传语。标「已验证」的每一条都在真机上执行并检查了结果；标「已实现」的接口存在、参数按设备行为校验，但还没有一次成功的真机验收（安装、卸载、清数据这三条属于破坏性操作）。标「不可用」的是实测走不通的路径，调用立即抛 <code>UnsupportedError</code>，不会挂起 30 秒再超时。</p>
+
+      <h2 id="methods">全部方法</h2>
+      <p>下面按类别列出全部 ${HYPIIUM_CATALOG.length} 个方法。第一列是 TypeScript 名，第二列是 hypium 的原名——两者除了大小写与下划线之外一一对应，方便对照官方 Python 示例。</p>
+
+${sections}
+
+      <h2 id="differences">与 hypium 的差异</h2>
+      <ul>
+        <li><code>sn()</code> 返回设备序列号的 8 位哈希（如 <code>6c585f5b</code>），原始序列号不会出现在任何返回值、trace 或报告里。</li>
+        <li>Toast 与 UI 事件五个方法抛 <code>UnsupportedError</code>：设备侧的 <code>UIEventObserver</code> 会从 <code>start</code> 返回，但对 <code>getRecentUiEvent</code> 永不回复（实测 30 秒超时）。</li>
+        <li><code>findImage</code> 只有模板匹配（<code>mode: "template"</code>，JPEG 模板）；<code>sift</code> 需要主机侧 OpenCV，传了会明确报错。</li>
+        <li><code>setDisplayRotation</code> 只接受 <code>0/1/2/3</code>；设备参数校验器拒绝字符串。</li>
+        <li><code>ScreenLock.isLocked()</code> 读真实锁屏状态，而不是固定返回 <code>false</code>。</li>
+        <li><code>pushFile</code> 会把本地路径转成绝对路径再发：实测相对路径会被 hdc 当成目录树，在设备上建出一个同名文件夹。</li>
+      </ul>
+
+      <p class="doc-meta">本页由 <code>scripts/gen-api-page.mjs</code> 从 <code>src/hypium/catalog.ts</code> 生成，清单与驱动方法的一致性由单元测试保证。数字来自 2026-11-16 的真机验收。</p>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-row">
+      <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
+      <div class="footer-links">
+        <a href="index.html">首页</a>
+        <a href="docs.html">文档</a>
+        <a href="changelog.html">更新日志</a>
+        <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
+`;
+
+writeFileSync(OUT, page);
+console.log(`wrote site/api.html (${HYPIIUM_CATALOG.length} methods, ${CATEGORY_ORDER.length} categories)`);

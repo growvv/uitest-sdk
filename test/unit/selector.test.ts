@@ -90,3 +90,34 @@ describe("parseKeyName", () => {
     expect(() => parseKeyName("f13")).toThrow(/back/);
   });
 });
+
+describe("extended On predicates", () => {
+  it("supports the remaining text-like properties", () => {
+    expect(selectorText(On.description("Close", "contains"))).toBe('description~="Close"');
+    expect(selectorText(On.hint("Search"))).toBe('hint="Search"');
+    expect(selectorText(On.accessibilityId("42"))).toBe('accessibilityId="42"');
+    expect(selectorText(On.originalText("Hello"))).toBe('originalText="Hello"');
+  });
+
+  it("supports the remaining boolean properties", () => {
+    expect(selectorText(On.selected())).toBe("selected=true");
+    expect(selectorText(On.longClickable())).toBe("longClickable=true");
+    expect(selectorText(On.checkable(false))).toBe("checkable=false");
+  });
+
+  it("maps every match mode to the device enum", () => {
+    expect(On.text("a", "starts_with").toArgs()[1]).toEqual(["a", 2]);
+    expect(On.text("a", "ends_with").toArgs()[1]).toEqual(["a", 3]);
+    expect(On.text("a", "regex").toArgs()[1]).toEqual(["a", 4]);
+    expect(On.text("a", "regex_i").toArgs()[1]).toEqual(["a", 5]);
+  });
+
+  it("parses the extended predicates from the CLI form", () => {
+    expect(selectorText(parseOn("description=Close&hint~=Search"))).toBe(
+      'description="Close" & hint~="Search"',
+    );
+    expect(selectorText(parseOn("selected&checkable=false"))).toBe(
+      "selected=true & checkable=false",
+    );
+  });
+});

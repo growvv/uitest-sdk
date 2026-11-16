@@ -89,6 +89,45 @@ export { handoffDevice, holdDevice, resumeDevice, readHold, resolveTag, HOLD_TAS
 export type { HandoffOptions, HoldOptions, HoldResult } from "./hold.js";
 export { DevicePool } from "./pool.js";
 
+// The complete hypium 6.1.0.210 surface: one flat driver, 118 members.
+export { HypiumDriver, Gesture, HYPIIUM_CATALOG, shellQuote, splitCommand } from "./hypium/index.js";
+export type {
+  ActionOptions,
+  CaptureOptions,
+  CheckExistOptions,
+  ComponentPredicate,
+  Direction,
+  DisappearOptions,
+  DragOptions,
+  FlingOptions,
+  HookCallback,
+  HypiumAgent,
+  HypiumCatalogEntry,
+  HypiumCategory,
+  HypiumDriverOptions,
+  HypiumHdc,
+  HypiumIO,
+  HypiumLogger,
+  HypiumStatus,
+  ImageCheckOptions,
+  ImageOptions,
+  MouseButton,
+  MouseClickOptions,
+  PenOptions,
+  PointLike,
+  Rotation,
+  Side,
+  SwipeOptions,
+  TargetOptions,
+  TouchMode,
+  WaitComponentOptions,
+  WaitIdleOptions,
+  WindowCheck,
+} from "./hypium/index.js";
+export type { PinchOptions as HypiumPinchOptions } from "./hypium/types.js";
+export type { GestureOptions as HypiumGestureOptions } from "./hypium/types.js";
+export type { Target as HypiumTarget } from "./hypium/types.js";
+
 export { HdcRunner } from "./hdc.js";
 export type { HdcOptions } from "./hdc.js";
 
@@ -115,4 +154,5 @@ export {
   LaunchError,
   ElementNotFoundError,
   LeaseHeldError,
+  UnsupportedError,
 } from "./errors.js";

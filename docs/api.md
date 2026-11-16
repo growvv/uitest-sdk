@@ -16,14 +16,15 @@
 5. [AgentClient：UI 自动化](#5-agentclientui-自动化)
 6. [投流与录制](#6-投流与录制)
 7. [UI 树与窗口](#7-ui-树与窗口)
-8. [工具类](#8-工具类)
-9. [错误](#9-错误)
-10. [并发与生命周期](#10-并发与生命周期)
-11. [示例](#11-示例)
-12. [命令行 uitest-phone](#12-命令行-uitest-phone)
-13. [Agent 接入：MCP 与 Skill](#13-agent-接入mcp-与-skill)
-14. [接管与交接](#14-接管与交接)
-15. [Session、策略与审批](#15-session策略与审批)
+8. [完整 hypium API](#8-完整-hypium-api)
+9. [工具类](#9-工具类)
+10. [错误](#10-错误)
+11. [并发与生命周期](#11-并发与生命周期)
+12. [示例](#12-示例)
+13. [命令行 uitest-phone](#13-命令行-uitest-phone)
+14. [Agent 接入：MCP 与 Skill](#14-agent-接入mcp-与-skill)
+15. [接管与交接](#15-接管与交接)
+16. [Session、策略与审批](#16-session策略与审批)
 
 ## 1. 安装与前提
 
@@ -299,7 +300,61 @@ if (bounds) {
 
 `attributes` 是设备原样给出的字符串字典（`text`、`type`、`bounds`、`bundleName` 等）。
 
-## 8. 工具类
+## 8. 完整 hypium API
+
+设备侧的 hypium 驱动（DevEco Testing 6.1.0.210）公开 118 个方法：`OHOSDriver` 106 个，兼容层 12 个。
+`dev.hypium` 把它们逐个映射成 TypeScript 方法，参数按设备实际行为定，不是照着文档猜的。
+
+```ts
+import { Device, On, Gesture } from "uitest-sdk";
+
+const dev = await Device.connect();
+await dev.hypium.click(On.text("设置"));
+await dev.hypium.waitForComponent(On.text("WLAN"), { timeoutMs: 3000 });
+await dev.hypium.swipe("up", { distance: 40 });
+```
+
+### 位置参数：`Target`
+
+凡是接受位置的参数，四种写法可以互换：
+
+| 写法 | 例子 | 解析 |
+|---|---|---|
+| 绝对坐标 | `{ x: 608, y: 1344 }` | 原样使用 |
+| 屏幕比例 | `[0.5, 0.5]` | 乘以显示尺寸 |
+| 矩形 | `{ x, y, width, height }` | 取中心（`opts.offset` 可改） |
+| 选择器 / 控件 | `On.text("保存")`、`ComponentHandle` | 设备侧取 bounds 再取中心 |
+
+比例坐标相对整屏；给 `opts.area` 时相对那个区域。
+
+### 通道选择
+
+同样是「点一下」，设备上有四条路，SDK 按动作类型选最快的那条：
+
+| 通道 | 方法 | 说明 |
+|---|---|---|
+| 单指 `touchDown/Move/Up` | `click`、`swipe`、`drag`、`fling`、`longClick`、`slide` | 实测最快，单次 8–30 ms |
+| `PointerMatrix` | `pinchIn/Out`、`twoFingerSwipe`、`multiFingerTouch`、`injectGesture` | 多条同时轨迹，单指通道表达不了 |
+| `Driver.mouse*` / `pen*` | `mouseClick`、`mouseScroll`、`penClick`、`penSwipe` 等 | 桌面形态、带按键与压感 |
+| `Component.*` | `touch(On…)`、`switchComponentStatus`、`inputText(On…)` | 交给设备侧控件判定命中，不受遮挡影响 |
+
+### 与 hypium 的差异
+
+- `sn()` 返回设备序列号的 8 位哈希（如 `6c585f5b`），原始序列号不会出现在任何返回值、trace 或报告里。
+- Toast 与 UI 事件五个方法抛 `UnsupportedError`：设备侧 `UIEventObserver` 会从 `start` 返回，但对
+  `getRecentUiEvent` 永不回复（实测 30 秒超时）。
+- `findImage` 只支持模板匹配（`mode: "template"`，JPEG 模板）；`sift` 需要主机侧 OpenCV，传了会明确报错。
+- `setDisplayRotation` 只接受 `0/1/2/3`：设备参数校验器拒绝字符串。
+- `ScreenLock.isLocked()` 读真实锁屏状态，而不是固定返回 `false`。
+- `pushFile` 会把本地路径转成绝对路径再发：实测相对路径被 hdc 当成目录树，在设备上建出一个同名文件夹。
+
+### 状态清单
+
+`HYPIIUM_CATALOG` 导出每个方法对应的 hypium 原名与验收状态（`verified` / `device` / `host` /
+`hardware` / `unsupported`）。单元测试核对它的长度与方法名，所以清单不会与驱动脱节。
+全部 118 条、逐条示例与调用路径图见官网的 [完整 API](https://growvv.github.io/uitest-sdk/api.html) 页。
+
+## 9. 工具类
 
 | 导出 | 说明 |
 |---|---|
@@ -316,7 +371,7 @@ if (bounds) {
 | `loadScrcpyService()` | 加载 `scrcpy.proto` 的 gRPC service 构造器（低层用） |
 | `H264CastClient` / `MjpegCastClient` | 低层客户端；正常用 `dev.createCast()`，它们会自己管 daemon 与端口 |
 
-## 9. 错误
+## 10. 错误
 
 所有错误继承 `UitestError`，带 `code` 与可选 `cause`。
 
@@ -329,7 +384,7 @@ if (bounds) {
 | `AgentBusyError` | `EBUSY` | 设备全局锁被其它进程占着且重试耗尽；或该设备已有采集流（立即失败，不等待） |
 | `AgentConnectionError` | `ECONN` | 连接不可用、请求超时后连接被丢弃、关闭后继续调用 |
 
-## 10. 并发与生命周期
+## 11. 并发与生命周期
 
 - **一条连接一个在途请求**：`SerialQueue` 串行化；断开后 `autoRestart` 会用新 socket 重连，**不重放**失败中的请求。
 - **全局锁冲突**：只有 `Disallow concurrent use` 会退避重试（0.5 s 起，抖动后翻倍，最多 40 次）。
@@ -340,7 +395,7 @@ if (bounds) {
 - **超时即断连**：请求超时后连接被丢弃（回复没有请求 id，迟到的回复会配错请求），下一次调用走重连。
 - **进程退出前 `dispose()`**：撤销 fport；否则本地会留下隧道。
 
-## 11. 示例
+## 12. 示例
 
 ### 点击与滑动
 
@@ -413,7 +468,7 @@ try {
 await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 ```
 
-## 12. 命令行 `uitest-phone`
+## 13. 命令行 `uitest-phone`
 
 包内只有一个可执行文件。`npm install -g uitest-sdk` 之后命令名是 `uitest-phone`；不装全局也可以用
 `npx uitest-sdk <command>`。每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
@@ -499,7 +554,7 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 - 租约在 `<state-dir>/leases/<tag>.lock`；设备序列号只以 8 位哈希出现。
 - 每条命令各写一个 trace 文件；`report` 按 task 从磁盘读回并跨文件重新编号。
 
-## 13. Agent 接入：MCP 与 Skill
+## 14. Agent 接入：MCP 与 Skill
 
 ### `uitest-phone connect [--agent claude|codex|gemini|copilot] [--force]`
 
@@ -545,7 +600,7 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 Skill 的目录（`missing`）都不动；0.3.0 装的副本没有记录，按该版本两个文件的精确摘要识别后接管。
 刷新失败不会阻止 MCP server 启动。
 
-## 14. 接管与交接
+## 15. 接管与交接
 
 ```
 uitest-phone hold [--device <id>] [--state-dir <dir>]
@@ -568,7 +623,7 @@ hold 不按进程存活判断，所以不会自己过期。
 而且 agent 注入的合成触摸也会被当成手指上报，无法区分真人和程序。接管因此是人的明确声明，
 这也是 Agent 唯一能遵守的形式。
 
-## 15. Session、策略与审批
+## 16. Session、策略与审批
 
 CLI 的每条命令就是一个 `Session`。想在自己的脚本里拿到同样的语义，直接用 `Session`：
 
@@ -619,4 +674,4 @@ try {
 
 ---
 
-生成于 2026-11-16。行为与数字对应的源码版本：`0.4.0`。
+生成于 2026-11-16。行为与数字对应的源码版本：`0.5.0`。
