@@ -628,15 +628,14 @@ async function main(): Promise<number> {
           await sleep(300);
         }
         if (!used) throw new Error("no tap changed the screen");
-        // A category switch lands on a skeleton screen; wait for a content
-        // card so the evidence shows the page, not placeholders.
-        await a!
-          .until(
-            () => a!.nodes().nodes.some((n) => !n.masked && n.label.trim().length >= 12),
-            6000,
-            "the feed content",
-          )
-          .catch(() => undefined);
+        // A category switch lands on a skeleton screen. Placeholders carry at
+        // most one long label; real cards carry several, so three is the mark
+        // of a loaded feed. The cap keeps a slow feed from failing the scenario
+        // that already proved its point.
+        const longLabels = (): number =>
+          a!.nodes().nodes.filter((n) => !n.masked && n.label.trim().length >= 12).length;
+        const contentDeadline = Date.now() + 5000;
+        while (Date.now() < contentDeadline && longLabels() < 3) await sleep(150);
         // Every tap is a down and an up; wait for a broadcast that saw them.
         const stats = await a!.waitForStatsAtLeast(n0 + taps * 2);
         if (stats.p50 > 20) throw new Error(`p50 ${stats.p50.toFixed(1)} ms > 20 ms`);
