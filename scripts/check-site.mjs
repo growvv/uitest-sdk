@@ -354,6 +354,7 @@ for (const needle of [
   // bump it leaves the page claiming an older package than npm has.
   "0.6.0",
   "0.7.0",
+  "0.7.1",
   // Live mirroring is the release's headline: the docs must name the command,
   // the privacy switch and the fact that masking happens when the screen is
   // read rather than being painted over the video.
@@ -443,6 +444,10 @@ for (const needle of [
   "--approval-scope task",
   "升级后 Skill 自己跟上",
   ".uitest-skill.json",
+  // 0.7.1: the decoder fixes, which are the reason this patch exists.
+  "0.7.1",
+  "投屏解码修复",
+  "prefer-hardware",
   // 0.7.0: live mirroring, and the three defects the real device exposed.
   "0.7.0",
   "uitest-sdk live",

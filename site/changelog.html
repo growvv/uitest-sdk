@@ -24,6 +24,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-7-1">0.7.1 · 投屏解码修复</a>
       <a href="#v0-7-0">0.7.0 · 投屏与实时检查</a>
       <a href="#v0-6-0">0.6.0 · 7.0 WebSocket 投流</a>
       <a href="#v0-5-0">0.5.0 · 完整 hypium API</a>
@@ -38,6 +39,27 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-7-1">
+        <div class="release-head">
+          <h2>0.7.1</h2>
+          <span class="release-date">2026-11-16</span>
+          <span class="release-tag">投屏解码修复</span>
+        </div>
+
+        <h3>修掉两种「连着但黑屏」</h3>
+        <ul>
+          <li>不再写死 <code>hardwareAcceleration: 'prefer-hardware'</code>。它是硬要求不是偏好：没有 GPU 解码的机器上 <code>isConfigSupported()</code> 返回 false、<code>configure()</code> 抛 <code>OperationError</code>，一帧都出不来（实测 30 帧里 0 帧）。现在交给浏览器挑，只有默认配置被拒时才重试一次软解，并在提示条上写明。</li>
+          <li>解码中途出错后能自己恢复。原来只把解码器置空并请求关键帧，却没有人再开一个解码器，之后每一帧都被丢掉、那个 IDR 请求也没有接收方——画面永久卡住（实测卡在第 20 帧）。现在会记住最近一次 <code>hello</code>，出错时立刻重开解码器再请求关键帧（实测恢复到第 40 帧）。</li>
+        </ul>
+
+        <h3>官网补上传输与解码的对比</h3>
+        <ul>
+          <li>新增「传输与解码，到底谁更快」一节，含三条链路的对比图。</li>
+          <li>逐行读了 hscrcpy、HOScrcpy、HarmonyMirror 的实现：前两个都是 FFmpeg 软解（hscrcpy 的 README 写「硬解」，源码里没有任何 <code>hwaccel</code> 代码），HarmonyMirror 用 VideoToolbox 但中间夹一层 Python 桥接。</li>
+          <li>实测我们的每帧成本：转封装 12 µs、解码 1.57 ms（1216×2688 硬解）、绘制 0.07 ms，约占 33 ms 预算的 5%。瓶颈在设备侧编码器，三家一样。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-7-0">
         <div class="release-head">
