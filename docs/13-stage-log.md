@@ -762,3 +762,12 @@ npm test                              670/670
    账户变动、提额提醒、快递、聊天摘要。这些图是随报告提交到公开仓库的。整目录
    `git checkout -- docs/acceptance` 回滚，重新验收时先清空通知栏、停在设置首页。
    README 与路线图的发版步骤都补了这条。
+
+### E. 部署失败与重跑
+
+0.8.0 的 release commit 推上去后，`test` 绿、`deploy` 挂在 `actions/deploy-pages@v4`：
+`Failed to get ID Token ... Error Code: 503`。这不是 workflow 的问题（`permissions` 里
+`id-token: write` 一直在，14:25 那次同样的 workflow 部署成功），是 GitHub 的 OIDC 端点
+瞬时不可用。`gh run rerun --failed` **不能修它**：重跑会再上传一个 `github-pages`
+artifact，`deploy-pages` 看到两个同名 artifact 直接报错。正确做法是
+`gh workflow run pages --ref master` 起一次全新的 run。
