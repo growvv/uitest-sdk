@@ -67,7 +67,9 @@ function fakeDevice() {
         async touchDown() {},
         async touchMove() {},
         async touchUp() {},
-        async inputText() {},
+        async inputText(_x: number, _y: number, _text: string, mode?: unknown) {
+          calls.push({ api: "inputText", args: [mode] });
+        },
         async triggerKey() {},
       },
       hdc: {
@@ -95,7 +97,14 @@ function fakeDevice() {
   };
 }
 
-async function withRunner<T>(fn: (runner: CommandRunner, dir: string) => Promise<T>): Promise<T> {
+/** The input mode each type command passed to the device, in order. */
+function textModes(fake: ReturnType<typeof fakeDevice>): unknown[] {
+  return fake.calls.filter((c) => c.api === "inputText").map((c) => c.args[0]);
+}
+
+async function withRunner<T>(
+  fn: (runner: CommandRunner, dir: string, fake: ReturnType<typeof fakeDevice>) => Promise<T>,
+): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-cmd-"));
   const fake = fakeDevice();
   const session = await Session.open(fake.device, {
@@ -105,7 +114,7 @@ async function withRunner<T>(fn: (runner: CommandRunner, dir: string) => Promise
   });
   const runner = new CommandRunner(session, { stateDir: dir, device: fake.device });
   try {
-    return await fn(runner, dir);
+    return await fn(runner, dir, fake);
   } finally {
     await session.release();
     await rm(dir, { recursive: true, force: true });
@@ -309,6 +318,20 @@ describe("CommandRunner", () => {
   it("runs type", async () => {
     await withRunner(async (runner) => {
       expect((await runner.run("type", { text: "hello" })).status).toBe("settled");
+    });
+  });
+
+  it("passes --paste to the device", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      expect((await runner.run("type", { text: "hello", paste: true })).status).toBe("settled");
+      expect(textModes(fake)).toEqual([{ paste: true }]);
+    });
+  });
+
+  it("sends no mode when --paste is absent", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      expect((await runner.run("type", { text: "hello" })).status).toBe("settled");
+      expect(textModes(fake)).toEqual([undefined]);
     });
   });
 

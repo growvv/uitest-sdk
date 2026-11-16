@@ -8,7 +8,7 @@ import {
   AgentProtocolError,
   UitestError,
 } from "../errors.js";
-import type { Rect, UiEvent, UiNode } from "../model.js";
+import type { InputTextMode, Rect, UiEvent, UiNode } from "../model.js";
 import { cropRect, parseBounds } from "../util/bounds.js";
 
 export type AgentMethod = "Captures" | "CtrlCmd" | "Gestures" | "callHypiumApi";
@@ -325,11 +325,13 @@ export class AgentClient {
     return this.call("callHypiumApi", { api, this: thisRef, args });
   }
 
-  async inputText(x: number, y: number, text: string): Promise<void> {
+  async inputText(x: number, y: number, text: string, mode?: InputTextMode): Promise<void> {
     await this.call("callHypiumApi", {
       api: "Driver.inputText",
       this: "Driver#0",
-      args: [{ x, y }, text],
+      // The extension takes the mode as a third argument; omitting it is how
+      // the default (type character by character, replace) is selected.
+      args: mode ? [{ x, y }, text, mode] : [{ x, y }, text],
     });
   }
 

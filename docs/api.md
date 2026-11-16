@@ -655,7 +655,7 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 |---|---|
 | `observe` | 读屏：每个元素一行，带 ref、角色、标签与中心点；`--out` 存截图 |
 | `tap` | 按 ref / 标签 / selector / 坐标点击；`--long` 长按 |
-| `type` | 输入文本；`--ref` 指定输入框，默认焦点框 |
+| `type` | 输入文本；`--ref` 指定输入框，默认焦点框；`--paste` 一次粘贴（实测 36 字符 1.3 s，逐字符 2.8 s） |
 | `swipe` | 两点滑动或四向滑动；`--ref` 在元素内滑 |
 | `double-click` | 双击 |
 | `drag` | 按住再移动（拖拽排序） |

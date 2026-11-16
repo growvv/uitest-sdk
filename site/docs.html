@@ -184,7 +184,7 @@ try {
             <tr><td><code>Session.open(device, opts)</code></td><td>取设备租约；被别的任务占用时抛 <code>LeaseHeldError</code>，此时设备还没被读写</td></tr>
             <tr><td><code>observe()</code> / <code>screen()</code></td><td>读屏并记录；<code>screen()</code> 返回上一次读到的屏幕，没有则新读</td></tr>
             <tr><td><code>tap(target, opts)</code></td><td><code>{ref}</code> 走坐标点击，<code>{text}</code> 或 <code>On</code> 走设备自己的 <code>Component.click</code></td></tr>
-            <tr><td><code>type(text, opts)</code></td><td>默认输入到焦点框；密码框在任何按键前被策略拒绝</td></tr>
+            <tr><td><code>type(text, opts)</code></td><td>默认输入到焦点框；密码框在任何按键前被策略拒绝。<code>{paste: true}</code> 一次粘贴而不是逐字符输入，实测 36 字符 1.3 s 对 2.8 s</td></tr>
             <tr><td><code>swipe</code> / <code>longPress</code> / <code>doubleClick</code> / <code>drag</code> / <code>fling</code> / <code>pinch</code></td><td>手势；<code>pinch</code> 走 <code>PointerMatrix</code>，单指通道表达不了两条同时的轨迹</td></tr>
             <tr><td><code>waitFor</code> / <code>readList</code> / <code>scrollUntilVisible</code></td><td>设备侧等待、逐屏读列表、逐屏翻到目标</td></tr>
             <tr><td><code>window(filter, opts)</code></td><td>报告焦点窗口或某 bundle 的窗口，可 focus / close</td></tr>

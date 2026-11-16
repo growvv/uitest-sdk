@@ -42,6 +42,19 @@ describe("parseArgv", () => {
     expect(parsed.args).toEqual({ ref: "3" });
   });
 
+  it("reads --paste as a bare flag on type", () => {
+    // A value-less flag that sits next to --text; if the parser took the
+    // following token as its value, --text would lose its argument.
+    expect(parseArgv(["type", "--paste", "--text", "hi"]).args).toEqual({
+      paste: true,
+      text: "hi",
+    });
+    expect(parseArgv(["type", "--text", "hi", "--paste"]).args).toEqual({
+      text: "hi",
+      paste: true,
+    });
+  });
+
   it("reads a kebab-case boolean flag as its camelCase option", () => {
     // A flag stored under its raw spelling is silently ignored by the reader,
     // so `--read-only` would have driven a device without read-only protection.
