@@ -277,6 +277,7 @@ describe("Device.connect", () => {
     hdcState.agentPort = agent.port;
     const dev = await Device.connect({ extensionDir: hdcState.extDir });
     expect(dev.ownsDaemon).toBe(false);
+    expect(dev.files.list).toBeTypeOf("function");
     expect(hdcState.shellCalls.some((c) => c.includes("start-daemon"))).toBe(false);
     await dev.dispose();
     await agent.close();

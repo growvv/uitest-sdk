@@ -107,6 +107,7 @@ const dev = await Device.connect(options?: DeviceOptions);
 |---|---|---|
 | `dev.agent` | `AgentClient` | 长连接客户端，见第 5 节 |
 | `dev.cli` | `CliRunner` | 走 `uitest dumpLayout` 的窗口级工具，见第 7 节 |
+| `dev.files` | `Files` | 设备文件：`list` / `stat` / `exists` / `mkdir` / `remove` / `move` / `push` / `pull` / `readText`，见第 9 节 |
 | `dev.state` | `"connected" \| "disconnected"` | `dispose()` 后变为 `disconnected`，再调用会抛 `EDISPOSED` |
 | `dev.ownsDaemon` | `boolean` | 本次连接是否由自己拉起 daemon |
 | `dev.resolveCastExtension()` | `string \| null` | 该 ABI 的 casting 扩展路径；`null` 表示没有 |
@@ -324,6 +325,37 @@ if (bounds) {
 
 `attributes` 是设备原样给出的字符串字典（`text`、`type`、`bounds`、`bundleName` 等）。
 
+### 布局检查与节点高亮
+
+`Session.inspect` 读一次屏幕、截一帧，把每个元素的 `bounds` 画成方框并编号：
+
+```ts
+const session = await Session.open(dev, { task: "layout" });
+const r = await session.inspect({ out: "layout.jpg", html: "layout.html" });
+if (r.status === "settled") {
+  console.log(r.nodes); // [{ index, ref, role, label, rect, state, masked }, ...]
+}
+```
+
+- 图上的编号就是 `ref`，可以直接 `session.tap({ ref: 3 })` 或 `tap --ref 3`。
+- 颜色按角色固定（`ROLE_COLORS`：`text` 蓝、`button` 绿、`input` 橙、`list` 紫……）。
+- 被脱敏的元素**先涂灰再画框**，框线从不替代脱敏；节点表里 `masked: true`。
+- `html` 面板是单文件：JPEG 以 base64 内嵌，没有外部资源；悬停表格行与画面上的框会互相高亮。
+- 纯客户端渲染，建立在已有的 `captureLayout` 与 JPEG 截图上，不新增设备依赖。
+
+不走 Session 时可以直接用组件：
+
+```ts
+import { Screenshot, inspectScreen, renderPanel } from "uitest-sdk";
+
+const shot = await Screenshot.from(jpeg, { display, rotation });
+const inspection = inspectScreen(screen, shot); // { nodes, annotated, plain }
+const html = renderPanel(screen, inspection);
+```
+
+`Screenshot.mark(boxes)` 是底层绘制原语：`{ rect, color, fill?, label? }`，输入是显示坐标，
+内部按实际收到的帧缩放；`annotated` 就是「脱敏后的帧 + 所有框与编号」。
+
 ## 8. 完整 hypium API
 
 设备侧的 hypium 驱动（DevEco Testing 6.1.0.210）公开 118 个方法：`OHOSDriver` 106 个，兼容层 12 个。
@@ -394,6 +426,37 @@ await dev.hypium.swipe("up", { distance: 40 });
 | `resolveCastingExtension(abi, dir)` | 该 ABI 的 casting 扩展路径，没有返回 `null` |
 | `loadScrcpyService()` | 加载 `scrcpy.proto` 的 gRPC service 构造器（低层用） |
 | `H264CastClient` / `MjpegCastClient` | 低层客户端；正常用 `dev.createCast()`，它们会自己管 daemon 与端口 |
+| `Files` | 设备文件封装，`dev.files` 已是实例；路径按设备 shell 转义 |
+| `CastConfig` / `castConfigPath(stateDir)` | 投流默认值的 JSON 持久化（`<state-dir>/cast.json`） |
+| `FpsMeter` | 客户端帧率统计：`add()` / `stats()` / `reset()`，窗口默认 2000 ms |
+
+### 文件、配置与帧率
+
+```ts
+// 设备文件：一条 shell 或一次 file send/recv
+const entries = await dev.files.list("/data/local/tmp"); // [{ name, path, size, isDir, mode, mtime }]
+await dev.files.mkdir("/data/local/tmp/demo dir", { parents: true });
+await dev.files.push("./clip.mp4", "/data/local/tmp/demo dir/clip.mp4");
+await dev.files.move("/data/local/tmp/demo dir/clip.mp4", "/data/local/tmp/demo dir/moved.mp4");
+await dev.files.remove("/data/local/tmp/demo dir", { recursive: true });
+const head = await dev.files.readText("/data/local/tmp/x.json", 4096); // 默认 1 MiB，上限 64 MiB
+
+// 投流默认值的持久化：显式合并，不会偷偷改变 createCast 的行为
+const cfg = await CastConfig.load(castConfigPath(stateDir));
+await cfg.set({ scale: 2, frameRate: 30, bitRate: 8_000_000, transport: "ws" });
+const cast = await dev.createCast({ ...cfg.toCastOptions("stream"), wsExtension: "./lib.so" });
+
+// 任意帧流的客户端帧率
+const meter = new FpsMeter({ windowMs: 2000 });
+for await (const chunk of cast.stream()) {
+  meter.add();
+  const { fps, stalledMs } = meter.stats();
+}
+```
+
+`Files.remove` 拒绝空路径与 `/`，其余路径由调用方负责。`CastConfig.load` 对损坏或手改坏的文件
+是宽容的（忽略该键，不阻断运行），`CastConfig.set` 是严格的（非法值抛 `EBADARG`）。
+`FpsMeter` 用帧间隔计算，至少两帧才报速率，所以刚开流时不会出现假低值。
 
 ## 10. 错误
 
@@ -536,6 +599,7 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 | `window` | 焦点窗口或某 bundle 的窗口；`--focus` / `--close` |
 | `doctor` | 探测设备与能力 |
 | `screenshot` | 存一张 JPEG，报告帧尺寸与缩放因子 |
+| `inspect` | 截图并把每个元素框出、编号（编号即 ref）；`--html` 另存自包含面板 |
 | `report` | 按 task 把各进程的 trace 聚合为 HTML 报告 |
 | `status` | 当前任务、设备哈希、策略设置 |
 | `handoff` | 请人接手：只写租约，不碰设备（见第 14 节） |
@@ -666,7 +730,7 @@ try {
 ```
 
 `Session.open` 的选项：`task`、`stateDir`、`policy: { readOnly, confirm, apps }`、`settleMs`、
-`traceShots`、`lease: { dir, staleMs } | false`。方法包括 `observe`、`tap`、`type`、`swipe`、
+`traceShots`、`lease: { dir, staleMs } | false`。方法包括 `observe`、`inspect`、`tap`、`type`、`swipe`、
 `longPress`、`doubleClick`、`pinch`、`drag`、`fling`、`waitFor`、`readList`、`scrollUntilVisible`、
 `window`、`pressKey`、`settle`、`release`，以及 `steps` 与 `record()`。被其它任务占用时
 `Session.open` 抛 `LeaseHeldError`，此时设备还没被读写。

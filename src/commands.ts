@@ -4,6 +4,7 @@ import type { ApprovalScope } from "./approvals.js";
 import { doctor, renderDoctor } from "./doctor.js";
 import { EXIT_CODE, actionText, statusOf } from "./agent/result.js";
 import type { ActionResult, ActionStatus } from "./agent/result.js";
+import { renderFull } from "./agent/screen.js";
 import { parseOn } from "./agent/selector.js";
 import { parseKeyName } from "./agent/selector.js";
 import { LeaseHeldError, UitestError } from "./errors.js";
@@ -188,6 +189,15 @@ export const COMMANDS: CommandSpec[] = [
     description: "Save a JPEG of the screen and report its geometry.",
     args: {
       out: { type: "string", description: "Output path; a timestamped file under the state dir by default." },
+    },
+  },
+  {
+    name: "inspect",
+    description:
+      "Box and number every element on a screenshot; the numbers are refs. Optionally write an HTML panel with the node table.",
+    args: {
+      out: { type: "string", description: "Annotated JPEG path; a timestamped file under the state dir by default." },
+      html: { type: "string", description: "Also write a self-contained HTML panel (image + node table) here." },
     },
   },
   {
@@ -451,6 +461,8 @@ export class CommandRunner {
       }
       case "screenshot":
         return this.screenshot(raw);
+      case "inspect":
+        return this.inspect(raw);
       case "report":
         return this.report(raw);
       case "status":
@@ -717,6 +729,30 @@ export class CommandRunner {
       code: statusOf(r),
       text: `saved: ${out}\nJPEG is half the display size; use display coordinates for taps`,
       data: { path: out, shot: r.shot },
+    };
+  }
+
+  private async inspect(raw: Record<string, unknown>): Promise<RunResult> {
+    const out = asString(raw.out) ?? join(this.opts.stateDir, "shots", `inspect-${Date.now()}.jpg`);
+    const html = asString(raw.html);
+    const r = await this.session.inspect({ out, html });
+    const settled = r.status === "settled";
+    const body = r.screen ? renderFull(r.screen) : "";
+    const saved = settled
+      ? `\nsaved: ${out}${html ? `\npanel: ${html}` : ""}` +
+        "\nnumbers on the image are refs: tap --ref N"
+      : "";
+    return {
+      status: r.status,
+      code: statusOf(r),
+      text: settled ? `${body}${saved}` : `${actionText(r)}${body ? `\n${body}` : ""}`,
+      data: {
+        image: settled ? (r.image ?? null) : null,
+        html: settled ? (r.html ?? null) : null,
+        nodes: r.nodes ?? [],
+        elements: r.screen?.elements.length ?? 0,
+        bundle: r.screen?.bundle,
+      },
     };
   }
 

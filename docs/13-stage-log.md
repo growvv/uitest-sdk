@@ -265,3 +265,87 @@ record  MP4 156,320 B / stsz.sample_count 128（约 6 s 连续滑动）
 
 发版时处理：旧 npm token 没有 bypass 2FA 权限（`403`），改用用户提供的、开启 bypass 的 granular token；
 临时 npmrc 放在仓库外，发布完成后立即删除。
+
+---
+
+## 2026-11-16 · 布局检查面板与节点高亮（未发版）
+
+### A. 目标
+
+把 `captureLayout` 的树与 `captureScreen` 的帧合成一张「带框和编号的图」，编号即 ref；
+另给一个人看的单文件 HTML 面板。纯客户端，零新增设备依赖。
+
+### B. 交付
+
+| 文件 | 内容 |
+|---|---|
+| `src/agent/shot.ts` | `Screenshot.mark(boxes)`：显示坐标 → 帧坐标，2px 框线、可填充、3×5 数字标签（字形只有 0–9） |
+| `src/agent/inspector.ts` | `inspectScreen(screen, shot)`：先按 `masked` 脱敏再画框；`renderPanel` 生成自包含 HTML（图片 base64 + CSS 覆盖层 + 节点表） |
+| `src/session.ts` | `Session.inspect({ out, html? })` → `InspectResult`（`image` / `html` / `nodes`） |
+| `src/commands.ts` | 新命令 `inspect`（CLI 与 MCP 共用），默认写到 `<state-dir>/shots/inspect-<ts>.jpg` |
+| `src/index.ts` | 导出 `inspectScreen` / `renderPanel` / `ROLE_COLORS` / `colorFor`，类型 `InspectNode` / `Inspection` / `InspectOptions` / `InspectResult` / `MarkBox` / `Rgb` |
+| 测试 | `shot.test.ts` +5、`inspector.test.ts` 7、`commands.test.ts` +3 |
+
+### C. 设计决定
+
+- **编号 = ref**：不另造一套 ID，`tap --ref N` 直接可用；ref 表与 `observe` 同源。
+- **脱敏先行**：`redact()` 涂灰后再 `mark()` 画框，框线永远不替代脱敏。
+- **颜色按角色固定**（`ROLE_COLORS`），两次运行可比对。
+- **面板不叠图**：HTML 用 CSS 覆盖层按显示坐标百分比定位，缩放窗口不错位；底图是脱敏后的原图。
+- **字形只有数字**：3×5 点阵 0–9，约 40 行，不引入字体或画布依赖。
+- **屏幕文本是不可信输入**：面板所有标签经 `escapeHtml`，单测覆盖 `<img onerror>`。
+- **锁屏不写文件**：`device_locked` 时不截、不存，文本也不声称已保存（单测钉住）。
+
+### D. 真机验收
+
+```
+node dist/bin.js inspect --out .work-bench/inspect/device.jpg --html …/panel.html
+settled · 5 个元素 · JPEG 127,621 B · HTML 85,918 B
+```
+
+方框与编号位置正确（状态栏按钮、通知列表、通知按钮）。锁屏时第一次调用返回 `device_locked`
+且不写文件，符合预期；唤醒后同一画面被判定为 `settled` —— 既有锁屏识别依赖
+`ScreenLockWidgetView` 节点，节点不在树里就不判锁屏，不属于本次改动。`inspect` 只渲染
+`ScreenBuilder` 给出的模型。
+
+### E. 已知边界
+
+- 树与帧是两次读：屏幕在这期间变化时，框可能落后于画面（与 `observe` 存截图的取舍一致）。
+- 面板的框是 DOM，不是像素；带框的 JPEG 才是导出物，两者坐标同源。
+
+---
+
+## 2026-11-16 · 薄封装三件套：文件、配置、帧率（未发版）
+
+### A. 交付
+
+| 文件 | 内容 |
+|---|---|
+| `src/files.ts` + `dev.files` | `list` / `stat` / `exists` / `mkdir` / `remove` / `move` / `push` / `pull` / `readText`；解析 `ls -l`，路径按设备 shell 转义 |
+| `src/config.ts` | `CastConfig`（`<state-dir>/cast.json`）与 `castConfigPath`；`load` 宽容、`set` 严格、`toCastOptions(mode)` 显式合并 |
+| `src/fps.ts` | `FpsMeter`：窗口化帧间隔统计，`add()` / `stats()` / `reset()` |
+| `src/util/shell.ts` | `shellQuote` 从 hypium driver 提到 util，公开导出不变 |
+| 测试 | `files.test.ts` 10、`config.test.ts` 9、`fps.test.ts` 7、`device.test.ts` +1 |
+
+### B. 设计决定
+
+- **`Files` 只做薄封装**：每个方法一条 shell 或一次 `file send/recv`；`remove` 是唯一破坏性操作，
+  拒绝空路径与 `/`；`readText` 默认上限 1 MiB、硬上限 64 MiB，避免 `cat` 大文件把进程打爆。
+- **配置是显式的**：`CastConfig` 不接管 `createCast`，调用方自己展开；`load` 忽略非法值，
+  `set` 抛 `EBADARG`。字段与 `CastOptions` 同型（`scale: 1..5`、`frameRate: 15|30|60|120`）。
+- **配置格式是 JSON**：与 refs / approvals / traces 的状态文件一致；没有引入 INI 解析器。
+- **`FpsMeter` 不依赖投流**：按帧间隔算，至少两帧才报速率；MJPEG 与 H.264 都能用。
+
+### C. 真机验收（`dev.files`）
+
+```
+list("/data/local/tmp")          解析出 name / size / isDir / mtime（真实目录 200+ 项）
+stat(内置 casting SO)            247989 B · -rw-r--r-- · 2026-11-16 14:41
+mkdir(".../uitest-files-check/a b")   含空格目录创建成功
+push → list → readText(40) → move → remove -rf   全部成功
+```
+
+### D. 边界
+
+- `list` 用 `ls -l`，不显示隐藏文件；需要时传具体路径用 `stat`。
+- `hdc shell` 会做行尾转换，`readText` 读到的 JSON 里是 `\r\r\n`；需要精确字节时走 `pull`。

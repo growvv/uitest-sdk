@@ -1,5 +1,5 @@
-import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { AppManager } from "./apps.js";
 import { Approvals, Grants } from "./approvals.js";
@@ -9,6 +9,8 @@ import { Gestures } from "./agent/gestures.js";
 import { On, selectorText, parseKeyName } from "./agent/selector.js";
 import { ScreenReader, settle } from "./agent/settle.js";
 import { Screenshot } from "./agent/shot.js";
+import { inspectScreen, renderPanel } from "./agent/inspector.js";
+import type { InspectNode } from "./agent/inspector.js";
 import { ScreenBuilder, findElement, findText, renderDiff, renderFull } from "./agent/screen.js";
 import type { Screen, ScreenElement } from "./agent/screen.js";
 import { Policy } from "./policy.js";
@@ -80,6 +82,20 @@ export interface TypeOptions {
   /** Input to type into; defaults to the focused field. */
   ref?: number;
 }
+
+export interface InspectOptions {
+  /** Annotated JPEG path. */
+  out: string;
+  /** Also write a self-contained HTML panel here. */
+  html?: string;
+}
+
+/** An inspect step's outcome, including the files it wrote and the node table. */
+export type InspectResult = ActionResult & {
+  image: string | null;
+  html: string | null;
+  nodes: InspectNode[];
+};
 
 export interface SwipeInput {
   from: Point;
@@ -264,6 +280,50 @@ export class Session {
     }
     const text = renderFull(screen) + (shot ? `\nsaved: ${shot}` : "");
     return this.finish("observe", opts, "settled", text, { screen, shot });
+  }
+
+  /**
+   * Reads the screen, boxes every element on the frame and numbers it.
+   *
+   * This is `observe` plus pixels: the numbers on the image are the `ref`s in
+   * the table, so a caller can look at the layout and then `tap --ref`. The
+   * optional HTML panel embeds the same frame and lets a person hover a row to
+   * find its box.
+   */
+  async inspect(opts: InspectOptions): Promise<InspectResult> {
+    const screen = await this.reader.read();
+    this.lastScreen = screen;
+    if (screen.locked) {
+      return (await this.finish(
+        "inspect",
+        opts,
+        "device_locked",
+        actionText({ status: "device_locked", screen }),
+        { screen, image: null, html: null, nodes: [] },
+      )) as InspectResult;
+    }
+    const [frame, ctx] = await Promise.all([this.device.agent.captureScreen(), this.reader.context()]);
+    const shot = await Screenshot.from(frame, ctx);
+    const inspection = inspectScreen(screen, shot);
+    await inspection.annotated.save(opts.out);
+
+    let panel: string | null = null;
+    if (opts.html) {
+      await mkdir(dirname(opts.html), { recursive: true });
+      await writeFile(opts.html, renderPanel(screen, inspection), "utf8");
+      panel = opts.html;
+    }
+
+    const text =
+      `${renderFull(screen)}\nsaved: ${opts.out}` +
+      (panel ? `\npanel: ${panel}` : "") +
+      "\nnumbers on the image are refs: tap --ref N";
+    return (await this.finish("inspect", opts, "settled", text, {
+      screen,
+      image: opts.out,
+      html: panel,
+      nodes: inspection.nodes,
+    })) as InspectResult;
   }
 
   /** The screen as of the last read, or a fresh one. */

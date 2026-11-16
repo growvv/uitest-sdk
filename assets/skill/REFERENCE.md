@@ -389,6 +389,23 @@ ignores the requested scale and returns a fixed frame (measured 608x1344 for a
 measured in the image before using it as a tap coordinate. Credential elements
 are covered with gray in the saved image, matching the masked labels.
 
+### inspect
+
+```
+inspect [--out annotated.jpg] [--html panel.html]
+```
+
+Draws a box around every element on the screenshot and numbers it; **the number
+is the ref**, so `tap --ref 3` works directly. Boxes are coloured by role
+(text, button, input, list, ...), and a masked element is greyed out before its
+box is drawn — the outline never replaces redaction.
+
+`--html` also writes a single self-contained panel: the same frame with CSS
+overlays plus the node table, and hovering a row highlights its box. Useful
+when a person wants to look at the layout, or when a ref is ambiguous.
+
+Both files default to `<state-dir>/shots/inspect-<timestamp>.jpg`.
+
 ### report
 
 ```

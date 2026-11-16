@@ -93,4 +93,77 @@ describe("Screenshot", () => {
     expect(px(7, 7)[0]).toBeGreaterThan(110);
     expect(px(2, 2)[0]).toBeLessThan(0x50);
   });
+
+  it("outlines a display rect in the given colour and leaves the inside alone", async () => {
+    const shot = await Screenshot.from(solidJpeg(40, 40), {
+      display: { width: 40, height: 40 },
+      rotation: 0,
+    });
+    const marked = shot.mark([{ rect: { x: 8, y: 8, width: 24, height: 24 }, color: [255, 0, 0] }]);
+    const decoded = jpeg.decode(marked.data, { useTArray: true });
+    const px = (x: number, y: number) => {
+      const i = (y * 40 + x) * 4;
+      return [decoded.data[i], decoded.data[i + 1], decoded.data[i + 2]];
+    };
+    expect(px(8, 8)[0]).toBeGreaterThan(180);
+    expect(px(8, 8)[1]).toBeLessThan(100);
+    // The middle is still the background the frame arrived with.
+    expect(px(20, 20)[0]).toBeLessThan(120);
+    expect(px(2, 2)[0]).toBeLessThan(120);
+  });
+
+  it("fills a box when asked", async () => {
+    const shot = await Screenshot.from(solidJpeg(20, 20), {
+      display: { width: 20, height: 20 },
+      rotation: 0,
+    });
+    const marked = shot.mark([{ rect: { x: 4, y: 4, width: 12, height: 12 }, color: [0, 255, 0], fill: true }]);
+    const decoded = jpeg.decode(marked.data, { useTArray: true });
+    const px = (x: number, y: number) => {
+      const i = (y * 20 + x) * 4;
+      return [decoded.data[i], decoded.data[i + 1], decoded.data[i + 2]];
+    };
+    expect(px(10, 10)[1]).toBeGreaterThan(180);
+    expect(px(10, 10)[0]).toBeLessThan(120);
+  });
+
+  it("draws the index as a light chip in the box corner", async () => {
+    const shot = await Screenshot.from(solidJpeg(40, 40), {
+      display: { width: 40, height: 40 },
+      rotation: 0,
+    });
+    const marked = shot.mark([{ rect: { x: 8, y: 8, width: 24, height: 24 }, color: [0, 0, 0], label: 7 }]);
+    const decoded = jpeg.decode(marked.data, { useTArray: true });
+    // The digit is white on a black chip: look for a light pixel near the
+    // top-left corner of the box.
+    let light = 0;
+    for (let y = 8; y < Math.min(40, 8 + 20); y++) {
+      for (let x = 8; x < Math.min(40, 8 + 16); x++) {
+        const i = (y * 40 + x) * 4;
+        if (decoded.data[i] > 200 && decoded.data[i + 1] > 200 && decoded.data[i + 2] > 200) light++;
+      }
+    }
+    expect(light).toBeGreaterThan(0);
+  });
+
+  it("leaves the image untouched when there is nothing to mark", async () => {
+    const shot = await Screenshot.from(solidJpeg(10, 10), {
+      display: { width: 10, height: 10 },
+      rotation: 0,
+    });
+    expect(shot.mark([])).toBe(shot);
+  });
+
+  it("clamps a box that runs off the frame instead of throwing", async () => {
+    const shot = await Screenshot.from(solidJpeg(20, 20), {
+      display: { width: 20, height: 20 },
+      rotation: 0,
+    });
+    const marked = shot.mark([
+      { rect: { x: -5, y: -5, width: 15, height: 15 }, color: [255, 0, 0] },
+    ]);
+    const decoded = jpeg.decode(marked.data, { useTArray: true });
+    const i = 0; // frame (0,0) is part of the box's top/left edge
+    expect(decoded.data[i]).toBeGreaterThan(150);
+  });
 });

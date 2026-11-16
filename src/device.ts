@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentClient, isBusyException } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
+import { Files } from "./files.js";
 import { HdcRunner } from "./hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
 import { deviceTag } from "./trace.js";
@@ -76,6 +77,8 @@ function connectTcp(port: number): Promise<net.Socket> {
 export class Device {
   readonly agent: AgentClient;
   readonly cli: CliRunner;
+  /** The device filesystem, through hdc: list, stat, mkdir, rm, mv, push, pull. */
+  readonly files: Files;
   /**
    * The hdc target this device drives. Public because the session layer needs a
    * shell for app management, and because a lease and a trace are keyed by it.
@@ -101,6 +104,7 @@ export class Device {
     this.deviceId = deviceId;
     this.agent = agent;
     this.cli = new CliRunner(hdc);
+    this.files = new Files(hdc);
   }
 
   static async connect(opts: DeviceOptions = {}): Promise<Device> {

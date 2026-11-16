@@ -7,6 +7,7 @@ import { On, parseKeyName } from "../agent/selector.js";
 import { ElementNotFoundError, UitestError, UnsupportedError } from "../errors.js";
 import type { InputTextMode, Rect, WindowFilter } from "../model.js";
 import { cropJpeg, decodeJpeg, findTemplate, type Raster } from "./image.js";
+import { shellQuote } from "../util/shell.js";
 import type {
   ActionOptions,
   CaptureOptions,
@@ -86,10 +87,7 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
 
-/** POSIX single-quote, safe for the device's shell. */
-export function shellQuote(value: string): string {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
-}
+export { shellQuote };
 
 /** Splits a connector command the way a shell would, respecting quotes. */
 export function splitCommand(command: string): string[] {

@@ -25,7 +25,9 @@ export type { ActionResult, ActionStatus } from "./agent/result.js";
 export { ScreenReader, settle } from "./agent/settle.js";
 export type { ScreenSource, SettleOptions, SettleResult } from "./agent/settle.js";
 export { Screenshot } from "./agent/shot.js";
-export type { ShotContext } from "./agent/shot.js";
+export type { ShotContext, MarkBox, Rgb } from "./agent/shot.js";
+export { inspectScreen, renderPanel, colorFor, ROLE_COLORS } from "./agent/inspector.js";
+export type { InspectNode, Inspection, PanelOptions } from "./agent/inspector.js";
 export { On, selectorText, parseOn, parseKeyName, KEY_NAMES } from "./agent/selector.js";
 export type { KeyName } from "./agent/selector.js";
 export { Components, ComponentHandle, UiWindowHandle, resolveSelector } from "./agent/components.js";
@@ -49,6 +51,8 @@ export type {
   Target,
   TapOptions,
   TypeOptions,
+  InspectOptions,
+  InspectResult,
   SwipeInput,
   WaitForOptions,
   ListOptions,
@@ -130,6 +134,12 @@ export type { Target as HypiumTarget } from "./hypium/types.js";
 
 export { HdcRunner } from "./hdc.js";
 export type { HdcOptions } from "./hdc.js";
+export { Files } from "./files.js";
+export type { FileEntry } from "./files.js";
+export { CastConfig, castConfigPath } from "./config.js";
+export type { CastSettings } from "./config.js";
+export { FpsMeter } from "./fps.js";
+export type { FpsStats, FpsMeterOptions } from "./fps.js";
 
 export { CliRunner } from "./cli.js";
 export type { DumpLayoutOptions } from "./cli.js";

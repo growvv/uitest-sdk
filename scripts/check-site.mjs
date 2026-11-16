@@ -140,7 +140,7 @@ for (const needle of [
 for (const name of [
   "observe", "tap", "type", "swipe", "double-click", "drag", "fling", "pinch",
   "key", "wait-for", "read-list", "scroll-until", "launch", "apps", "window",
-  "doctor", "screenshot", "report", "status", "handoff",
+  "doctor", "screenshot", "inspect", "report", "status", "handoff",
 ]) {
   if (!cli.includes(name)) fail(`#cli 没有列出命令 ${name}`);
 }
@@ -185,7 +185,7 @@ for (const needle of [
 
 const features = sectionHtml("features");
 const cards = (features.match(/<article class="card">/g) ?? []).length;
-if (cards !== 11) fail(`#features 有 ${cards} 张 .card，必须恰好 11 张`);
+if (cards !== 12) fail(`#features 有 ${cards} 张 .card，必须恰好 12 张`);
 // The last two cards are the agent setup and the takeover; the page must not
 // claim an agent can be wired up without saying how a person takes the phone.
 for (const needle of ["人随时接管", "lease_held", "resume"]) {
@@ -308,6 +308,15 @@ for (const needle of [
   'transport: "ws"',
   "wsExtension",
   "一个客户端独占一个 daemon",
+  // Layout inspection is a user-visible capability of its own: the docs must
+  // name the command, the ref numbering and the panel.
+  "inspect",
+  "layout.html",
+  "编号就是 ref",
+  // The thin wrappers are exported API, not internals.
+  "dev.files",
+  "CastConfig",
+  "FpsMeter",
   // The CLI half of the package is documented here, not only on the home page.
   "Session.open",
   "TraceRecorder",

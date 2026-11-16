@@ -50,6 +50,8 @@ try {
 | H.264 投流 | `dev.createCast({ mode: "stream" })` | 15~89 fps（随 `frameRate`） |
 | MP4 录制 | `dev.createCast({ mode: "record", outputPath })` | 见下 |
 | 窗口级 UI 树 | `dev.cli.dumpLayout({ windowId })` | 一次 shell + pull |
+| 设备文件 | `dev.files.list/stat/mkdir/remove/move/push/pull` | 一条 shell 或一次 `file send/recv` |
+| 帧率统计 | `new FpsMeter().add()/stats()` | 纯客户端，按帧间隔计算 |
 
 ### 和 hdc CLI 的对比
 
@@ -88,6 +90,10 @@ const cast = await dev.createCast({
 同时存在、互不覆盖。帧率两者持平（实测 20.8~23.2 fps），ws 的收益是客户端不再需要 gRPC 运行时。
 一个客户端独占一个 daemon —— `stop` 是进程级的，并发投流靠多个 `port`。
 
+投流默认值可以存成 JSON（`CastConfig`），但合并是显式的：`dev.createCast({ ...cfg.toCastOptions("stream") })`，
+配置文件不会在背后改变一次 cast。帧率统计用 `FpsMeter`：每来一帧 `add()`，`stats()` 给出
+`fps` / `frames` / `spanMs` / `stalledMs`，与投流实现无关，MJPEG 和 H.264 都能用。
+
 ### 录制
 
 ```ts
@@ -103,16 +109,20 @@ await cast.dispose();   // 关闭 muxer，拉回 out.mp4
 ## 命令行与 Agent Skill
 
 SDK 之上有一层给人和 Agent 用的 CLI：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
-共 20 条命令（`handoff` 只写租约、把手机交给人，不碰设备）：`observe`、`tap`、`type`、`swipe`、`double-click`、`drag`、`fling`、`pinch`、`key`、
+共 21 条命令（`handoff` 只写租约、把手机交给人，不碰设备）：`observe`、`inspect`、`tap`、`type`、`swipe`、`double-click`、`drag`、`fling`、`pinch`、`key`、
 `wait-for`、`read-list`、`scroll-until`、`launch`、`apps`、`window`、`doctor`、`screenshot`、`report`、`status`、`handoff`。
 
 ```bash
 npx uitest-sdk doctor                     # 探测设备与能力，确认可用
 npx uitest-sdk observe --task "check WLAN"
+npx uitest-sdk inspect --html layout.html # 截图 + 每个元素框出编号，另存可悬停的 HTML 面板
 npx uitest-sdk tap --ref 12 --task "check WLAN"
 npx uitest-sdk apps --current
 npx uitest-sdk report --title "WLAN check"
 ```
+
+`inspect` 画在图上的编号就是 `observe` / `tap` 用的 ref：框线按角色着色，被脱敏的元素先涂灰再画框，
+`--html` 面板是单文件（图片内嵌），悬停表格行会高亮对应的框。
 
 真机上每条命令的端到端耗时（含 Node 启动与设备打开，2026-11-16 采样）：
 `status` 1.2 s、`apps --current` 1.5 s、`observe` 1.7 s、`doctor` 1.9 s、`tap --ref` 2.3 s。
@@ -192,7 +202,7 @@ try {
 }
 ```
 
-`Session` 提供 `observe`、`tap`、`type`、`swipe`、`longPress`、`doubleClick`、`pinch`、`drag`、`fling`、
+`Session` 提供 `observe`、`inspect`、`tap`、`type`、`swipe`、`longPress`、`doubleClick`、`pinch`、`drag`、`fling`、
 `waitFor`、`readList`、`scrollUntilVisible`、`window`、`pressKey`、`settle`、`release`，
 以及 `steps`（本会话已记录的步数）与 `record()`（记录不经过动作路径的命令）。
 被别的任务占用时 `Session.open` 抛 `LeaseHeldError`，此时设备还没被读写。

@@ -107,6 +107,7 @@ const dev = await Device.connect(options?);</code></pre>
           <tbody>
             <tr><td><code>dev.agent</code></td><td>AgentClient</td><td>长连接客户端</td></tr>
             <tr><td><code>dev.cli</code></td><td>CliRunner</td><td>走 <code>uitest dumpLayout</code> 的窗口级工具</td></tr>
+            <tr><td><code>dev.files</code></td><td>Files</td><td>设备文件：list / stat / mkdir / remove / move / push / pull / readText</td></tr>
             <tr><td><code>dev.state</code></td><td>connected / disconnected</td><td><code>dispose()</code> 后变为 disconnected，再调用抛 <code>EDISPOSED</code></td></tr>
             <tr><td><code>dev.ownsDaemon</code></td><td>boolean</td><td>本次连接是否由自己拉起 daemon</td></tr>
             <tr><td><code>dev.resolveCastExtension()</code></td><td>string / null</td><td>该 ABI 的 casting 扩展路径</td></tr>
@@ -212,6 +213,7 @@ try {
       <p>安装后命令名是 <code>uitest-phone</code>；<code>npx uitest-sdk &lt;command&gt;</code> 等价，无需全局安装。</p>
       <pre><code>uitest-phone doctor
 uitest-phone observe --task "check WLAN"
+uitest-phone inspect --html layout.html
 uitest-phone tap --ref 12 --task "check WLAN"
 uitest-phone read-list --ref 20
 uitest-phone report --title "WLAN check"</code></pre>
@@ -345,6 +347,12 @@ if (bounds) {
   await dev.agent.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 }</code></pre>
 
+      <h3>布局检查与节点高亮</h3>
+      <p><code>Session.inspect</code> 读一次屏幕、截一帧，把每个元素的 bounds 画成方框并编号 —— <strong>编号就是 ref</strong>，可以直接 <code>tap --ref 3</code>。框线按角色着色，被脱敏的元素先涂灰再画框；<code>html</code> 另存一个单文件面板（图片 base64 内嵌，悬停节点表高亮对应的框）。</p>
+      <pre><code>const r = await session.inspect({ out: "layout.jpg", html: "layout.html" });
+// r.nodes: [{ index, ref, role, label, rect, state, masked }, ...]</code></pre>
+      <p>不走 Session 时可以直接组合组件：<code>Screenshot.mark(boxes)</code> 是绘制原语，<code>inspectScreen(screen, shot)</code> 返回 <code>{ nodes, annotated, plain }</code>，<code>renderPanel(screen, inspection)</code> 生成 HTML。纯客户端，建立在已有的 <code>captureLayout</code> 与 JPEG 截图上。</p>
+
       <h2 id="hypium">9. 完整 hypium API<span class="doc-tag">0.5.0</span></h2>
       <p>设备侧的 hypium 驱动公开 118 个方法（<code>OHOSDriver</code> 106 + 兼容层 12）。<code>dev.hypium</code> 把它们逐个映射成 TypeScript 方法，参数按设备实际行为定，并逐条标注真机状态：</p>
       <pre><code>import { On } from "uitest-sdk";
@@ -364,6 +372,19 @@ console.log(await dev.hypium.getComponentProperty(On.type("Button"), "bounds"));
       <p class="note">从 <code>0.5.0</code> 起提供；<code>0.4.0</code> 及更早的版本没有 <code>dev.hypium</code>。</p>
 
       <h2 id="tools">10. 工具类与导出</h2>
+      <h3>文件、配置与帧率</h3>
+      <pre><code>const entries = await dev.files.list("/data/local/tmp"); // [{ name, path, size, isDir, mode, mtime }]
+await dev.files.mkdir("/data/local/tmp/demo dir", { parents: true });
+await dev.files.push("./clip.mp4", "/data/local/tmp/demo dir/clip.mp4");
+await dev.files.remove("/data/local/tmp/demo dir", { recursive: true });
+
+const cfg = await CastConfig.load(castConfigPath(stateDir));
+await cfg.set({ scale: 2, frameRate: 30, transport: "ws" });
+const cast = await dev.createCast({ ...cfg.toCastOptions("stream"), wsExtension: "./lib.so" });
+
+const meter = new FpsMeter({ windowMs: 2000 });
+for await (const chunk of cast.stream()) meter.add();</code></pre>
+      <p><code>Files.remove</code> 拒绝空路径与 <code>/</code>；<code>readText</code> 默认上限 1 MiB。<code>CastConfig</code> 不接管 <code>createCast</code>，合并是显式的；<code>load</code> 忽略手改坏的键，<code>set</code> 对非法值抛 <code>EBADARG</code>。<code>FpsMeter</code> 按帧间隔计算，MJPEG 与 H.264 都能用。</p>
       <div class="doc-table">
         <table>
           <thead><tr><th>导出</th><th>说明</th></tr></thead>
@@ -380,6 +401,10 @@ console.log(await dev.hypium.getComponentProperty(On.type("Button"), "bounds"));
             <tr><td><code>resolveCastingExtension(abi, dir)</code></td><td>该 ABI 的 casting 扩展路径，没有返回 null</td></tr>
             <tr><td><code>loadScrcpyService()</code></td><td>加载 <code>scrcpy.proto</code> 的 gRPC service 构造器</td></tr>
             <tr><td><code>H264CastClient</code> / <code>MjpegCastClient</code></td><td>低层客户端；正常用 <code>dev.createCast()</code></td></tr>
+            <tr><td><code>Files</code></td><td>设备文件封装（<code>dev.files</code>）：list / stat / mkdir / remove / move / push / pull / readText</td></tr>
+            <tr><td><code>CastConfig</code> / <code>castConfigPath()</code></td><td>投流默认值的 JSON 持久化（<code>&lt;state-dir&gt;/cast.json</code>）</td></tr>
+            <tr><td><code>FpsMeter</code></td><td>客户端帧率统计：<code>add()</code> / <code>stats()</code> / <code>reset()</code></td></tr>
+            <tr><td><code>inspectScreen()</code> / <code>renderPanel()</code></td><td>布局检查：叠框、编号、生成 HTML 面板</td></tr>
             <tr><td><code>Session</code></td><td>一个任务看一台设备：租约、策略、ref 表、trace</td></tr>
             <tr><td><code>ScreenReader</code> / <code>ScreenBuilder</code></td><td>读屏与渲染；<code>renderDiff</code> / <code>renderFull</code> 生成 CLI 打印的那份文本</td></tr>
             <tr><td><code>Components</code> / <code>Gestures</code> / <code>AppManager</code></td><td>设备侧控件操作、手势、应用与窗口管理</td></tr>

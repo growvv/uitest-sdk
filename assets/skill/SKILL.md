@@ -120,6 +120,7 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Is this installed | `apps --has com.example.app` |
 | Inspect a window | `window --bundle com.example.app` |
 | Save a screenshot | `screenshot --out shot.jpg` |
+| See where each element is | `inspect --html panel.html` |
 | Write a report | `report --title "WLAN check"` |
 | Session info | `status` |
 

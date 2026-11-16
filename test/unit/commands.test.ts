@@ -118,7 +118,7 @@ describe("COMMANDS", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "observe", "tap", "type", "swipe", "key", "wait-for", "read-list",
-        "launch", "apps", "doctor", "screenshot", "report", "scroll-until",
+        "launch", "apps", "doctor", "screenshot", "inspect", "report", "scroll-until",
       ]),
     );
     for (const command of COMMANDS) {
@@ -141,6 +141,36 @@ describe("CommandRunner", () => {
       expect(r.status).toBe("settled");
       expect(r.text).toContain("com.demo");
       expect(r.data?.elements).toBeGreaterThan(0);
+    });
+  });
+
+  it("writes an annotated image and a node table for inspect", async () => {
+    await withRunner(async (runner, dir) => {
+      const out = join(dir, "inspect.jpg");
+      const panel = join(dir, "panel.html");
+      const r = await runner.run("inspect", { out, html: panel });
+      expect(r.status).toBe("settled");
+      expect(r.code).toBe(0);
+      const image = await readFile(out);
+      expect(image[0]).toBe(0xff);
+      expect(image[1]).toBe(0xd8);
+      expect(String(r.data?.image)).toBe(out);
+      const nodes = r.data?.nodes as { index: number; label: string }[];
+      expect(nodes.length).toBeGreaterThan(0);
+      expect(nodes[0]!.index).toBe(1);
+      const html = await readFile(panel, "utf8");
+      expect(html).toContain("<!doctype html>");
+      expect(html).toContain("data:image/jpeg;base64,");
+      expect(r.text).toContain("saved:");
+      expect(r.text).toContain("panel:");
+    });
+  });
+
+  it("defaults inspect's image into the state directory", async () => {
+    await withRunner(async (runner, dir) => {
+      const r = await runner.run("inspect", {});
+      expect(String(r.data?.image)).toContain(join(dir, "shots"));
+      expect(r.data?.html).toBeNull();
     });
   });
 
@@ -169,6 +199,32 @@ describe("CommandRunner", () => {
     expect(r.code).toBe(2);
     expect(r.text).toContain("Ask the person to unlock it");
     expect(r.text).toContain("ScreenLockWidgetView");
+  });
+
+  it("does not claim inspect saved anything while the phone is locked", async () => {
+    const screen = {
+      header: "screen 1000x2000 · app: com.ohos.sceneboard · rotation 0°",
+      lines: ['[1] button "ScreenLockWidgetView RelativeContainer" @600,1300'],
+      bundle: "com.ohos.sceneboard",
+      locked: true,
+      elements: [],
+      hash: "0",
+    };
+    const session = {
+      steps: 0,
+      async assertLease() {},
+      record() {},
+      async inspect() {
+        return { status: "device_locked", screen, step: 1, shot: null };
+      },
+    } as unknown as Session;
+    const runner = new CommandRunner(session, { stateDir: tmpdir() });
+    const r = await runner.run("inspect", { out: join(tmpdir(), "never.jpg") });
+    expect(r.status).toBe("device_locked");
+    expect(r.code).toBe(2);
+    expect(r.text).toContain("Ask the person to unlock it");
+    expect(r.text).not.toContain("saved:");
+    expect(r.data?.image).toBeNull();
   });
 
   it("stops a live session when a person takes the device, and continues after resume", async () => {
