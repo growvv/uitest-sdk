@@ -758,10 +758,22 @@ npm test                              670/670
 1. **屏幕自动锁会卡死 `streamScreen`。** 第一次跑在 `cropToWindow` 之后就停住了：屏幕休眠
    （`hidumper -s 3308 -a -a` 显示 `State=0`），`streamScreen` 的帧循环没有超时，一直等。
    跑之前 `power-shell wakeup` 并把休眠调长。
-2. **截图会把通知栏里的个人信息发出去。** 第二次跑 16/16 PASS，但截图全停在通知栏：
+2. **截图会把锁屏上的个人信息发出去。** 第二次跑 16/16 PASS，但截图全停在通知栏：
    账户变动、提额提醒、快递、聊天摘要。这些图是随报告提交到公开仓库的。整目录
-   `git checkout -- docs/acceptance` 回滚，重新验收时先清空通知栏、停在设置首页。
-   README 与路线图的发版步骤都补了这条。
+   `git checkout -- docs/acceptance` 回滚。
+
+   第一次我把它归因为「跑之前没清通知栏」，那是错的。根因在脚本里：`triggerKey` 那一步
+   按的是**电源键**，屏幕亮着就被它关掉了；`triggerKey` 自己的截图、以及之后每一个能力
+   （`captureLayout`、`captureScreen`、`cropToWindow`、`streamScreen`）都拍在锁屏上。
+   而且那一步本来也证明不了什么——拍一张自己刚按出来的锁屏，只能说明按键到达了设备。
+
+   改法：`triggerKey` 按完把屏幕恢复（`pressPowerKey`），并且每个能力截图前都过一遍
+   `assertCapturable`——锁着就 `hypium.unlock()`，解不开（有 PIN）就中止，绝不把通知栏
+   写进仓库。先红后绿 4 个用例（`acceptance-capture-guard.test.ts`），变异：去掉
+   `pressPowerKey` 里的恢复 → 测试红。
+
+   真机重跑：16/16 PASS，`cropToWindow` 从 `com.ohos.sceneboard`（桌面/锁屏）变成
+   `com.zhihu.hmos`，16 张截图逐张看过，全是知乎公开内容。
 
 ### E. 部署失败与重跑
 
@@ -771,3 +783,10 @@ npm test                              670/670
 瞬时不可用。`gh run rerun --failed` **不能修它**：重跑会再上传一个 `github-pages`
 artifact，`deploy-pages` 看到两个同名 artifact 直接报错。正确做法是
 `gh workflow run pages --ref master` 起一次全新的 run。
+
+### F. 0.8.0 发布
+
+`npm publish` 用 bypass-2FA 的 granular token，临时 npmrc 放仓库外、发完删除。PUT 返回
+**202 Accepted**（staged publishing），不是 201：包元数据先可见，tarball 晚约 90 秒才可下载。
+期间 `npm view uitest-sdk@0.8.0` 会 404、`npm stage list` 也是空——不是失败，等一下再查。
+最终 `dist-tags.latest = 0.8.0`，tarball 200。
