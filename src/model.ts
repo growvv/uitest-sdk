@@ -1,6 +1,11 @@
 export interface UiNode {
   attributes: Record<string, string>;
-  children: UiNode[];
+  /**
+   * Child nodes. Absent on leaves: the device omits the key rather than sending
+   * an empty array, which is why every walk over the tree reads
+   * `node.children ?? []`.
+   */
+  children?: UiNode[];
 }
 
 export interface UiEvent {

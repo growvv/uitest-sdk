@@ -95,7 +95,7 @@ describe("ScreenBuilder", () => {
     const first = builder.build(exampleTree(), { display, rotation: 0 });
     const home = first.elements.find((e) => e.label === "Home")!;
     const moved = exampleTree();
-    moved.children[1]!.attributes.bounds = "[20,120][300,200]";
+    moved.children![1]!.attributes.bounds = "[20,120][300,200]";
     const second = builder.build(moved, { display, rotation: 0 });
     expect(second.elements.find((e) => e.label === "Home")!.ref).not.toBe(home.ref);
   });
@@ -106,7 +106,7 @@ describe("ScreenBuilder", () => {
     expect(renderFull(first)).toContain('[1]');
 
     const changed = exampleTree();
-    changed.children[1]!.attributes.text = "Dashboard";
+    changed.children![1]!.attributes.text = "Dashboard";
     const second = builder.build(changed, { display, rotation: 0 });
     const diff = renderDiff(first, second);
     expect(diff.mode).toBe("diff");

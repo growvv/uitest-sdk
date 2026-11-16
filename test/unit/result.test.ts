@@ -13,7 +13,9 @@ describe("ActionResult", () => {
     expect(statusOf({ ...settled, status: "uncertain", reason: "settle timeout" })).toBe(1);
     expect(statusOf({ ...settled, status: "not_found", query: "Save" })).toBe(1);
     expect(statusOf({ ...settled, status: "blocked", rule: "credentials", reason: "password" })).toBe(4);
-    expect(statusOf({ ...settled, status: "approval_pending", approvalId: "ap_1", rule: "payments" })).toBe(3);
+    expect(
+      statusOf({ ...settled, status: "approval_pending", approvalId: "ap_1", rule: "payments", reason: "over 100" }),
+    ).toBe(3);
     expect(statusOf({ ...settled, status: "approval_denied", reason: "expired" })).toBe(4);
     expect(statusOf({ ...settled, status: "stale", reason: "screen changed" })).toBe(4);
     expect(statusOf({ ...settled, status: "lease_held", task: "other" })).toBe(2);

@@ -58,6 +58,11 @@ function device(pages: UiNode[]) {
           actions.push("up");
           index = Math.min(index + 1, pages.length - 1);
         },
+        // Read-list only reads and swipes; these exist so the fake satisfies
+        // `SessionAgent` rather than relying on a cast.
+        async click() {},
+        async inputText() {},
+        async triggerKey() {},
       },
       hdc: {
         async shell() {

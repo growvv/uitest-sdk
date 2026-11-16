@@ -202,7 +202,9 @@ describe("CommandRunner", () => {
         return { status: "device_locked", screen, step: 1, shot: null };
       },
     } as unknown as Session;
-    const runner = new CommandRunner(session, { stateDir: tmpdir() });
+    // The locked path returns before touching the device; the runner still
+    // wants one, so hand it the same fake the other tests use.
+    const runner = new CommandRunner(session, { stateDir: tmpdir(), device: fakeDevice().device });
     const r = await runner.run("observe", {});
     expect(r.status).toBe("device_locked");
     expect(r.code).toBe(2);
@@ -227,7 +229,9 @@ describe("CommandRunner", () => {
         return { status: "device_locked", screen, step: 1, shot: null };
       },
     } as unknown as Session;
-    const runner = new CommandRunner(session, { stateDir: tmpdir() });
+    // The locked path returns before touching the device; the runner still
+    // wants one, so hand it the same fake the other tests use.
+    const runner = new CommandRunner(session, { stateDir: tmpdir(), device: fakeDevice().device });
     const r = await runner.run("inspect", { out: join(tmpdir(), "never.jpg") });
     expect(r.status).toBe("device_locked");
     expect(r.code).toBe(2);

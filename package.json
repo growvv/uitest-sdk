@@ -47,7 +47,8 @@
     "test": "vitest run test/unit",
     "test:device": "vitest run test/device",
     "acceptance:handoff": "node scripts/acceptance-handoff.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.7",

@@ -571,3 +571,55 @@ node dist/bin.js type --ref 302 --paste --text "蓝牙耳机🎧"
   测试类型错误）。新增的两个测试文件单独 `tsc` 过是干净的，但把 `test/` 纳入检查是
   另一件事，没有顺手做。
 - `paste` 走设备剪贴板，会让「来自剪贴板」出现在搜索历史里——这是设备行为，不是 SDK 写的。
+
+---
+
+## 2026-11-16 · `live` 页的截图/录屏按钮、`test/` 纳入类型检查（未发版）
+
+两件事都是补上一版留下的尾巴：`live` 页面缺两个按钮，`test/` 里的类型错误没人看得见。
+
+### A. `live` 页的截图与录屏
+
+页头多两个按钮，由 `hello` 里的 `canShot` / `canRecord` 决定显不显示——一个纯视频源
+（没有 `readScreen` 的会话）两个都没有，按钮点了没反应比不显示更糟。
+
+| 动作 | 走的路 | 为什么 |
+|---|---|---|
+| Shot | `source.capture()` → `Session.observe({ out })` | 截图必须和节点表用同一套遮罩：文字里藏起来的密码不能在像素里读出来。`saveShot` 已经有这条规则和测试，复制一份就是多一个出错的地方 |
+| Record | `Recording` → `createCast({ mode: "record", outputPath })` | 录屏要另起一个 daemon，因为 `onStart` 在一个进程里只能开一次 |
+
+录屏的坑是实测出来的，不是设计出来的：
+
+- 第一版在 `createCast` 之后又调了 `cast.stream()`，结果 MP4 只有 259 字节，`pidof uitest`
+  多出两个进程。原因：record 模式的 `start()` 里已经开了 `onStart`（`onEnd` 只能关掉一个
+  已经打开的 muxer），第二次 `onStart` 被扩展拒绝。现在 `Recording` 永不调用 `stream()`，
+  并用 `expect(made[0].streamCalls).toBe(0)` 钉住。
+- record daemon 必须和 stream daemon 并存——按录制键不能把画面停掉——所以它要有自己的
+  socket（grpc 用 `uitest_live_record`）或端口（ws 用 stream 端口 +1）。
+- 收尾时发现 `H264CastClient.start()` 在 `fresh.length !== 1` 时直接抛错，把刚起来的
+  daemon 丢在设备上。四个孤儿 `xdevice_scrcpy` 就是这么来的。现在先 `kill -9` 再抛。
+- `close()` 与一个正在进行的 stop 会各发一次 `onEnd`（真机上就是第二次 pull）。stop 现在
+  存成 promise，`close()` 等它而不是再发一次；有先红后绿的测试。
+
+### B. `test/` 与 `scripts/` 纳入类型检查
+
+`tsconfig.json` 的 `rootDir` 是 `src`，`include` 只有 `src/**/*.ts`，所以测试文件从来没被
+类型检查过，积了 27 处错误。新增 `tsconfig.test.json`（`extends` 根配置，`rootDir: "."`，
+`noEmit`，include 加上 `test/` 与 `scripts/`），`npm run typecheck:tests` 跑它，CI 的 `test`
+job 在 `typecheck` 之后加一步。
+
+27 处里只有一处是真问题：`UiNode.children` 声明成必填，但设备在叶子节点上根本不发这个键，
+生产代码到处写 `node.children ?? []`。改成可选后少了 7 处，其余是测试自己的毛病
+（`findLast` 需要 ES2023、假的 agent 少几个方法、`approval_pending` 少 `reason`、
+`Buffer<ArrayBufferLike>` 与 `Buffer<ArrayBuffer>` 的泛型不匹配）。
+
+### C. 验收
+
+```
+npm run typecheck                    干净
+npm run typecheck:tests              干净（0 错误，改前 27）
+npm test                             660/660（新增 13 个用例）
+node scripts/check-site.mjs          site ok
+```
+
+真机：`live` 页面按 Record，画面 fps 保持 29–30 不掉；按 Stop 得到 41,830 字节的 MP4。

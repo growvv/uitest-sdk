@@ -449,14 +449,14 @@ describe("Session: window", () => {
     await withDir(async (dir) => {
       const fake = fakeDevice([page("WLAN")]);
       const original = fake.device.agent.hypium;
-      fake.device.agent.hypium = async (api: string, thisRef: string, args: unknown[]) => {
+      fake.device.agent.hypium = (async (api: string, thisRef: string, args: unknown[]) => {
         if (api === "UiWindow.getBounds") {
           return { left: 0, top: 100, right: 1000, bottom: 1900 };
         }
         if (api === "UiWindow.getBundleName") return "com.demo";
         if (api === "UiWindow.isFocused") return true;
         return original.call(fake.device.agent, api, thisRef, args);
-      };
+      }) as typeof fake.device.agent.hypium;
       const s = await open(fake, dir);
       const w = await s.window({ focused: true });
       expect(w.status).toBe("settled");

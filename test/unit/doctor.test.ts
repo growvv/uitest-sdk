@@ -28,6 +28,14 @@ function device(opts: { hypium?: (api: string) => unknown; targets?: string[] } 
       async captureScreen() {
         return Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
       },
+      // `doctor` probes and reads; it never acts. These exist so the fake
+      // satisfies `SessionAgent` instead of being cast into it.
+      async click() {},
+      async touchDown() {},
+      async touchMove() {},
+      async touchUp() {},
+      async inputText() {},
+      async triggerKey() {},
     },
     hdc: {
       async shell(command: string) {

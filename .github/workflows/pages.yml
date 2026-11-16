@@ -31,6 +31,10 @@ jobs:
       # typecheck is a subset of build, but it is the step that fails fastest
       # and names the offending file, so keep it visible on its own.
       - run: npm run typecheck
+      # `typecheck` only covers src/ (rootDir), which let 27 errors pile up in
+      # test/ unseen. This project file adds test/ and scripts/ to the same
+      # strict settings so they cannot drift again.
+      - run: npm run typecheck:tests
       - run: npm test
   deploy:
     needs: test

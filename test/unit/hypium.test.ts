@@ -71,7 +71,9 @@ function world(handlers: Record<string, Handler> = {}) {
     async shell(cmd: string, timeoutMs?: number) {
       shellCalls.push({ cmd, timeoutMs });
       const h = handlers[`shell:${cmd}`];
-      if (h) return h([], "shell");
+      // A handler answers with whatever the driver expects to parse; `shell`
+      // itself always hands back a string.
+      if (h) return String(h([], "shell"));
       return "";
     },
     async command(args: string[]) {
@@ -145,7 +147,8 @@ describe("HypiumDriver · targets and actions", () => {
     const w = world();
     await w.driver.swipe("up", { distance: 50, durationMs: 200, steps: 4 });
     const down = w.calls.find((c) => c.api === "touchDown")!;
-    const up = w.calls.findLast((c) => c.api === "touchUp")!;
+    // `findLast` needs ES2023, which the package's ES2022 target does not have.
+    const up = w.calls.filter((c) => c.api === "touchUp").at(-1)!;
     expect(down.args[1] as number).toBeGreaterThan(up.args[1] as number);
     expect(down.args[0]).toBe(500);
   });
