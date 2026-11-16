@@ -13,6 +13,8 @@ import { WsCastClient } from "./cast/ws-client.js";
 import { MjpegCastClient } from "./cast/mjpeg.js";
 import { CASTING_EXTENSION, resolveCastingExtension } from "./cast/resolve.js";
 import type { CastClient, CastOptions } from "./cast/types.js";
+import { AgentInputLane } from "./live/input-lane.js";
+import type { InputSession } from "./live/input-lane.js";
 import {
   AgentBusyError,
   AgentConnectionError,
@@ -279,6 +281,44 @@ export class Device {
   /** Path of the casting extension for this device's ABI, or null when none exists. */
   resolveCastExtension(): string | null {
     return resolveCastingExtension(this.abi, this.extDir);
+  }
+
+  /**
+   * Opens a second agent connection dedicated to input.
+   *
+   * The daemon serialises requests per connection, so a click sent on the
+   * read connection waits behind a 300-600 ms layout read. A second forward
+   * and socket give input its own queue: measured p50 12 ms while layout reads
+   * are in flight. No daemon is started and no health check is run - a
+   * read-only `live` page never calls this, and the first failure is reported
+   * to whoever tried to take control.
+   *
+   * No transparent reconnect: replaying a gesture after a socket swap is how
+   * duplicate down/up pairs reach the device. The caller opens a fresh lane
+   * after the failure instead.
+   */
+  async openInputLane(): Promise<InputSession> {
+    this.assertConnected();
+    const port = await this.hdc.fportAdd(this.opts.agentPort ?? 8012, "tcp:8012");
+    let sock: net.Socket;
+    try {
+      sock = await connectTcp(port);
+    } catch (e) {
+      await this.hdc.fportRemove(port).catch(() => undefined);
+      throw e;
+    }
+    const client = new AgentClient(sock, {
+      requestTimeoutMs: this.opts.requestTimeoutMs,
+      retryOnBusy: this.opts.retryOnBusy,
+    });
+    const hdc = this.hdc;
+    return {
+      lane: new AgentInputLane(client),
+      async close() {
+        client.close();
+        await hdc.fportRemove(port).catch(() => undefined);
+      },
+    };
   }
 
   /**
