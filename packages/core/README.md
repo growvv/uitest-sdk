@@ -7,28 +7,33 @@
 [官网](https://growvv.github.io/uitest-sdk/) · [使用文档](https://growvv.github.io/uitest-sdk/docs.html) · [完整 API](https://growvv.github.io/uitest-sdk/api.html) · [更新日志](https://growvv.github.io/uitest-sdk/changelog.html) · [宣传视频](https://growvv.github.io/uitest-sdk/#video) · [GitHub](https://github.com/growvv/uitest-sdk) · MIT
 
 把鸿蒙 `uitest` 的设备侧扩展（`agent.so` / `libscreen_casting.z.so`）封装成 TypeScript SDK：
-一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。包里同时带一个给人和 Agent 用的命令行。
+一条长连接做 UI 自动化，一条 gRPC 通道做 H.264 投流与 MP4 录制。这是一个**库**——不装命令、
+不起界面；要命令行和 Agent 接入用 [`uitest-phone`](https://www.npmjs.com/package/uitest-phone)，
+要浏览器投屏用 [`uitest-console`](https://www.npmjs.com/package/uitest-console)。
 
 ```bash
 npm install uitest-sdk
 ```
 
 ```ts
-import { Device } from "uitest-sdk";
+import { connect } from "uitest-sdk";
 
-const dev = await Device.connect({ deviceId: "<your-device-id>" });
+const session = await connect({ deviceId: "<your-device-id>" });
 try {
-  const { width, height } = await dev.agent.getDisplaySize();
-  await dev.agent.click(width / 2, height / 2);
-  const jpeg = await dev.agent.captureScreen();   // ~110 ms
-  await dev.agent.swipe(width / 2, height * 0.7, width / 2, height * 0.3);
+  const screen = await session.observe.layout();        // 节点表 + display 尺寸
+  const { width, height } = screen.display;
+  await session.act.tap({ text: "WLAN" });              // ref / 文本 / 选择器 / 坐标
+  const shot = await session.observe.screenshot();      // 608×1344 JPEG
+  await session.act.swipe({ from: { x: width / 2, y: height * 0.7 }, to: { x: width / 2, y: height * 0.3 } });
 } finally {
-  await dev.dispose();
+  await session.close();
 }
 ```
 
-`Device.connect()` 会按设备 ABI 推送对应的 `agent.so`、必要时拉起 daemon、建立 fport 隧道，
+`connect()` 会按设备 ABI 推送对应的 `agent.so`、必要时拉起 daemon、建立 fport 隧道，
 并做一次 `getDisplaySize()` 健康检查。任何业务失败直接抛 `UitestError` 子类，不做静默兜底。
+返回的 `Session` 按用途分成 `observe` / `act` / `wait` / `cast` / `view` / `govern` 六个命名空间；
+底层 `Device` 仍可经 `session.device` 拿到，高级接口走 `uitest-sdk/{commands,cast,viewer,govern,drivers}` 子路径。
 
 可运行的 JavaScript 版本：[`examples/quickstart.mjs`](https://github.com/growvv/uitest-sdk/blob/master/examples/quickstart.mjs)（本仓库先 `npm run build`，
 之后 `node examples/quickstart.mjs`）。完整 API 与示例见 [`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md)。
@@ -47,11 +52,11 @@ try {
 | 整屏截图 | `agent.captureScreen()` | **109~222 ms** |
 | 窗口截图 | `agent.cropToWindow({ bundleName })` | 采集 + 裁剪 |
 | MJPEG 流 | `agent.streamScreen({ scale })` | 10~16 fps（需画面变化） |
-| H.264 投流 | `dev.createCast({ mode: "stream" })` | 15~89 fps（随 `frameRate`） |
-| MP4 录制 | `dev.createCast({ mode: "record", outputPath })` | 见下 |
-| 窗口级 UI 树 | `dev.cli.dumpLayout({ windowId })` | 一次 shell + pull |
-| 设备文件 | `dev.files.list/stat/mkdir/remove/move/push/pull` | 一条 shell 或一次 `file send/recv` |
-| 帧率统计 | `new FpsMeter().add()/stats()` | 纯客户端，按帧间隔计算 |
+| H.264 投流 | `session.cast.open({ ... })` | 15~89 fps（随 `frameRate`） |
+| MP4 录制 | `session.cast.record({ out })` | 见下 |
+| 窗口级 UI 树 | `session.device.cli.dumpLayout({ windowId })` | 一次 shell + pull |
+| 设备文件 | `session.device.files.list/stat/mkdir/remove/move/push/pull` | 一条 shell 或一次 `file send/recv` |
+| 帧率统计 | `new FpsMeter().add()/stats()`（`uitest-sdk/cast`） | 纯客户端，按帧间隔计算 |
 
 ### 和 hdc CLI 的对比
 
@@ -78,8 +83,7 @@ shell 往返与 uitest 启动——也就是手敲命令时真正付出的时间
 H.264 有两条传输可选：默认的 6.8 gRPC（内置），或 7.0 WebSocket：
 
 ```ts
-const cast = await dev.createCast({
-  mode: "stream",
+const cast = await session.cast.open({
   transport: "ws",                                    // 默认 "grpc"
   wsExtension: "./libscrcpy_server_unix_7.0-20260930.z.so",
   port: 5000,
@@ -90,16 +94,17 @@ const cast = await dev.createCast({
 同时存在、互不覆盖。帧率两者持平（实测 20.8~23.2 fps），ws 的收益是客户端不再需要 gRPC 运行时。
 一个客户端独占一个 daemon —— `stop` 是进程级的，并发投流靠多个 `port`。
 
-投流默认值可以存成 JSON（`CastConfig`），但合并是显式的：`dev.createCast({ ...cfg.toCastOptions("stream") })`，
-配置文件不会在背后改变一次 cast。帧率统计用 `FpsMeter`：每来一帧 `add()`，`stats()` 给出
-`fps` / `frames` / `spanMs` / `stalledMs`，与投流实现无关，MJPEG 和 H.264 都能用。
+投流默认值可以存成 JSON（`CastConfig`），但合并是显式的：`session.cast.open({ ...cfg.get() })`，
+配置文件不会在背后改变一次 cast。帧率统计用 `FpsMeter`（`uitest-sdk/cast`）：每来一帧 `add()`，
+`stats()` 给出 `fps` / `frames` / `spanMs` / `stalledMs`，与投流实现无关，MJPEG 和 H.264 都能用。
+需要显式指定传输或自己管录制时，用 `uitest-sdk/cast` 的 `createCast` / `Recording`。
 
 ### 投屏：给人在浏览器里看
 
-```bash
-npx uitest-sdk live                    # 打开 http://127.0.0.1:7000/
-npx uitest-sdk live --privacy off      # 初始不遮凭据
-npx uitest-sdk live --no-layout        # 只投屏
+```ts
+const view = await session.view.open();            // http://127.0.0.1:7000/
+const view2 = await session.view.open({ privacy: false, layout: false, open: false });
+await view.close();                                 // 关页面，不关会话
 ```
 
 一个页面里同时有画面和布局：右边是当前屏的节点表，点节点（或点画面上的框）就复制它的 ref、角色、
@@ -120,9 +125,10 @@ npx uitest-sdk live --no-layout        # 只投屏
 `compositionend` 时整词落设备（拼音不会先变成英文字母再被替换）。系统键里 `back` 只弹一层页面、
 不关应用；`home` 回桌面。双指缩放按两段注入（首段只记基线），在图片查看器里放大是真实渲染的。
 
-验收报告在 [`docs/acceptance/live/report.md`](docs/acceptance/live/report.md)：知乎上 10 个场景
-全过（只读守卫、接管、点击、长按、滚动、键盘、浏览器键盘、系统键、双指、10 分钟稳定性），
-含换手（关掉控制页、另一个页面接管）与真机截图。
+浏览器里看手机是一个**产品**：[`uitest-console`](https://www.npmjs.com/package/uitest-console)
+在同一页面上加接管按钮、审批收件箱与 Hold/Resume。这个库只提供 `view.open()` 和可复用的
+viewer（`uitest-sdk/viewer`），页面本身、来源校验与解码都在里面；验收报告见
+[`docs/acceptance/live/report.md`](docs/acceptance/live/report.md)。
 
 解码全在浏览器里：H.264 走 WebCodecs `VideoDecoder`（服务端把 Annex-B 转 AVCC 并生成 `avcC`），
 MJPEG（x86_64）走 `createImageBitmap`；没有 MSE、没有 fMP4 重封装。状态机是
@@ -130,126 +136,41 @@ MJPEG（x86_64）走 `createImageBitmap`；没有 MSE、没有 fMP4 重封装。
 不重开投流。背压按 socket 写队列（1 MB 水位）丢增量帧并请求 IDR。
 
 真机 1216×2688 / 30 fps：首帧约 3.1 s（含 daemon 启动），画面持续变化时页面绘制 18.5 fps，
-帧间隔中位 33 ms、p90 55 ms，每帧平均 11.6 KB。SDK 里同一套东西是 `LiveServer`，见
-[`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md#6-投流与录制)。
+帧间隔中位 33 ms、p90 55 ms，每帧平均 11.6 KB。要自己起页面而不走 `session.view`，用
+`uitest-sdk/viewer` 的 `startViewerServer` / `createViewerSource`，见
+[`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/api.md)。
 
 ### 录制
 
 ```ts
-const cast = await dev.createCast({ mode: "record", frameRate: 30, outputPath: "out.mp4" });
+const rec = await session.cast.record({ frameRate: 30, out: "out.mp4" });
 // ...让画面动起来...
-await cast.dispose();   // 关闭 muxer，拉回 out.mp4
+await rec.stop();   // 关闭 muxer，拉回 out.mp4
 ```
 
-录制是**起停驱动**的：`createCast` 返回时编码器已经在写，`dispose()` 关闭 muxer 并把
-设备侧 `/data/local/tmp/mytest.mp4`（路径写死在扩展里，不可改）拉回 `outputPath`。
-静止画面不产生样本 —— 录制期间要让 UI 动。
+录制是**起停驱动**的：`cast.record` 返回时编码器已经在写，`stop()` 关闭 muxer 并把
+设备侧 `/data/local/tmp/mytest.mp4`（路径写死在扩展里，不可改）拉回 `out`。
+静止画面不产生样本 —— 录制期间要让 UI 动。更底层的开关（显式 `transport`、`socketName`、
+`outputPath`）在 `uitest-sdk/cast` 的 `createCast` / `Recording`。
 
-## 命令行与 Agent Skill
+## 产品：库之上还有两个包
 
-SDK 之上有一层给人和 Agent 用的 CLI：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。
-共 21 条命令（`handoff` 只写租约、把手机交给人，不碰设备）：`observe`、`inspect`、`tap`、`type`、`swipe`、`double-click`、`drag`、`fling`、`pinch`、`key`、
-`wait-for`、`read-list`、`scroll-until`、`launch`、`apps`、`window`、`doctor`、`screenshot`、`report`、`status`、`handoff`。
+这个仓库按「一个库 + 两个产品」组织。库不装命令、不起界面，产品各自独立发版：
+
+| 包 | 是什么 | 装法 |
+|---|---|---|
+| [`uitest-sdk`](https://www.npmjs.com/package/uitest-sdk) | 本库：连接、观察、动作、投屏、viewer、治理 | `npm install uitest-sdk` |
+| [`uitest-phone`](https://www.npmjs.com/package/uitest-phone) | 无界面的设备 Agent：21 条命令的 CLI、MCP server、Agent Skill | `npm i -g uitest-phone` |
+| [`uitest-console`](https://www.npmjs.com/package/uitest-console) | 人的界面：浏览器投屏、接管、审批收件箱 | `npm i -g uitest-console` |
 
 ```bash
-npx uitest-sdk doctor                     # 探测设备与能力，确认可用
-npx uitest-sdk observe --task "check WLAN"
-npx uitest-sdk inspect --html layout.html # 截图 + 每个元素框出编号，另存可悬停的 HTML 面板
-npx uitest-sdk tap --ref 12 --task "check WLAN"
-npx uitest-sdk apps --current
-npx uitest-sdk report --title "WLAN check"
+npx uitest-phone doctor             # 探测设备与能力
+npx uitest-phone observe --task "check WLAN"
+uitest-console                      # 浏览器里看手机、接管、批准
 ```
 
-`inspect` 画在图上的编号就是 `observe` / `tap` 用的 ref：框线按角色着色，被脱敏的元素先涂灰再画框，
-`--html` 面板是单文件（图片内嵌），悬停表格行会高亮对应的框。
-
-一次性的 `inspect` 之外，还有一直开着的 `live`：一个浏览器页面同时给出画面和节点表，
-点节点即复制 ref / JSON，隐私开关默认打开，页头两个按钮可以存截图、录 MP4，
-点「接管」后画布就是设备（点击 / 长按 / 拖动 / 滚动 / 双指 / 键盘 / 返回 / Home），
-输入走独立通道（见上面的「投屏」一节）。它不占 21 条命令的名额，和 `mcp` / `hold` 一样是长期运行的子命令。
-
-真机上每条命令的端到端耗时（含 Node 启动与设备打开，2026-11-16 采样）：
-`status` 1.2 s、`apps --current` 1.5 s、`observe` 1.7 s、`doctor` 1.9 s、`tap --ref` 2.3 s。
-设备侧动作本身仍是 SDK 的毫秒级；CLI 付的是「开一次设备」的固定开销。
-
-包只有一个可执行文件，安装后命令名是 `uitest-phone`：
-
-```bash
-npm install -g uitest-sdk      # 之后可直接用 uitest-phone
-npx uitest-sdk connect         # 把 MCP 注册写进 Agent 自己的配置，并装好 Skill
-npx uitest-sdk mcp             # 以 MCP（stdio）暴露全部命令，供 Agent 调用
-npx uitest-sdk install-skill   # 写 ~/.claude/skills 与 ~/.agents/skills 两处
-```
-
-- **只改自己那一项**：`connect` 直接编辑 Agent 的设置文件（`claude` → `~/.claude.json`，
-  `codex` → `~/.codex/config.toml`，`gemini` → `~/.gemini/settings.json`，
-  `copilot` → `~/.copilot/mcp-config.json`），只插入本包的条目；注释、键顺序、其它 server 的排版原样保留，
-  已经正确时一个字节都不写。文件解析失败就拒绝并报出偏移，不替人重写。入口是当前 `node` 加本包绝对路径，
-  因为从 Dock / 开始菜单启动的 Agent 看不到终端的 `PATH`。
-- **两处 Skill 目录**：`~/.claude/skills` 给 Claude Code，`~/.agents/skills` 是 agentskills.io 的跨 runtime
-  别名，Codex、Copilot CLI、Gemini CLI 都读它。两个目标先全部检查再写，拒绝时不会留下半套。
-- **升级后 Skill 自己跟上**：安装目录里记着本包写入时的版本与文件摘要；`mcp` 启动时若发现包已升级、
-  且副本仍是本包写的那份，就地把两份文档更新到当前版本——不需要重跑 `install-skill --force`。人改过的
-  副本与手写的 Skill 不动；0.3.0 装的副本按发布时的精确摘要识别后接管。
-
-- **ref 跨进程稳定**：ref 表存在 `<state-dir>/refs-<device-hash>.json`，`observe` 打印的 ref 在
-  下一条 `tap` 里仍指向同一个元素；不在当前屏幕上的 ref 直接 `not_found`，绝不悄悄指向别的控件。
-- **审批跨进程可用**：`approval_pending` 给出的 id 存在 `<state-dir>/approvals-<device-hash>.json`，
-  下一条命令带 `--approval-id` 就能兑现；id 一次性、有 TTL，页面变了返回 `stale`。
-- **审批可以记住**：带 `--approval-scope task` 时，这条 rule 在本任务内同一个应用里不再问；
-  `always` 则在这个 state dir 的所有任务里都不再问。记住的授权只跳过一次审批检查，凭据、`--read-only`
-  和 `--apps` 白名单不受影响；`resume` 清掉 `task` 的、保留 `always`。
-- **报告跨进程聚合**：每条命令各写一个 trace 文件，`report` 按 task 把它们从磁盘读回来、跨文件重新编号，
-  覆盖整轮任务（含之前那些进程写的步骤），而不是只有写报告这一步。加 `--trace-shots` 每步存一张截图，
-  报告里的链接相对报告自身，截图和 HTML 可以整体搬走。
-- **窗口与多指**：`window` 报告焦点窗口（或某个 bundle 的窗口）的 bundle、焦点与 bounds，可 `--focus`/`--close`；
-  `pinch` 走设备 `PointerMatrix` 做双指缩放，单指通道表达不了两条同时的轨迹。
-- **状态即结果**：`settled` / `uncertain` / `not_found` / `blocked` / `approval_pending` /
-  `approval_denied` / `stale` / `lease_held` / `device_locked` / `device_needs_setup` /
-  `device_offline`，退出码 0/1/1/4/3/4/4/2/2/2/2，非 `settled` 时把 `approvalId`、`rule`、
-  `reason` 放进 `--json` 的 `data`。
-- **设备状态有名字**：锁屏返回 `device_locked`（不把锁屏当成一个页面去点）；连上了但没授权调试
-  返回 `device_needs_setup`；没插/关机/Offline 返回 `device_offline`。三者都以退出码 2 停下，
-  Agent 应请人解锁、点「允许」或插线，而不是重试同一条命令。
-- **默认审批集**：支付、金融、删除、发送——四类人收不回来的动作。`commits`（确认 / 保存）不默认，
-  因为手机上半数普通表单按钮都叫这个，每次都问会把人训练成不看就点同意。
-- **凭据不外泄**：密码框的值、凭据语境里的 3–8 位验证码，在 `observe`、diff、`read-list`、报告与
-  截图里统一脱敏（`••••••` / 灰块）；被遮住的元素也不能再用原文搜索。设备侧动作仍然照常执行，
-  Agent 只是读不到秘密。低层 `captureLayout()` / `captureScreen()` 保持原样。
-- **人可以随时接管**：`uitest-phone hold` 把设备交给此刻拿着手机的人，连正在运行的 MCP 会话也一并让出——
-  Agent 命令随即以 `lease_held`（退出码 2）停下，不重试、不抢回；`uitest-phone resume` 交还后，
-  同一个会话下一条命令自动继续。反过来，Agent 遇到只有人能做的一步（登录、验证码、解锁）可以
-  `handoff --reason "..."`（MCP 工具 `uitest_handoff`）把手机交给人：调用立即返回 `handoff`（退出码 2），
-  原因写进租约并在每次 `lease_held` 里重复，人用同一个 `resume` 交还。hold 与 handoff 都不按进程存活
-  判断，所以不会自己过期。设备侧的 UI 事件流不能用来判断「人在动手机」：它会关掉会话、能把 daemon
-  卡死，而且合成点击也被当成手指。
-- 设备序列号不进任何文件或输出，只用 8 位哈希；`<state-dir>` 里是用户屏幕内容，已被 gitignore。
-
-Skill 正文见 [`assets/skill/SKILL.md`](assets/skill/SKILL.md)，完整命令参考见
-[`assets/skill/REFERENCE.md`](assets/skill/REFERENCE.md)。
-
-## 在代码里用同一层（Session）
-
-CLI 的每条命令就是一个 `Session`：它持有租约、策略、ref 表和 trace。想在自己的脚本里拿到同样的语义，直接用 `Session`。
-
-```ts
-import { Device, Session } from "uitest-sdk";
-
-const dev = await Device.connect();
-const session = await Session.open(dev, { task: "check WLAN" });
-try {
-  await session.observe();
-  const r = await session.tap({ ref: 12 });   // settled · 一行 diff
-  console.log(r.status, r.text);
-} finally {
-  await session.release();
-}
-```
-
-`Session` 提供 `observe`、`inspect`、`tap`、`type`、`swipe`、`longPress`、`doubleClick`、`pinch`、`drag`、`fling`、
-`waitFor`、`readList`、`scrollUntilVisible`、`window`、`pressKey`、`settle`、`release`，
-以及 `steps`（本会话已记录的步数）与 `record()`（记录不经过动作路径的命令）。
-被别的任务占用时 `Session.open` 抛 `LeaseHeldError`，此时设备还没被读写。
+`uitest-phone` 的 21 条命令、MCP 工具与 Skill 见它自己的 README；`uitest-console` 的
+接管与收件箱见它的 README。两者都只通过本库的公开 API 工作——这里没有给产品留的后门。
 
 ## 完整 hypium API（`dev.hypium`）
 

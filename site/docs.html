@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>使用文档 · uitest-sdk</title>
-  <meta name="description" content="uitest-sdk 完整使用文档：安装、快速开始、Device / AgentClient API、Session 与命令行、MCP 服务、投流与录制、错误码与并发模型。">
+  <meta name="description" content="uitest-sdk 完整使用文档：安装、快速开始、connect() 与六个命名空间、Device / AgentClient API、投流与录制、viewer、错误码与并发模型；命令行与 MCP 在 uitest-phone，浏览器界面在 uitest-console。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -31,7 +31,8 @@
       <a href="#concepts">核心概念</a>
       <a href="#device">Device</a>
       <a href="#agent">AgentClient</a>
-      <a href="#session">Session 与命令行</a>
+      <a href="#session">Session 与命名空间</a>
+      <a href="#packages">三个包</a>
       <a href="#cast">投流与录制</a>
       <a href="#uitree">UI 树与窗口</a>
       <a href="#hypium">完整 hypium API</a>
@@ -44,11 +45,15 @@
     <article class="doc-body">
       <h1>使用文档</h1>
       <p class="doc-meta">uitest-sdk <strong>0.10.0</strong> · Node.js ≥ 20 · MIT</p>
-      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。0.2.0 起，同一套能力还有一层命令行，可作为 <code>uitest-phone</code> 使用，也能以 MCP 暴露给 Agent。</p>
+      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。本页讲的是库 <code>uitest-sdk</code>；命令行、MCP 与 Skill 是产品 <code>uitest-phone</code>，浏览器里的镜像、接管与审批收件箱是产品 <code>uitest-console</code>，两者都只用这里的公开 API。</p>
 
       <h2 id="install">1. 安装与前提</h2>
-      <pre><code>npm install uitest-sdk
-npx uitest-sdk doctor      # 确认设备与所需能力都在</code></pre>
+      <pre><code>npm install uitest-sdk            # 库
+npm i -g uitest-phone             # 命令行 + MCP + Skill
+npm i -g uitest-console           # 浏览器投屏与审批收件箱
+npx uitest-phone doctor           # 确认设备与所需能力都在</code></pre>
+      <p>三个包各自发版：本页只讲库的 API；命令行、MCP 与 Skill 属于 <code>uitest-phone</code>，
+浏览器里的镜像、接管与收件箱属于 <code>uitest-console</code>。</p>
       <ul>
         <li><strong>Node.js ≥ 20</strong>，ESM（<code>import</code>）。</li>
         <li><strong>hdc</strong>：DevEco Studio 自带的 <code>hdc</code> 在 <code>PATH</code> 上，或设置 <code>HDC_PATH</code>，或传 <code>Device.connect({ hdcPath })</code>。</li>
@@ -58,24 +63,39 @@ npx uitest-sdk doctor      # 确认设备与所需能力都在</code></pre>
       </ul>
       <p class="note">扩展必须由华为签名才能在真机加载（XPM 校验拒绝未签名 <code>.so</code>）。本包内置的是实测可用的签名版本。</p>
 
-      <h2 id="quickstart">2. 快速开始</h2>
-      <pre><code>import { Device } from "uitest-sdk";
+      <h2 id="packages">2. 三个包</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>包</th><th>是什么</th><th>装法</th></tr></thead>
+          <tbody>
+            <tr><td><code>uitest-sdk</code></td><td>库：连接、观察、动作、投流、viewer、治理。没有可执行文件</td><td><code>npm install uitest-sdk</code></td></tr>
+            <tr><td><code>uitest-phone</code></td><td>无界面的设备 Agent：21 条命令的 CLI、stdio MCP、Agent Skill、审批与接管</td><td><code>npm i -g uitest-phone</code></td></tr>
+            <tr><td><code>uitest-console</code></td><td>人的界面：浏览器镜像、接管、审批收件箱、活动记录</td><td><code>npm i -g uitest-console</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>依赖只有一个方向：两个产品 → 库，产品之间互不依赖。库不认识任何产品，产品也没有深路径 import。</p>
 
-const dev = await Device.connect(); // 只有一台设备时可省略参数
+      <h2 id="quickstart">3. 快速开始</h2>
+      <pre><code>import { connect } from "uitest-sdk";
+
+const session = await connect(); // 只有一台设备时可省略参数
 try {
-  const { width, height } = await dev.agent.getDisplaySize();
+  const screen = await session.observe.layout(); // 节点表 + display 尺寸
+  const { width, height } = screen.display;
 
-  await dev.agent.click(width / 2, height / 2);
-  await dev.agent.swipe(width / 2, height * 0.7, width / 2, height * 0.3);
+  await session.act.tap({ text: "设置" });
+  await session.act.swipe({ from: { x: width / 2, y: height * 0.7 }, to: { x: width / 2, y: height * 0.3 } });
 
-  const jpeg = await dev.agent.captureScreen(); // 608×1344 JPEG
-  console.log(`captured ${jpeg.length} bytes`);
+  const shot = await session.observe.screenshot({ out: "screen.jpg" }); // 608×1344 JPEG
+  console.log(`captured ${shot.path}`);
 } finally {
-  await dev.dispose();
+  await session.close();
 }</code></pre>
+      <p><code>connect()</code> 返回的 <code>Session</code> 按用途分成六个命名空间：<code>observe</code>、<code>act</code>、<code>wait</code>、<code>cast</code>、<code>view</code>、<code>govern</code>。其余能力走子路径 <code>uitest-sdk/{commands,cast,viewer,govern,drivers}</code>，根入口保持很小。</p>
       <p>可运行的版本在包里：<code>node_modules/uitest-sdk/examples/quickstart.mjs</code>。</p>
 
-      <h2 id="concepts">3. 核心概念</h2>
+      <h2 id="concepts">4. 核心概念</h2>
       <h3>坐标</h3>
       <p>所有触摸坐标都是<strong>逻辑显示坐标</strong>，即 <code>getDisplaySize()</code> 返回的那套（例如 1216×2688）。<code>captureScreen()</code> 默认按 <code>scale: 0.5</code> 出图（608×1344）；把截图上的点换回显示坐标，乘以 <code>display.width / 608</code>。</p>
       <h3>扩展与 daemon</h3>
@@ -83,7 +103,7 @@ try {
       <h3>失败即报错</h3>
       <p>每个失败都是 <code>UitestError</code> 的子类，带稳定的 <code>code</code>。SDK 不做静默降级：能走 H.264 就走 H.264，走不了会通过 <code>cast.castKind</code> 明确告诉你走的是 MJPEG。</p>
 
-      <h2 id="device">4. Device</h2>
+      <h2 id="device">5. Device</h2>
       <pre><code>import { Device } from "uitest-sdk";
 const dev = await Device.connect(options?);</code></pre>
       <h3>DeviceOptions</h3>
@@ -113,13 +133,13 @@ const dev = await Device.connect(options?);</code></pre>
             <tr><td><code>dev.state</code></td><td>connected / disconnected</td><td><code>dispose()</code> 后变为 disconnected，再调用抛 <code>EDISPOSED</code></td></tr>
             <tr><td><code>dev.ownsDaemon</code></td><td>boolean</td><td>本次连接是否由自己拉起 daemon</td></tr>
             <tr><td><code>dev.resolveCastExtension()</code></td><td>string / null</td><td>该 ABI 的 casting 扩展路径</td></tr>
-            <tr><td><code>dev.createCast(opts)</code></td><td>Promise&lt;CastClient&gt;</td><td>创建投流或录制</td></tr>
+            <tr><td><code>session.cast.open(opts)</code></td><td>Promise&lt;CastClient&gt;</td><td>创建投流（<code>uitest-sdk/cast</code> 的 <code>createCast</code> 是同一实现）</td></tr>
             <tr><td><code>dev.dispose()</code></td><td>Promise&lt;void&gt;</td><td>关连接、撤销自己的 fport；<code>ownDaemon: true</code> 时再杀掉自己的 daemon</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h2 id="agent">5. AgentClient：UI 自动化</h2>
+      <h2 id="agent">6. AgentClient：UI 自动化</h2>
       <p>所有方法都返回 Promise，失败抛 <code>UitestError</code>。</p>
       <h3>显示</h3>
       <pre><code>await dev.agent.getDisplaySize();     // { width: 1216, height: 2688 }
@@ -163,35 +183,50 @@ await dev.agent.call("CtrlCmd", { api: "getDisplaySize", args: [] });
 await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);</code></pre>
       <p><code>call</code> 的 method 只能是 <code>"Captures"</code> / <code>"CtrlCmd"</code> / <code>"Gestures"</code> / <code>"callHypiumApi"</code>。</p>
 
-      <h2 id="session">6. Session 与命令行</h2>
-      <p><code>Session</code> 是 SDK 里「一个任务看一台设备」的那一层：它持有租约（两个任务不能交错）、策略（危险步骤在碰设备前停下）、ref 表（ref 只指向它被观察时的那个元素）和 trace。CLI 的每条命令都只是开一个 <code>Session</code>、跑一步、关掉。</p>
+      <h2 id="session">7. Session：按用途分类的入口</h2>
+      <p><code>Session</code> 是 SDK 里「一个任务看一台设备」的那一层：它持有租约（两个任务不能交错）、策略（危险步骤在碰设备前停下）、ref 表（ref 只指向它被观察时的那个元素）和 trace。<code>uitest-phone</code> 的每条命令都只是开一个 <code>Session</code>、跑一步、关掉；<code>uitest-console</code> 用同一个 <code>Session</code> 起页面。</p>
 
-      <h3>直接使用 Session</h3>
-      <pre><code>import { Device, Session } from "uitest-sdk";
+      <h3>两个入口</h3>
+      <pre><code>import { connect } from "uitest-sdk";
 
-const dev = await Device.connect();
-const session = await Session.open(dev, { task: "check WLAN" });
+// 一步：连上设备并取租约；失败时自动 dispose，不留 daemon 与 fport
+const session = await connect({ task: "check WLAN" });
 try {
-  await session.observe();                 // 读屏并记录
-  const r = await session.tap({ ref: 12 }); // 按 ref 点击
-  console.log(r.status, r.text);           // settled · 一行 diff
+  const screen = await session.observe.layout();
+  const r = await session.act.tap({ ref: 12 });
+  console.log(r.status);                    // settled
 } finally {
-  await session.release();                 // 释放租约、关 trace、dispose 设备
+  await session.close();                    // 释放租约、关 viewer、dispose 设备
 }</code></pre>
+      <p>要自己管设备时用 <code>Device.connect()</code> + <code>new Session(dev, await CoreSession.open(dev, opts))</code>；<code>session.device</code> 与 <code>session.core</code> 就是这两层。</p>
+
+      <h3>六个命名空间</h3>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>命名空间</th><th>成员</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>observe</code></td><td><code>layout()</code>、<code>screenshot()</code>、<code>window()</code>、<code>apps()</code>、<code>inspect()</code></td><td>读：节点表、截图、窗口、应用、带框的面板；<code>observe()</code> 本身打印一行一元素</td></tr>
+            <tr><td><code>act</code></td><td><code>tap</code>、<code>type</code>、<code>swipe</code>、<code>drag</code>、<code>fling</code>、<code>pinch</code>、<code>key</code>、<code>launch</code>、<code>longPress</code>、<code>doubleClick</code></td><td>做：全部输入动作，返回 <code>ActionResult</code></td></tr>
+            <tr><td><code>wait</code></td><td><code>forText</code>、<code>forSelector</code>、<code>settle</code>、<code>scrollUntil</code></td><td>等：等出现、等稳定、逐屏翻找</td></tr>
+            <tr><td><code>cast</code></td><td><code>open()</code>、<code>record()</code>、<code>configure()</code></td><td>投屏：流、录制、默认值持久化</td></tr>
+            <tr><td><code>view</code></td><td><code>open()</code></td><td>起 core 的 viewer 页面（镜像 + 可选节点表 + 隐私开关）</td></tr>
+            <tr><td><code>govern</code></td><td><code>policy</code>、<code>approvals</code>、<code>lease</code>、<code>trace</code>、<code>recent()</code></td><td>治理：规则、审批、租约、记录</td></tr>
+          </tbody>
+        </table>
+      </div>
       <div class="doc-table">
         <table>
           <thead><tr><th>成员</th><th>说明</th></tr></thead>
           <tbody>
-            <tr><td><code>Session.open(device, opts)</code></td><td>取设备租约；被别的任务占用时抛 <code>LeaseHeldError</code>，此时设备还没被读写</td></tr>
-            <tr><td><code>observe()</code> / <code>screen()</code></td><td>读屏并记录；<code>screen()</code> 返回上一次读到的屏幕，没有则新读</td></tr>
-            <tr><td><code>tap(target, opts)</code></td><td><code>{ref}</code> 走坐标点击，<code>{text}</code> 或 <code>On</code> 走设备自己的 <code>Component.click</code></td></tr>
-            <tr><td><code>type(text, opts)</code></td><td>默认输入到焦点框；密码框在任何按键前被策略拒绝。<code>{paste: true}</code> 一次粘贴而不是逐字符输入，实测 36 字符 1.3 s 对 2.8 s</td></tr>
-            <tr><td><code>swipe</code> / <code>longPress</code> / <code>doubleClick</code> / <code>drag</code> / <code>fling</code> / <code>pinch</code></td><td>手势；<code>pinch</code> 走 <code>PointerMatrix</code>，单指通道表达不了两条同时的轨迹</td></tr>
-            <tr><td><code>waitFor</code> / <code>readList</code> / <code>scrollUntilVisible</code></td><td>设备侧等待、逐屏读列表、逐屏翻到目标</td></tr>
-            <tr><td><code>window(filter, opts)</code></td><td>报告焦点窗口或某 bundle 的窗口，可 focus / close</td></tr>
-            <tr><td><code>pressKey(key)</code></td><td>命名按键或数字 key code</td></tr>
-            <tr><td><code>steps</code></td><td>本会话已记录的步数</td></tr>
-            <tr><td><code>release()</code></td><td>结束任务</td></tr>
+            <tr><td><code>connect(opts)</code> / <code>CoreSession.open(dev, opts)</code></td><td>取设备租约；被别的任务占用时抛 <code>LeaseHeldError</code>，此时设备还没被读写</td></tr>
+            <tr><td><code>observe.layout()</code> / <code>observe.screenshot()</code></td><td>节点表与截图；<code>observe()</code> 本身打印一行一元素的屏幕</td></tr>
+            <tr><td><code>act.tap(target, opts)</code></td><td><code>{ref}</code> 走坐标点击，<code>{text}</code> 或 <code>On</code> 走设备自己的 <code>Component.click</code></td></tr>
+            <tr><td><code>act.type(text, opts)</code></td><td>默认输入到焦点框；密码框在任何按键前被策略拒绝。<code>{paste: true}</code> 一次粘贴而不是逐字符输入，实测 36 字符 1.3 s 对 2.8 s</td></tr>
+            <tr><td><code>act.swipe</code> / <code>longPress</code> / <code>doubleClick</code> / <code>drag</code> / <code>fling</code> / <code>pinch</code></td><td>手势；<code>pinch</code> 走 <code>PointerMatrix</code>，单指通道表达不了两条同时的轨迹</td></tr>
+            <tr><td><code>wait.forText</code> / <code>wait.scrollUntil</code></td><td>设备侧等待、逐屏翻到目标</td></tr>
+            <tr><td><code>observe.window(filter, opts)</code></td><td>报告焦点窗口或某 bundle 的窗口，可 focus / close</td></tr>
+            <tr><td><code>act.key(key)</code></td><td>命名按键或数字 key code</td></tr>
+            <tr><td><code>close()</code></td><td>关 viewer、释放租约、dispose 设备</td></tr>
           </tbody>
         </table>
       </div>
@@ -211,15 +246,16 @@ try {
         </table>
       </div>
 
-      <h3>命令行</h3>
-      <p>安装后命令名是 <code>uitest-phone</code>；<code>npx uitest-sdk &lt;command&gt;</code> 等价，无需全局安装。</p>
+      <h3>命令行属于 <code>uitest-phone</code></h3>
+      <p>库不带可执行文件。每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备；21 条命令与 MCP 工具见 <a href="https://github.com/growvv/uitest-sdk/blob/master/packages/phone/README.md">uitest-phone 的 README</a>。</p>
       <pre><code>uitest-phone doctor
 uitest-phone observe --task "check WLAN"
 uitest-phone inspect --html layout.html
 uitest-phone tap --ref 12 --task "check WLAN"
 uitest-phone read-list --ref 20
 uitest-phone report --title "WLAN check"
-uitest-phone live                        # 浏览器里投屏 + 节点表（0.7.0）</code></pre>
+uitest-phone approvals list               # 人回答被策略拦下的步骤
+uitest-console                            # 浏览器里投屏、接管、批准（另一个产品）</code></pre>
       <p>全局 flag 对所有命令生效：<code>--task</code>、<code>--state-dir</code>、<code>--device</code>、<code>--read-only</code>、<code>--apps</code>、<code>--confirm</code>、<code>--settle-ms</code>、<code>--trace-shots</code>、<code>--approval-id</code>、<code>--approval-scope</code>、<code>--json</code>。完整命令与参数见 <code>--help</code> 与随包 Skill 的 <code>REFERENCE.md</code>。</p>
       <p>状态与退出码：<code>settled</code> 0、<code>uncertain</code>/<code>not_found</code> 1、<code>lease_held</code>/<code>handoff</code>/<code>device_locked</code>/<code>device_needs_setup</code>/<code>device_offline</code> 2、<code>approval_pending</code> 3、<code>blocked</code>/<code>approval_denied</code>/<code>stale</code> 4。<code>--json</code> 时输出 <code>{status, code, text, data}</code>。</p>
       <p>设备本身不可用时也有名字：锁屏是 <code>device_locked</code>（不把锁屏当成页面去点），连上但没授权调试是 <code>device_needs_setup</code>，没插/关机/Offline 是 <code>device_offline</code>。三者都以退出码 2 停下，Agent 应请人解锁、点「允许」或插线，而不是重试。</p>
@@ -260,9 +296,8 @@ uitest-phone resume     # 交还给 Agent</code></pre>
       <p>Agent 也能反向发起：<code>handoff --reason "请登录后继续"</code> 把手机交给人，立即返回 <code>handoff</code>（退出码 2）。原因写在租约里，之后每个拿到 <code>lease_held</code> 的命令都会重复它；人做完后 <code>resume</code>，同一个 Agent 会话下一条命令继续。MCP 里对应工具是 <code>uitest_handoff</code>，参数 <code>reason</code> 必填——没有原因，人打开手机时只能猜 Agent 要什么。</p>
       <p>设备侧没有「人在用手机」的可靠信号：UI 事件流会关掉会话、能把 agent daemon 卡死，而且合成点击也会被当成手指，分不出真假。所以接管是人的明确声明，这也正好是 Agent 唯一能遵守的形式。</p>
 
-      <h2 id="cast">7. 投流与录制</h2>
-      <pre><code>const cast = await dev.createCast({
-  mode: "stream",   // "stream" | "record"
+      <h2 id="cast">8. 投流与录制</h2>
+      <pre><code>const cast = await session.cast.open({
   frameRate: 60,    // 15 | 30 | 60 | 120，默认 30
   scale: 2,         // 1..5 整数缩小因子，默认 1
 });
@@ -306,14 +341,13 @@ await cast.dispose();</code></pre>
       </div>
       <h3>选择规则</h3>
       <ul>
+        <li><code>transport: "mjpeg"</code> → MJPEG（<code>castKind === "mjpeg"</code>，10–16 fps）。请求录制直接抛 <code>ExtensionMissingError</code>：MJPEG 后面没有 muxer。</li>
         <li><code>transport: "ws"</code> → 7.0 WebSocket 扩展。没有 <code>wsExtension</code>、文件不存在、或设备是 x86_64（没有 7.0 构建）都抛 <code>ExtensionMissingError</code>。<strong>不会退回 gRPC。</strong></li>
-        <li>否则 <code>resolveCastExtension()</code> 非空 → H.264（gRPC over abstract socket，实测 15–89 fps）。</li>
-        <li>为空（x86_64 模拟器）→ MJPEG（<code>castKind === "mjpeg"</code>，10–16 fps）。</li>
+        <li>不指定 <code>transport</code> 时按能力选：<code>resolveCastExtension()</code> 非空 → H.264（gRPC over abstract socket，实测 15–89 fps）；为空（x86_64 模拟器）→ MJPEG。</li>
         <li>x86_64 上请求 <code>mode: "record"</code> 直接抛 <code>ExtensionMissingError</code>，不会返回一个「录不到东西」的客户端。</li>
       </ul>
       <h3>7.0 WebSocket 传输<span class="doc-tag">0.6.0</span></h3>
-      <pre><code>const cast = await dev.createCast({
-  mode: "stream",
+      <pre><code>const cast = await session.cast.open({
   transport: "ws",
   wsExtension: "./libscrcpy_server_unix_7.0-20260930.z.so",
   port: 5000,
@@ -321,42 +355,48 @@ await cast.dispose();</code></pre>
       <p>SDK 不打包 7.0 扩展，需要自己提供 <code>.so</code>。它按文件名推到 <code>/data/local/tmp/&lt;name&gt;</code> 并用 <code>--extension-name &lt;name&gt;</code> 加载，所以能和内置的 6.8 扩展同时存在、互不覆盖。</p>
       <p>真机实测：启动 0.9–1.3 s，首帧 82–137 ms，<code>requestIDR</code> 7–9 ms，<code>-frameRate 30</code> 下 20.8–23.2 fps。与 6.8 持平，优势是客户端零 gRPC 依赖。</p>
       <p class="note"><strong>一个客户端独占一个 daemon。</strong>实测 <code>stop</code> 是进程级的：任一客户端 stop，同一 daemon 上另一路立刻停止出流；stop 后监听 socket 关闭，新客户端连不上。并发投流靠多个 <code>port</code>，不是一个 daemon 多客户端。</p>
-      <h3>投屏与实时检查：<code>uitest-sdk live</code><span class="doc-tag">0.7.0</span></h3>
-      <pre><code>npx uitest-sdk live                    # http://127.0.0.1:7000/
-npx uitest-sdk live --privacy off      # 初始不遮凭据
-npx uitest-sdk live --no-layout        # 只投屏</code></pre>
+      <h3>投屏与实时检查：<code>viewer</code><span class="doc-tag">0.7.0</span></h3>
+      <pre><code>const view = await session.view.open();               // http://127.0.0.1:7000/
+const view2 = await session.view.open({ privacy: false, layout: false });
+await view.close();                                    // 关页面，不关会话</code></pre>
+      <p>浏览器里的镜像与接管是产品 <code>uitest-console</code> 的界面（<code>uitest-console</code> 命令），
+它用的就是这里的 viewer。要自己的页面，用 <code>uitest-sdk/viewer</code> 的
+<code>startViewerServer</code> 与 <code>createViewerSource</code>：页面、来源校验与解码都在库里，
+产品只组合选项。</p>
       <p>一个页面里同时有画面和布局：右边是当前屏的节点表，点节点（或点画面上的框）就复制它的 ref、角色、标签与中心坐标，编号和 <code>tap --ref</code> 共用。解码在浏览器里完成：H.264 走 WebCodecs <code>VideoDecoder</code>（服务端把 Annex-B 转 AVCC 并生成 <code>avcC</code>），MJPEG 走 <code>createImageBitmap</code>，没有 MSE、没有 fMP4 重封装。</p>
       <p><strong>隐私开关默认打开</strong>：密码框与验证码在节点表和画面上都被遮住。关掉后服务端用 <code>redact: false</code> 重新读布局，原文才出现 —— 遮罩在读的时候完成，不是事后擦除。多个页面同时连着时，只要有一个还开着遮罩，共享的屏幕模型就保持遮罩。</p>
       <p>状态机是 <code>idle → starting → live → reconnecting → stopping → stopped</code>，失败从任意状态进入 <code>failed</code> 并按 0.5/1/2/4/5 s 退避重启；页面重载有 5 s 宽限期，不重开投流。背压在 socket 写队列超过 1 MB 时丢增量帧并请求 IDR，页面侧 <code>decodeQueueSize &gt; 4</code> 时同样丢。</p>
       <p><strong>只接受自己发出的页面</strong><span class="doc-tag">0.9.3</span>：浏览器对 WebSocket <em>不做</em>同源限制，所以任何打开的网页都能连上 <code>ws://127.0.0.1:7000</code>，而端口是固定常量。服务端因此自己做 <strong>Origin 白名单</strong>：<code>Origin</code> 的 host 与 port 必须和客户端实际拨号的 <code>Host</code> 一致、scheme 是 <code>http:</code>；绑在回环上时拨号名还必须是回环名（这条挡 DNS rebinding）；<code>Origin: null</code> 一律拒绝；没有 <code>Origin</code> 头的非浏览器客户端放行。拒绝时直接回 <strong>403</strong>，不先升级再断开。默认只绑 <code>127.0.0.1</code>——能连上端口的人就能看这台手机，详见 <a href="https://github.com/growvv/uitest-sdk/blob/master/SECURITY.md">SECURITY.md</a>。</p>
       <p><strong>页头两个按钮：Shot 存截图，Record 录 MP4。</strong>截图走 <code>Session.observe({ out })</code>，所以遮罩规则和节点表是同一套——文字里藏起来的密码在像素里也是灰块。录屏另起一个 record daemon（gRPC 用自己的 socket，WebSocket 用端口 +1），画面不会停；同一时间只有一个录屏，页面关掉时正在录的那个会被停掉并写盘。实测录制期间画面保持 29–30 fps。</p>
       <p>真机 1216×2688 / 30 fps 实测：首帧约 3.1 s（含 daemon 启动），画面持续变化时页面绘制 <strong>18.5 fps</strong>，帧间隔中位 33 ms、p90 55 ms，每帧平均 11.6 KB。</p>
-      <p><strong>接管：页面默认只读，点页头「接管」后画布就是设备</strong><span class="doc-tag">0.9.0</span>。点击、长按、拖动、滚动、双指缩放、键盘输入、<code>back</code> / <code>home</code> 都直接落在手机上。输入走<strong>第二条通道</strong>——独立的 <code>hdc fport</code> 与 agent 连接（<code>device.openInputLane()</code>），和读布局那条互不排队：2 s 的长按不会让节点表停 2 s。真机实测点击注入的写通道往返 p50 <strong>3.9 ms</strong>、p95 18.9 ms；整轮混合输入（含 456 ms 的滚轮调用）p50 275.4 ms。控制权独占：另一个页面 <code>take</code> 会收到 <code>busy by &lt;clientId&gt;</code>，控制者离开或输入出错时广播 <code>readonly</code>；按住 10 s 无移动只抬指针、保留控制权。键盘停顿 300 ms 整段落字，拼音组合期间不上屏、<code>compositionend</code> 时整词落下。</p>
+      <p><strong>接管：页面默认只读，点页头「接管」后画布就是设备</strong><span class="doc-tag">0.9.0</span>。点击、长按、拖动、滚动、双指缩放、键盘输入、<code>back</code> / <code>home</code> 都直接落在手机上。输入走<strong>第二条通道</strong>——独立的 <code>hdc fport</code> 与 agent 连接（<code>uitest-sdk/viewer</code> 的 <code>openInput()</code>），和读布局那条互不排队：2 s 的长按不会让节点表停 2 s。真机实测点击注入的写通道往返 p50 <strong>3.9 ms</strong>、p95 18.9 ms；整轮混合输入（含 456 ms 的滚轮调用）p50 275.4 ms。控制权独占：另一个页面 <code>take</code> 会收到 <code>busy by &lt;clientId&gt;</code>，控制者离开或输入出错时广播 <code>readonly</code>；按住 10 s 无移动只抬指针、保留控制权。键盘停顿 300 ms 整段落字，拼音组合期间不上屏、<code>compositionend</code> 时整词落下。</p>
       <p>这条链路每一步的耗时都量过：服务端把 Annex-B 转 AVCC 并封装成帧是 <strong>12 µs/帧</strong>（关键帧 43 µs），浏览器解码 1216×2688 是 <strong>1.57 ms/帧</strong>（硬解）到 2.46 ms/帧（强制软解），画布绘制 0.07 ms。30 fps 的 33 ms 预算里只用掉约 5%，瓶颈在设备侧编码器。<a href="index.html#codec">和 hscrcpy / HOScrcpy / HarmonyMirror 的逐行对比见首页</a>，<a href="index.html#showcase">真实页面截图见首页「实拍」</a>。</p>
-      <pre><code>import { LiveServer } from "uitest-sdk";
+      <pre><code>import { createViewerSource, startViewerServer } from "uitest-sdk/viewer";
 
-const server = await LiveServer.start({
-  port: 0,
+const source = createViewerSource(session.core, session.device, {
+  stateDir: ".uitest-phone",
+  cast: { frameRate: 30 },
+});
+const server = await startViewerServer({
+  port: 0,          // 0 → 系统分配
   privacy: true,
-  graceMs: 5000,
-  layoutMs: 250,
-  source: {
-    createCast: () =&gt; dev.createCast({ mode: "stream", frameRate: 30 }),
-    readScreen: (redact) =&gt; {
-      session.reader.builder.setRedact(redact);
-      return session.reader.read();
-    },
-  },
+  graceMs: 5000,    // 页面断开后保留投流的时间
+  layoutMs: 250,    // 两次读布局的最小间隔
+  source,
 });
 console.log(server.port);   // 页面地址
 await server.close();</code></pre>
+      <p><code>createViewerSource</code> 是给自家会话用的现成 source：<code>layout: false</code> 只投屏不读布局，
+<code>recordPath</code> 指定录屏文件，<code>socketSuffix</code> 让多个页面各用一条投流 socket。
+<code>ViewerServerOptions</code> 还有 <code>watchdogMs</code>、<code>features</code>、<code>page</code>、
+<code>input</code>（接管仲裁）与 <code>hooks</code>（产品在自己的页面上加消息）。</p>
       <h3>录制</h3>
-      <pre><code>const cast = await dev.createCast({ mode: "record", frameRate: 30, outputPath: "out.mp4" });
+      <pre><code>const rec = await session.cast.record({ frameRate: 30, out: "out.mp4" });
 // 让画面动起来：静止画面不会产生新帧
-await cast.dispose(); // 关闭 muxer → 等待设备写完 → 拉回 out.mp4</code></pre>
-      <p>设备侧文件路径写死在扩展里（<code>/data/local/tmp/mytest.mp4</code>），不可改。编码器是起停驱动的：<code>createCast</code> 返回时已经在录，<code>dispose()</code> 后才完成。</p>
+await rec.stop(); // 关闭 muxer → 等待设备写完 → 拉回 out.mp4</code></pre>
+      <p>设备侧文件路径写死在扩展里（<code>/data/local/tmp/mytest.mp4</code>），不可改。编码器是起停驱动的：<code>record()</code> 返回时已经在录，<code>stop()</code> 后才完成。</p>
 
-      <h2 id="uitree">8. UI 树与窗口</h2>
+      <h2 id="uitree">9. UI 树与窗口</h2>
       <h3>整屏 UI 树</h3>
       <pre><code>const tree = await dev.agent.captureLayout(); // { attributes, children }
 console.log(tree.attributes.bundleName, tree.children.length);</code></pre>
@@ -385,7 +425,7 @@ if (bounds) {
 // r.nodes: [{ index, ref, role, label, rect, state, masked }, ...]</code></pre>
       <p>不走 Session 时可以直接组合组件：<code>Screenshot.mark(boxes)</code> 是绘制原语，<code>inspectScreen(screen, shot)</code> 返回 <code>{ nodes, annotated, plain }</code>，<code>renderPanel(screen, inspection)</code> 生成 HTML。纯客户端，建立在已有的 <code>captureLayout</code> 与 JPEG 截图上。</p>
 
-      <h2 id="hypium">9. 完整 hypium API<span class="doc-tag">0.5.0</span></h2>
+      <h2 id="hypium">10. 完整 hypium API<span class="doc-tag">0.5.0</span></h2>
       <p>设备侧的 hypium 驱动公开 118 个方法（<code>OHOSDriver</code> 106 + 兼容层 12）。<code>dev.hypium</code> 把它们逐个映射成 TypeScript 方法，参数按设备实际行为定，并逐条标注真机状态：</p>
       <pre><code>import { On } from "uitest-sdk";
 
@@ -403,7 +443,7 @@ console.log(await dev.hypium.getComponentProperty(On.type("Button"), "bounds"));
       <p>全部 118 个方法、参数说明、示例与调用路径图在 <a href="api.html">完整 API</a> 页。</p>
       <p class="note">从 <code>0.5.0</code> 起提供；<code>0.4.0</code> 及更早的版本没有 <code>dev.hypium</code>。</p>
 
-      <h2 id="tools">10. 工具类与导出</h2>
+      <h2 id="tools">11. 工具类与导出</h2>
       <h3>文件、配置与帧率</h3>
       <pre><code>const entries = await dev.files.list("/data/local/tmp"); // [{ name, path, size, isDir, mode, mtime }]
 await dev.files.mkdir("/data/local/tmp/demo dir", { parents: true });
@@ -412,7 +452,7 @@ await dev.files.remove("/data/local/tmp/demo dir", { recursive: true });
 
 const cfg = await CastConfig.load(castConfigPath(stateDir));
 await cfg.set({ scale: 2, frameRate: 30, transport: "ws" });
-const cast = await dev.createCast({ ...cfg.toCastOptions("stream"), wsExtension: "./lib.so" });
+const cast = await createCast(dev, { ...cfg.toCastOptions("stream"), wsExtension: "./lib.so" });
 
 const meter = new FpsMeter({ windowMs: 2000 });
 for await (const chunk of cast.stream()) meter.add();</code></pre>
@@ -432,7 +472,7 @@ for await (const chunk of cast.stream()) meter.add();</code></pre>
             <tr><td><code>CASTING_EXTENSION</code></td><td><code>libscreen_casting.z.so</code></td></tr>
             <tr><td><code>resolveCastingExtension(abi, dir)</code></td><td>该 ABI 的 casting 扩展路径，没有返回 null</td></tr>
             <tr><td><code>loadScrcpyService()</code></td><td>加载 <code>scrcpy.proto</code> 的 gRPC service 构造器</td></tr>
-            <tr><td><code>H264CastClient</code> / <code>MjpegCastClient</code></td><td>低层客户端；正常用 <code>dev.createCast()</code></td></tr>
+            <tr><td><code>H264CastClient</code> / <code>MjpegCastClient</code></td><td>低层客户端；正常用 <code>session.cast.open()</code> / <code>createCast()</code></td></tr>
             <tr><td><code>Files</code></td><td>设备文件封装（<code>dev.files</code>）：list / stat / mkdir / remove / move / push / pull / readText</td></tr>
             <tr><td><code>CastConfig</code> / <code>castConfigPath()</code></td><td>投流默认值的 JSON 持久化（<code>&lt;state-dir&gt;/cast.json</code>）</td></tr>
             <tr><td><code>FpsMeter</code></td><td>客户端帧率统计：<code>add()</code> / <code>stats()</code> / <code>reset()</code></td></tr>
@@ -454,7 +494,7 @@ for await (const chunk of cast.stream()) meter.add();</code></pre>
         </table>
       </div>
 
-      <h2 id="errors">11. 错误码</h2>
+      <h2 id="errors">12. 错误码</h2>
       <p>所有错误继承 <code>UitestError</code>，带 <code>code</code> 与可选 <code>cause</code>。</p>
       <div class="doc-table">
         <table>
@@ -470,7 +510,7 @@ for await (const chunk of cast.stream()) meter.add();</code></pre>
         </table>
       </div>
 
-      <h2 id="concurrency">12. 并发与生命周期</h2>
+      <h2 id="concurrency">13. 并发与生命周期</h2>
       <ul>
         <li><strong>一条连接一个在途请求</strong>：<code>SerialQueue</code> 串行化；断开后 <code>autoRestart</code> 用新 socket 重连，不重放失败中的请求。</li>
         <li><strong>全局锁冲突</strong>：只有 <code>Disallow concurrent use</code> 会退避重试（0.5 s 起，抖动后翻倍，最多 40 次，20 s 封顶）。</li>
@@ -480,7 +520,7 @@ for await (const chunk of cast.stream()) meter.add();</code></pre>
         <li><strong>退出前 <code>dispose()</code></strong>：撤销 fport，否则本地会留下隧道。</li>
       </ul>
 
-      <h2 id="examples">13. 完整示例</h2>
+      <h2 id="examples">14. 完整示例</h2>
       <h3>点击、滑动与输入</h3>
       <pre><code>const { width, height } = await dev.agent.getDisplaySize();
 await dev.agent.click(width / 2, height / 2);
@@ -489,7 +529,7 @@ await dev.agent.inputText(width / 2, height * 0.5, "hello");</code></pre>
       <h3>只截一个应用窗口</h3>
       <pre><code>const jpeg = await dev.agent.cropToWindow({ bundleName: "com.huawei.hmos.settings" });</code></pre>
       <h3>投流并解码</h3>
-      <pre><code>const cast = await dev.createCast({ mode: "stream", frameRate: 30 });
+      <pre><code>const cast = await session.cast.open({ frameRate: 30 });
 try {
   for await (const chunk of cast.stream()) {
     if ("isKeyFrame" in chunk &amp;&amp; chunk.isKeyFrame) {
@@ -500,9 +540,9 @@ try {
   await cast.dispose();
 }</code></pre>
       <h3>录制 10 秒</h3>
-      <pre><code>const cast = await dev.createCast({ mode: "record", frameRate: 30, outputPath: "demo.mp4" });
+      <pre><code>const rec = await session.cast.record({ frameRate: 30, out: "demo.mp4" });
 await new Promise((r) =&gt; setTimeout(r, 10_000));
-await cast.dispose();</code></pre>
+await rec.stop();</code></pre>
       <h3>多设备并行</h3>
       <pre><code>const ids = ["&lt;device-a&gt;", "&lt;device-b&gt;"];
 const devices = await Promise.all(ids.map((deviceId) =&gt; Device.connect({ deviceId })));

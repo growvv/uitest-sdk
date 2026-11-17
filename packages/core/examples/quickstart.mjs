@@ -1,4 +1,4 @@
-// The 30-line tour: connect, measure, click, swipe, capture.
+// The 30-line tour: connect, measure, tap, swipe, capture.
 //
 // Run it from this repository after `npm run build` (the import is the package
 // referring to itself through its "exports"), or from any project after
@@ -6,37 +6,36 @@
 //
 //   node examples/quickstart.mjs
 //
-// No device serial lives here: Device.connect() picks the only attached target.
-import { writeFileSync } from "node:fs";
-import { Device } from "uitest-sdk";
+// No device serial lives here: connect() picks the only attached target.
+import { connect } from "uitest-sdk";
 
 const t0 = performance.now();
-const dev = await Device.connect();
+const session = await connect();
 const tConnect = Math.round(performance.now() - t0);
 
 try {
-  const { width, height } = await dev.agent.getDisplaySize();
+  const screen = await session.observe.layout();
+  const { width, height } = screen.display;
   console.log(`✓ connected  ${width}×${height}  (${tConnect} ms)`);
 
   const cx = Math.round(width / 2);
   const cy = Math.round(height / 2);
 
   const t1 = performance.now();
-  await dev.agent.click(cx, cy);
-  console.log(`✓ click(${cx}, ${cy})  ${Math.round(performance.now() - t1)} ms`);
+  await session.act.tap({ x: cx, y: cy });
+  console.log(`✓ tap(${cx}, ${cy})  ${Math.round(performance.now() - t1)} ms`);
 
   const t2 = performance.now();
-  await dev.agent.swipe(cx, Math.round(height * 0.7), cx, Math.round(height * 0.3), {
+  await session.act.swipe({
+    from: { x: cx, y: Math.round(height * 0.7) },
+    to: { x: cx, y: Math.round(height * 0.3) },
     durationMs: 300,
   });
   console.log(`✓ swipe()  ${Math.round(performance.now() - t2)} ms`);
 
   const t3 = performance.now();
-  const jpeg = await dev.agent.captureScreen();
-  console.log(`✓ captureScreen() → ${jpeg.length} bytes JPEG  ${Math.round(performance.now() - t3)} ms`);
-  writeFileSync("screen.jpg", jpeg);
-
-  console.log("✓ wrote screen.jpg");
+  const shot = await session.observe.screenshot({ out: "screen.jpg" });
+  console.log(`✓ screenshot() → ${shot.path}  ${Math.round(performance.now() - t3)} ms`);
 } finally {
-  await dev.dispose();
+  await session.close();
 }

@@ -23,6 +23,29 @@ export type {
   ListOptions as AppListOptions,
   ShellRunner,
 } from "../transport/apps.js";
+
+// The agent layer, for a caller building its own reader or driver. These were
+// root exports before 0.10; the split moved them here rather than dropping
+// them, because a screen model, a selector and a gesture primitive are the
+// library's core capability, not the products' convenience.
+export { On, selectorText, parseOn, parseKeyName, KEY_NAMES } from "../driver/agent/selector.js";
+export type { KeyName } from "../driver/agent/selector.js";
+export { Screenshot } from "../driver/agent/shot.js";
+export type { ShotContext, MarkBox, Rgb } from "../driver/agent/shot.js";
+export { parseBounds, renderFull, renderDiff, findElement, findText, findTexts, nodesUnder, textOf, lineFor, ScreenBuilder } from "../driver/agent/screen.js";
+export type { ElementRole, Diff, ScreenBuilderOptions } from "../driver/agent/screen.js";
+export { Components, ComponentHandle, UiWindowHandle, resolveSelector } from "../driver/agent/components.js";
+export type { HypiumSource, WaitOptions } from "../driver/agent/components.js";
+export { Gestures } from "../driver/agent/gestures.js";
+export type { GestureDevice, GestureOptions, GestureResult, FingerPath } from "../driver/agent/gestures.js";
+export { ScreenReader, settle } from "../driver/agent/settle.js";
+export type { ScreenSource, SettleOptions, SettleResult } from "../driver/agent/settle.js";
+export { FrameDemux } from "../driver/agent/demux.js";
+export type { DemuxHandlers } from "../driver/agent/demux.js";
+export { SerialQueue } from "../driver/agent/queue.js";
+export { DevicePool } from "../transport/pool.js";
+export { cropRect } from "../transport/util/bounds.js";
+export type { UiNode } from "../transport/model.js";
 export { Gesture, HYPIIUM_CATALOG, HypiumDriver, shellQuote, splitCommand } from "../driver/hypium/index.js";
 export type {
   ActionOptions,

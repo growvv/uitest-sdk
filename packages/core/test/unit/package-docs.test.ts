@@ -235,6 +235,86 @@ describe("SECURITY.md", () => {
   });
 });
 
+describe("package split", () => {
+  // 0.10.0 moved the CLI, the MCP server, the skill and the browser page out
+  // of the library. A core README that still tells a reader `npx uitest-sdk
+  // mcp` sends them to a package with no bin at all, and the reader has no way
+  // to tell the doc is stale.
+  const coreReadme = readCore("README.md");
+  const phoneReadme = readFileSync(join(ROOT, "packages", "phone", "README.md"), "utf8");
+  const consoleReadme = readFileSync(join(ROOT, "packages", "console", "README.md"), "utf8");
+
+  it("does not present the CLI, MCP or live page as the library's own", () => {
+    for (const gone of [
+      "npx uitest-sdk mcp",
+      "npx uitest-sdk install-skill",
+      "npx uitest-sdk live",
+      "npx uitest-sdk connect",
+      "npm install -g uitest-sdk",
+    ]) {
+      expect(coreReadme, `core README still advertises "${gone}"`).not.toContain(gone);
+      expect(apiDoc, `docs/api.md still advertises "${gone}"`).not.toContain(gone);
+    }
+  });
+
+  it("names the two products a reader should install instead", () => {
+    expect(coreReadme).toContain("uitest-phone");
+    expect(coreReadme).toContain("uitest-console");
+  });
+
+  it("documents the session categories and the subpaths", () => {
+    for (const name of ["observe", "act", "wait", "cast", "view", "govern"]) {
+      expect(apiDoc, `docs/api.md does not document the ${name} namespace`).toContain(name);
+    }
+    expect(apiDoc).toContain("connect(");
+    for (const subpath of ["uitest-sdk/commands", "uitest-sdk/cast", "uitest-sdk/viewer", "uitest-sdk/govern", "uitest-sdk/drivers"]) {
+      expect(apiDoc, `docs/api.md does not link ${subpath}`).toContain(subpath);
+    }
+  });
+
+  it("gives the phone README every command the CLI serves", () => {
+    // The README is what npm shows. A command missing here is a command a
+    // reader will never discover, and the count in the prose would be wrong.
+    for (const name of [
+      "observe", "tap", "type", "swipe", "double-click", "drag", "fling",
+      "pinch", "key", "wait-for", "read-list", "scroll-until", "launch",
+      "apps", "window", "doctor", "screenshot", "inspect", "report", "status",
+      "handoff",
+    ]) {
+      expect(phoneReadme, `phone README does not document ${name}`).toContain(`\`${name}\``);
+    }
+  });
+
+  it("explains the approvals gate from the person's side", () => {
+    // The one rule that makes the gate real: the agent may not answer its own
+    // request. The README has to say the command exists and who runs it.
+    expect(phoneReadme).toContain("uitest-phone approvals");
+    expect(phoneReadme).toMatch(/allow/i);
+    expect(phoneReadme).toMatch(/deny/i);
+    expect(phoneReadme).toContain("0.9.4");
+  });
+
+  it("gives the console README the takeover and the inbox", () => {
+    expect(consoleReadme).toContain("uitest-console");
+    expect(consoleReadme).toMatch(/Hold/);
+    expect(consoleReadme).toMatch(/Resume/);
+    expect(consoleReadme).toMatch(/inbox/i);
+    expect(consoleReadme).toContain("127.0.0.1");
+  });
+
+  it("has a repository README that maps the packages and the commands", () => {
+    // The root used to be the package. It is now the monorepo, and a visitor
+    // arriving from GitHub needs to know which directory ships which npm name.
+    const readme = readRoot("README.md");
+    for (const name of ["packages/core", "packages/phone", "packages/console"]) {
+      expect(readme, `root README does not map ${name}`).toContain(name);
+    }
+    for (const command of ["npm test", "node scripts/check-site.mjs", "node scripts/check-layers.mjs"]) {
+      expect(readme, `root README does not document ${command}`).toContain(command);
+    }
+  });
+});
+
 describe("npm tarball", () => {
   it("is the core library: no bin, no MCP, no skill, no product source", () => {
     const out = execFileSync("npm", ["pack", "--dry-run", "--json"], {

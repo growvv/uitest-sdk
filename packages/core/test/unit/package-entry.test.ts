@@ -103,8 +103,52 @@ describe("package entry", () => {
     expect("HypiumDriver" in sdk).toBe(false);
   });
 
-  it("maps every subpath to a built file in package.json", () => {
-    const pkg = JSON.parse(read("package.json")) as {
+  // 0.9.4 published 126 names from its root. The split moved them behind
+  // subpaths on purpose, but "behind a subpath" and "gone" look identical to a
+  // caller: 62 of them were reachable from no entry point at all, including
+  // `On`, `Screenshot` and `doctor`, which `docs/api.md` still tells a reader
+  // to import. Every capability the library kept has to be importable from
+  // exactly one documented entry.
+  it("keeps every library capability reachable from a public entry", async () => {
+    const entries: Record<string, Record<string, unknown>> = {
+      ".": sdk as unknown as Record<string, unknown>,
+      "./commands": await import("../../src/exports/commands.js"),
+      "./cast": await import("../../src/exports/cast.js"),
+      "./viewer": await import("../../src/exports/viewer.js"),
+      "./govern": await import("../../src/exports/govern.js"),
+      "./drivers": await import("../../src/exports/drivers.js"),
+    };
+    const expected: Record<string, string[]> = {
+      "./commands": ["doctor", "renderDoctor", "deviceTagOf", "EXIT_CODE", "statusOf", "actionText", "isOk"],
+      "./cast": [
+        "buildHandshake", "encodeTextFrame", "decodeFrames", "nalTypes", "isKeyFrame",
+        "encodeCloseFrame", "encodePongFrame", "handshakeStatus",
+      ],
+      "./viewer": ["inspectScreen", "renderPanel", "colorFor", "ROLE_COLORS"],
+      "./drivers": [
+        "On", "selectorText", "parseOn", "parseKeyName", "KEY_NAMES",
+        "Screenshot", "parseBounds", "cropRect",
+        "Components", "ComponentHandle", "UiWindowHandle", "resolveSelector",
+        "Gestures", "ScreenBuilder", "ScreenReader", "settle",
+        "FrameDemux", "SerialQueue", "DevicePool",
+        "renderFull", "renderDiff", "findElement", "findText", "findTexts", "nodesUnder", "textOf", "lineFor",
+      ],
+    };
+    const missing: string[] = [];
+    for (const [subpath, names] of Object.entries(expected)) {
+      const mod = entries[subpath]!;
+      for (const name of names) {
+        if (!(name in mod)) missing.push(`${subpath}: ${name}`);
+      }
+    }
+    expect(missing, `not importable from any public entry:\n${missing.join("\n")}`).toEqual([]);
+    // The root stays the small entry: these live behind a subpath on purpose.
+    for (const name of ["On", "Screenshot", "doctor", "COMMANDS", "startViewerServer", "Policy"]) {
+      expect(name in sdk, `${name} must not be a root export`).toBe(false);
+    }
+  });
+
+  it("maps every subpath to a built file in package.json", () => {    const pkg = JSON.parse(read("package.json")) as {
       exports: Record<string, { types: string; import: string }>;
     };
     expect(Object.keys(pkg.exports).sort()).toEqual([

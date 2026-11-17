@@ -7,7 +7,11 @@
  */
 export { COMMANDS, CommandRunner } from "../operations/commands.js";
 export type { CommandSpec, ArgType, RunnerOptions, RunResult } from "../operations/commands.js";
-export { EXIT_CODE } from "../driver/agent/result.js";
+export { EXIT_CODE, statusOf, actionText, isOk } from "../driver/agent/result.js";
 export { exitCodeForError, parseArgv } from "../operations/argv.js";
 export type { ParsedArgv } from "../operations/argv.js";
 export type { Session as CoreSession } from "../operations/session.js";
+// The device probe is a library capability: a product's `doctor` command is a
+// formatter around this, not its own copy of the capability checks.
+export { doctor, renderDoctor, deviceTagOf } from "../operations/doctor.js";
+export type { Capabilities, DoctorReport, TargetLister } from "../operations/doctor.js";

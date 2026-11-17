@@ -62,7 +62,7 @@ const pages = [
 ];
 
 // ------------------------------------------------------------------- anchors
-const sections = ["hero", "terminal", "cli", "control", "showcase", "bench", "compare", "codec", "features", "arch", "video", "limits"];
+const sections = ["hero", "packages", "terminal", "cli", "control", "showcase", "bench", "compare", "codec", "features", "arch", "video", "limits"];
 for (const id of sections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(html)) fail(`index.html is missing id="${id}"`);
 }
@@ -127,7 +127,7 @@ if (termLines < 5) fail(`#terminal 只有 ${termLines} 行 .term-line，至少�
 const cli = sectionHtml("cli");
 for (const needle of [
   "uitest-phone",
-  "npx uitest-sdk",
+  "npx uitest-phone",
   "observe",
   "tap",
   "read-list",
@@ -140,11 +140,11 @@ for (const needle of [
   "not_found",
   "approval_pending",
   "lease_held",
-  "uitest-sdk mcp",
-  "uitest-sdk install-skill",
+  "uitest-phone mcp",
+  "uitest-phone install-skill",
   "refs-&lt;hash&gt;.json",
   // The two agent setups and the takeover, which 0.2.0 did not have.
-  "uitest-sdk connect",
+  "uitest-phone connect",
   "~/.agents/skills",
   "uitest-phone hold",
   "resume",
@@ -154,7 +154,8 @@ for (const needle of [
   "宿主侧不常驻",
   // 0.7.0: the live page is a person's tool, so the home page must say what it
   // shows, that masking is on by default, and what the state machine does.
-  "uitest-sdk live",
+  // 0.10.0: that page is now the uitest-console product.
+  "uitest-console",
   "WebCodecs",
   "18.5 fps",
   "隐私开关默认打开",
@@ -301,7 +302,7 @@ if (accentNodes !== 2) fail(`#codec 的图有 ${accentNodes} 个高亮节点，�
 // and the pairs must line up (equal counts) or the animation desynchronises.
 const showcase = sectionHtml("showcase");
 for (const needle of [
-  "uitest-phone live",
+  "uitest-console",
   "inspect --html",
   "assets/showcase/live.jpg",
   "assets/showcase/inspect-panel.jpg",
@@ -480,7 +481,9 @@ for (const needle of [
   "createCast",
   "captureScreen",
   "UitestError",
-  "0.2.0",
+  // 0.10.0: the page now documents the split, and the CLI history it used to
+  // carry here lives in the changelog and in uitest-phone's own README.
+  "0.10.0",
   "0.4.0",
   // The docs page states the version it documents; a release that forgets to
   // bump it leaves the page claiming an older package than npm has.
@@ -490,13 +493,14 @@ for (const needle of [
   // Live mirroring is the release's headline: the docs must name the command,
   // the privacy switch and the fact that masking happens when the screen is
   // read rather than being painted over the video.
-  "uitest-sdk live",
+  "session.view.open",
   "WebCodecs",
-  "privacy off",
+  // The switch is an option on the call now, not a flag string.
+  "privacy: false",
   "遮罩在读的时候完成",
   "12 µs/帧",
   "index.html#codec",
-  "LiveServer",
+  "startViewerServer",
   "decodeQueueSize",
   // The 7.0 WebSocket transport is a user-visible option, not an internal
   // detail: the docs must name the flag and the one-daemon-per-client rule.
@@ -512,10 +516,11 @@ for (const needle of [
   "dev.files",
   "CastConfig",
   "FpsMeter",
-  // The CLI half of the package is documented here, not only on the home page.
-  "Session.open",
-  "TraceRecorder",
+  // The CLI half is now a product, and the docs must say so rather than
+  // presenting it as the library's own.
   "uitest-phone",
+  "uitest-console",
+  "npm i -g uitest-phone",
   "mcp",
   // Both agent setups and the takeover must be described, not just the flags.
   "install-skill",
@@ -538,7 +543,7 @@ for (const needle of [
   "升级不需要重跑",
   // 0.9.0: the page can drive the phone, through a second lane.
   "接管",
-  "openInputLane",
+  "openInput",
   "busy by",
   "3.9 ms",
 ]) {
@@ -554,6 +559,14 @@ if (!docsHtml.includes(`uitest-sdk <strong>${VERSION}</strong>`)) {
 }
 
 for (const needle of [
+  // 0.10.0: the split. The changelog is where a reader upgrading from 0.9.4
+  // looks, so the migration table has to be on the page.
+  "0.10.0",
+  "库与产品拆分",
+  "uitest-phone mcp",
+  "uitest-console",
+  "Device.createCast(opts)",
+  "openInputLane",
   "0.3.0",
   "0.4.0",
   "0.2.0",

@@ -11,6 +11,7 @@
   <nav class="nav">
     <a class="nav-brand" href="#hero">uitest-sdk</a>
     <div class="nav-links">
+      <a href="#packages">三个包</a>
       <a href="#features">能力</a>
       <a href="#cli">命令行</a>
       <a href="#control">接管</a>
@@ -33,7 +34,7 @@
         <p class="hero-kicker">HarmonyOS uitest 扩展 · Node.js SDK</p>
         <h1>用一条长连接，<br>控制鸿蒙设备</h1>
         <p class="hero-tagline">UI automation, screenshots and H.264 casting for HarmonyOS — from Node.js.</p>
-        <p class="hero-sub">把设备侧的 <code>agent.so</code> 与 <code>libscreen_casting.z.so</code> 封装成类型化 API：点击、滑动、截图、H.264 投流与 MP4 录制，走的是扩展自己的长连接，不是 hdc 的慢路径。</p>
+        <p class="hero-sub">把设备侧的 <code>agent.so</code> 与 <code>libscreen_casting.z.so</code> 封装成类型化 API：点击、滑动、截图、H.264 投流与 MP4 录制，走的是扩展自己的长连接，不是 hdc 的慢路径。库之上是两个产品——给 Agent 的命令行，和给人的浏览器界面。</p>
         <div class="install">
           <code>npm install uitest-sdk</code>
           <button id="copy-install" type="button">复制</button>
@@ -48,6 +49,40 @@
       </figure>
     </section>
 
+    <section id="packages" class="section packages reveal">
+      <h2>一个库，两个产品</h2>
+      <p class="section-lede">投屏、inspect、输入和治理都在库里；产品只组合它们，各自安装、各自发版。给 Agent 的那个没有界面，给人的那个只有浏览器页面。</p>
+      <div class="bench-grid">
+        <article class="bench-card">
+          <h3><code>uitest-sdk</code> · 库</h3>
+          <ul>
+            <li><code>connect()</code> 返回一个会话，按用途分成 <code>observe</code> / <code>act</code> / <code>wait</code> / <code>cast</code> / <code>view</code> / <code>govern</code>。</li>
+            <li>投屏、inspect 面板、浏览器输入与来源校验都只有一份实现，第三方产品同样能用。</li>
+            <li>没有可执行文件，也没有界面。</li>
+          </ul>
+          <p class="cli-note"><code>npm install uitest-sdk</code></p>
+        </article>
+        <article class="bench-card">
+          <h3><code>uitest-phone</code> · Agent</h3>
+          <ul>
+            <li>21 条命令的 CLI、stdio MCP server、随包 Skill。</li>
+            <li>审批由人回答：<code>approvals list|allow|deny</code>；Agent 拿到 id 也不能自己批准。</li>
+            <li>没有桌面壳，装在任何能跑 Node 的 Agent 主机上即可。</li>
+          </ul>
+          <p class="cli-note"><code>npm i -g uitest-phone</code></p>
+        </article>
+        <article class="bench-card">
+          <h3><code>uitest-console</code> · 人</h3>
+          <ul>
+            <li>浏览器里的镜像、节点表与隐私开关，复用库的 viewer。</li>
+            <li>Hold / Resume 写的是同一条租约；只观看不占用设备。</li>
+            <li>审批收件箱与命令行写同一份决定文件。</li>
+          </ul>
+          <p class="cli-note"><code>npm i -g uitest-console</code></p>
+        </article>
+      </div>
+      <p class="table-note">依赖只有一个方向：两个产品 → 库。产品之间互不依赖，库里没有产品代码；CI 的 <code>scripts/check-layers.mjs</code> 会拦住任何一次反向引用。</p>
+    </section>
     <section id="terminal" class="section terminal reveal">
       <h2 id="quickstart">快速开始</h2>
       <div class="term">
@@ -55,23 +90,23 @@
         <pre class="term-body"><span class="term-line" data-kind="cmd">$ npm install uitest-sdk</span>
 <span class="term-line" data-kind="cmd">$ node quickstart.mjs</span>
 <span class="term-line" data-kind="ok">✓ connected  BRA-AL00 · 1216×2688</span>
-<span class="term-line" data-kind="ok">✓ click(608, 1344)                 32 ms</span>
-<span class="term-line" data-kind="ok">✓ captureScreen() → 608×1344 JPEG  118 ms</span></pre>
+<span class="term-line" data-kind="ok">✓ tap(608, 1344)                   32 ms</span>
+<span class="term-line" data-kind="ok">✓ screenshot() → screen.jpg       118 ms</span></pre>
       </div>
     </section>
     <section id="cli" class="section cli reveal">
       <h2>也可以不开编辑器</h2>
-      <p class="section-lede">包里带一个命令行：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。同一套命令还能以 MCP 暴露给 Agent——写代码不是前提。</p>
+      <p class="section-lede"><code>uitest-phone</code> 是一个独立的包，装在需要驱动手机的 Agent 上：每条命令开一次设备、执行一步、等 UI 稳定、打印屏幕或 diff、释放设备。同一套命令还能以 MCP 暴露给 Agent——写代码不是前提。</p>
 
       <div class="cli-grid">
         <div class="cli-col">
           <div class="term">
             <div class="term-bar"><span></span><span></span><span></span></div>
-            <pre class="term-body"><span class="term-line" data-kind="cmd">$ npx uitest-sdk doctor</span>
+            <pre class="term-body"><span class="term-line" data-kind="cmd">$ npx uitest-phone doctor</span>
 <span class="term-line" data-kind="ok">settled · doctor</span>
 <span class="term-line" data-kind="ok">targets: dev-&lt;8 位哈希&gt;</span>
 <span class="term-line" data-kind="ok">capabilities: waitForIdle=yes findComponent=yes</span>
-<span class="term-line" data-kind="cmd">$ npx uitest-sdk observe --task "check WLAN"</span>
+<span class="term-line" data-kind="cmd">$ npx uitest-phone observe --task "check WLAN"</span>
 <span class="term-line" data-kind="ok">settled</span>
 <span class="term-line" data-kind="ok">screen 1216x2688 · app: com.huawei.hmos.settings</span>
 <span class="term-line" data-kind="ok">[65] button "WLAN" @608,432 focused checked</span>
@@ -88,7 +123,7 @@
             <li><strong>能被审。</strong>策略在碰设备前判定：凭据永久拦截，支付、金融、删除、发送默认要人点头。审批 id 绑命令与目标签名，一台设备一个任务。</li>
             <li><strong>能复现。</strong>每步一条 trace，报告从磁盘读回整轮任务，包括不走屏幕的那些命令。</li>
           </ul>
-          <p class="cli-note">需要省掉每步的设备启动开销时，用 <code>uitest-sdk mcp</code>：一个进程、一次连接、逐步调用。</p>
+          <p class="cli-note">需要省掉每步的设备启动开销时，用 <code>uitest-phone mcp</code>：一个进程、一次连接、逐步调用。</p>
         </div>
       </div>
 
@@ -121,12 +156,12 @@
         </table>
       </div>
 
-      <h3 class="cli-sub">也可以一直开着：<code>uitest-sdk live</code></h3>
+      <h3 class="cli-sub">也可以一直开着：<code>uitest-console</code></h3>
       <div class="bench-grid">
         <article class="bench-card">
           <h3>浏览器里同时看到画面和布局</h3>
           <ul>
-            <li><code>live</code> 起一个本地页面：左边是投屏，右边是当前屏的节点表。</li>
+            <li><code>uitest-console</code> 起一个本地页面：左边是投屏，右边是当前屏的节点表。</li>
             <li>点节点或点画面上的框，复制它的 ref、角色、标签与中心坐标；编号与 <code>tap --ref</code> 共用。</li>
             <li>H.264 走浏览器自带 WebCodecs 解码；x86_64 的 MJPEG 走 <code>createImageBitmap</code>。</li>
           </ul>
@@ -170,8 +205,8 @@
         <article class="bench-card">
           <h3>审批跨进程可用</h3>
           <ul>
-            <li><code>approval_pending</code> 给出的 id 存在 <code>approvals-&lt;hash&gt;.json</code>。</li>
-            <li>下一条命令带 <code>--approval-id</code> 就能兑现；id 一次性、10 分钟过期。</li>
+            <li><code>approval_pending</code> 给出的 id 存在 <code>approvals/&lt;hash&gt;/</code>，请求与决定是两个文件。</li>
+            <li>人用 <code>uitest-phone approvals allow|deny</code> 或 console 的收件箱回答；id 一次性、60 秒过期。</li>
             <li>页面在等待期间变了返回 <code>stale</code>，不会执行到别的东西上。</li>
           </ul>
         </article>
@@ -211,12 +246,12 @@
       <p class="table-note">每条命令都是一次独立进程：设备打开、执行一步、等 UI 稳定、释放。数字是 2026-11-16 真机上 2–3 次采样的范围，含 Node 启动；设备侧动作本身仍是 SDK 的毫秒级。</p>
 
       <h3 class="cli-sub">同一套命令，接给 Agent</h3>
-      <pre class="cli-code"><code>npx uitest-sdk connect            # 把 MCP 注册写进 Agent 自己的配置，并装好 Skill
-npx uitest-sdk connect --agent gemini   # 也支持 codex、copilot
-npx uitest-sdk mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
-npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
+      <pre class="cli-code"><code>npx uitest-phone connect            # 把 MCP 注册写进 Agent 自己的配置，并装好 Skill
+npx uitest-phone connect --agent gemini   # 也支持 codex、copilot
+npx uitest-phone mcp                # stdio 上暴露 uitest_&lt;command&gt;，整个进程只开一次设备
+npx uitest-phone install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 两处</code></pre>
       <p class="cli-note">Skill 与二进制同版本发布。Agent 拿到的是「先 <code>observe</code>、再按 ref 动作、读 diff」的固定循环，以及一组它必须遵守的安全规则。</p>
-      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code>、设备状态与审批记忆从 0.4.0 起提供，<code>dev.hypium</code> 的 118 个方法从 0.5.0 起提供，7.0 WebSocket 投流（<code>transport: "ws"</code>）从 0.6.0 起提供，<code>inspect</code>、<code>dev.files</code>、<code>CastConfig</code>、<code>FpsMeter</code> 与浏览器里的 <code>live</code> 投屏从 0.7.0 起提供；<code>live</code> 的接管输入从 0.9.0 起提供。</p>
+      <p class="cli-note"><code>connect</code>、<code>hold</code>、<code>handoff</code>、<code>resume</code> 从 0.3.0 起提供，<code>connect --agent gemini|copilot</code>、设备状态与审批记忆从 0.4.0 起提供，<code>dev.hypium</code> 的 118 个方法从 0.5.0 起提供，7.0 WebSocket 投流（<code>transport: "ws"</code>）从 0.6.0 起提供，<code>inspect</code>、<code>dev.files</code>、<code>CastConfig</code>、<code>FpsMeter</code> 与浏览器里的投屏从 0.7.0 起提供；接管输入从 0.9.0 起提供。0.10.0 起命令行、MCP 与 Skill 是独立的 <code>uitest-phone</code>，浏览器界面是 <code>uitest-console</code>。</p>
 
       <div class="bench-grid">
         <article class="bench-card">
@@ -308,7 +343,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
       <figure class="shot" data-shot>
         <div class="shot-scroll">
           <div class="shot-frame">
-            <img src="assets/showcase/live.jpg" alt="uitest-phone live 页面：左侧是手机画面与节点框，右侧是节点表" width="1020" height="900">
+            <img src="assets/showcase/live.jpg" alt="uitest-console 页面：左侧是手机画面与节点框，右侧是节点表" width="1020" height="900">
             <div class="shot-overlay" aria-hidden="true">
               <span class="hl hl-row is-on" style="left:47%;top:35.47%;width:53%;height:3.55%"></span>
               <span class="hl hl-box is-on" style="left:8.2%;top:36.23%;width:30.5%;height:4.96%"></span>
@@ -321,7 +356,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
         </div>
         <p class="shot-scroll-hint">左右滑动看完整页面</p>
         <figcaption>
-          <p class="shot-title"><code>uitest-phone live</code> · 浏览器里投屏 + 节点表</p>
+          <p class="shot-title"><code>uitest-console</code> · 浏览器里投屏 + 节点表</p>
           <p class="shot-step">
             <span class="is-on">[100] button 个人热点</span>
             <span>[101] button 流量管理</span>

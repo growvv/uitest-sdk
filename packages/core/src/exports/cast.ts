@@ -12,3 +12,17 @@ export { resolveCastingExtension, CASTING_EXTENSION } from "../cast/resolve.js";
 export { H264CastClient, loadScrcpyService } from "../cast/client.js";
 export { WsCastClient } from "../cast/ws-client.js";
 export { MjpegCastClient } from "../cast/mjpeg.js";
+// The WebSocket framing and NAL helpers: a third-party transport or an
+// inspection tool needs them, and they are the reason the ws client needs no
+// gRPC runtime.
+export {
+  buildHandshake,
+  handshakeStatus,
+  encodeTextFrame,
+  encodeCloseFrame,
+  encodePongFrame,
+  decodeFrames,
+  nalTypes,
+  isKeyFrame,
+} from "../cast/ws.js";
+export type { WsFrame } from "../cast/ws.js";

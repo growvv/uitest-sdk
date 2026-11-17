@@ -20,3 +20,9 @@ export type { OriginContext } from "../viewer/origin.js";
 export { LiveState } from "../viewer/state.js";
 export type { LiveStatus, ChangeListener } from "../viewer/state.js";
 export { avcC, codecString, parameterSets, splitNalUnits, toAvcc } from "../viewer/avc.js";
+
+// The inspect panel is a core capability the console renders, so the pieces a
+// third party needs to build its own panel are public here rather than buried
+// in a driver module.
+export { inspectScreen, renderPanel, colorFor, ROLE_COLORS } from "../driver/agent/inspector.js";
+export type { InspectNode, Inspection, PanelOptions } from "../driver/agent/inspector.js";
