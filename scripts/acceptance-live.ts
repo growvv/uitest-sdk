@@ -1701,14 +1701,23 @@ async function main(): Promise<number> {
             );
             ackMs = performance.now() - takeAt;
             if (ackMs > 300) throw new Error(`handover ack ${ackMs.toFixed(0)} ms > 300 ms`);
+            // Frames and seconds must cover the same window: the feed walk
+            // below is part of the second half's wall clock, so its frames
+            // count too.
+            bStart = b!.binaries;
             // The new tab is the controller now; it must be able to scroll.
+            // Five minutes of mixed input can leave the app on an article or
+            // a search page, where a wheel at this point moves nothing — the
+            // check is "the new tab can drive the device", not "the device
+            // happens to be on a list". Walk back to the feed first.
+            await ensureFeed(b!, relaunchZhihu);
+            await settle(b!);
             const beforeKey = labelKey(b!.nodes().nodes);
             b!.sendInput({ action: "wheel", x: 608, y: 1200, dy: 300 });
             await sleep(1500);
             if (!(await labelsChanged(b!, beforeKey, 6000))) {
               throw new Error("the new tab's scroll did not move the list");
             }
-            bStart = b!.binaries;
             handedOver = true;
             continue;
           }
