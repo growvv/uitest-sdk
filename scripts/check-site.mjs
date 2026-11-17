@@ -530,7 +530,7 @@ for (const needle of [
   "接管",
   "openInputLane",
   "busy by",
-  "3.4 ms",
+  "3.9 ms",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }

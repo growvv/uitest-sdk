@@ -733,7 +733,7 @@ npx uitest-sdk live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
   （`device.openInputLane()` 预开的独立 fport + agent 连接），不排在读布局后面。控制权是
   独占的：另一个页面 `take` 会收到 `busy by <clientId>`；控制者离开或输入出错
   时广播 `readonly`。按住 10 s 没有移动时只抬起指针，控制权保留。实测点击注入
-  的写通道往返 p50 3.4 ms、整轮混合输入 p50 291.8 ms，报告在
+  的写通道往返 p50 3.9 ms、整轮混合输入 p50 275.4 ms，报告在
   `docs/acceptance/live/report.md`。
 - 详细协议与实测数字见 [6. 投流与录制](#6-投流与录制) 的 `LiveServer` 一节。
 
