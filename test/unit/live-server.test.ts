@@ -605,6 +605,49 @@ describe("LiveServer", () => {
     c.close();
   });
 
+  it("opens the replacement only after the dead cast has been disposed", async () => {
+    // MJPEG's `dispose()` stops the shared agent's capture, so a replacement
+    // opened while the old client is still winding down would be stopped by
+    // its predecessor's disposal. The order is what makes the leak fix safe.
+    const events: string[] = [];
+    let made = 0;
+    class SlowEndingCast extends FakeCast {
+      async *stream(): AsyncIterable<H264Chunk> {
+        yield keyframe();
+      }
+      async dispose(): Promise<void> {
+        events.push("dispose:start");
+        // Longer than the first retry backoff (500 ms): without the wait the
+        // replacement opens before this finishes.
+        await new Promise((r) => setTimeout(r, 900));
+        events.push("dispose:end");
+        this.disposed = true;
+      }
+    }
+    const server = await LiveServer.start({
+      port: 0,
+      host: "127.0.0.1",
+      graceMs: 200,
+      layoutMs: 1000,
+      source: {
+        async createCast() {
+          events.push(`create:${made}`);
+          const cast = made === 0 ? new SlowEndingCast() : new FakeCast();
+          made++;
+          return cast;
+        },
+        async readScreen() {
+          return fakeScreen();
+        },
+      },
+    });
+    running.push(server);
+    const c = await connect(server.port);
+    await until(() => made === 2, 8000);
+    expect(events).toEqual(["create:0", "dispose:start", "dispose:end", "create:1"]);
+    c.close();
+  });
+
   it("reports its state in every hello", async () => {
     const h = await start();
     const c = await connect(h.port);

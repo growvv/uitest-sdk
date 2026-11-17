@@ -1701,23 +1701,30 @@ async function main(): Promise<number> {
             );
             ackMs = performance.now() - takeAt;
             if (ackMs > 300) throw new Error(`handover ack ${ackMs.toFixed(0)} ms > 300 ms`);
-            // Frames and seconds must cover the same window: the feed walk
-            // below is part of the second half's wall clock, so its frames
-            // count too.
+            // Frames and seconds must cover the same window: everything the
+            // handover check does is part of the second half's wall clock.
             bStart = b!.binaries;
-            // The new tab is the controller now; it must be able to scroll.
-            // Five minutes of mixed input can leave the app on an article or
-            // a search page, where a wheel at this point moves nothing — the
-            // check is "the new tab can drive the device", not "the device
-            // happens to be on a list". Walk back to the feed first.
-            await ensureFeed(b!, relaunchZhihu);
-            await settle(b!);
-            const beforeKey = labelKey(b!.nodes().nodes);
-            b!.sendInput({ action: "wheel", x: 608, y: 1200, dy: 300 });
-            await sleep(1500);
-            if (!(await labelsChanged(b!, beforeKey, 6000))) {
-              throw new Error("the new tab's scroll did not move the list");
-            }
+            // The new tab is the controller now; it must be able to drive the
+            // device. A wheel only proves that where the app happens to be
+            // scrollable, and five minutes of mixed input can leave it on an
+            // article or a search page — the check then failed on a correct
+            // server. The system Home key is the position-independent proof:
+            // it always leaves the app for the launcher.
+            //
+            // The bundle, not the labels: the feed animates on its own, so a
+            // label change is not evidence that anything was injected, and
+            // waiting on it resolves before the key lands.
+            const beforeBundle = b!.nodes().bundle;
+            b!.sendInput({ action: "key", key: "home" });
+            await b!.until(
+              () => b!.nodes().bundle !== beforeBundle,
+              8000,
+              `the new tab's Home key to leave ${beforeBundle}`,
+            );
+            // Back to Zhihu for the rest of the run, through the same relaunch
+            // every other scenario uses.
+            await relaunchZhihu();
+            await sleep(2500);
             handedOver = true;
             continue;
           }

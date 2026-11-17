@@ -136,6 +136,8 @@ export class LiveServer {
   private graceTimer: NodeJS.Timeout | undefined;
   private retryTimer: NodeJS.Timeout | undefined;
   private retryIndex = 0;
+  /** In-flight disposal of a cast that died; the next open waits for it. */
+  private castDisposal: Promise<void> | null = null;
   private reading = false;
   private reread = false;
   private lastReadAt = 0;
@@ -977,6 +979,16 @@ export class LiveServer {
   private async runCast(): Promise<void> {
     if (this.cast || this.startingCast || this.closing) return;
     this.startingCast = true;
+    // A replacement must not start while the previous client is still winding
+    // down: MJPEG's `dispose()` stops the shared agent's capture, so it would
+    // stop the new stream instead of the old one.
+    const disposal = this.castDisposal;
+    this.castDisposal = null;
+    if (disposal) await disposal;
+    if (this.closing) {
+      this.startingCast = false;
+      return;
+    }
     let cast: CastClient | null = null;
     try {
       this.transition("starting");
@@ -998,21 +1010,30 @@ export class LiveServer {
         if (mjpeg) this.onJpeg(chunk as JpegFrame);
         else this.onChunk(chunk as H264Chunk);
       }
-      if (!this.closing && this.cast === cast) this.onCastLost("the cast stream ended");
+      if (!this.closing && cast && this.cast === cast) {
+        // `dispose()` is what stops the device-side daemon and removes the
+        // forward; without it every loss leaves an orphaned daemon on the
+        // phone, and each one competes for the encoder (measured: ten-minute
+        // runs decayed from ~18 fps to 13 fps after a few accumulated).
+        //
+        // It runs beside the retry, not before it: awaiting here would keep
+        // `startingCast` true, and the retry that fires meanwhile would return
+        // early and never be rescheduled. `runCast` waits for the disposal
+        // before it opens a replacement — for MJPEG that order matters,
+        // because its `dispose()` stops the *shared* agent's capture.
+        this.cast = null;
+        this.castDisposal = cast.dispose().catch(() => undefined);
+        this.onCastLost("the cast stream ended");
+      }
     } catch (err) {
-      if (!this.closing && this.cast === cast) {
+      if (!this.closing && cast && this.cast === cast) {
+        this.cast = null;
+        this.castDisposal = cast.dispose().catch(() => undefined);
         this.onCastLost(err instanceof Error ? err.message : String(err));
       }
     } finally {
       this.startingCast = false;
       if (this.cast === cast) this.cast = null;
-      // `dispose()` is what stops the device-side daemon and removes the port
-      // forward. A stream that ended or threw leaves the client unusable, and
-      // the retry opens a fresh one; without this, every loss leaves an
-      // orphaned cast daemon on the phone, and each one competes for the
-      // encoder (measured: ten-minute runs decayed from ~18 fps to 13 fps
-      // after a few had accumulated).
-      if (cast) await cast.dispose().catch(() => undefined);
     }
   }
 
