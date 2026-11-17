@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import jpeg from "jpeg-js";
 import { getDevice, hasCastSupport, countNodes, startMotion } from "./helpers.js";
 import type { Device } from "../../src/driver/device.js";
+import { createCast } from "../../src/cast/create.js";
 
 let dev: Device;
 
@@ -125,8 +126,8 @@ describe("streaming", () => {
 
 describe.skipIf(!hasCastSupport())("casting", () => {
   it("runs two independent casts", async () => {
-    const a = await dev.createCast({ mode: "stream", socketName: "cast_a", frameRate: 15 });
-    const b = await dev.createCast({ mode: "stream", socketName: "cast_b", frameRate: 15 });
+    const a = await createCast(dev, { mode: "stream", socketName: "cast_a", frameRate: 15 });
+    const b = await createCast(dev, { mode: "stream", socketName: "cast_b", frameRate: 15 });
     try {
       const [fa, fb] = await Promise.all([
         a.stream()[Symbol.asyncIterator]().next(),
@@ -143,7 +144,7 @@ describe.skipIf(!hasCastSupport())("casting", () => {
 
 describe.skipIf(hasCastSupport())("casting on a device without the extension", () => {
   it("selects the MJPEG path and still streams", async () => {
-    const cast = await dev.createCast({ mode: "stream", frameRate: 15 });
+    const cast = await createCast(dev, { mode: "stream", frameRate: 15 });
     expect(cast.castKind).toBe("mjpeg");
     const s = await dev.agent.getDisplaySize();
     const stop = startMotion(dev, s);

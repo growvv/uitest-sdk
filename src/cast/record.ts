@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { CastClient, CastOptions } from "../cast/types.js";
+import type { CastClient, CastOptions } from "./types.js";
 import { UitestError } from "../transport/errors.js";
 
 /** The port offset for the record daemon under the ws transport. */

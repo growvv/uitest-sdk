@@ -154,6 +154,15 @@ export { MjpegCastClient } from "./cast/mjpeg.js";
 export { resolveCastingExtension, CASTING_EXTENSION } from "./cast/resolve.js";
 export type { CastClient, CastOptions, JpegFrame } from "./cast/types.js";
 
+export { createCast } from "./cast/create.js";
+export type { CastHost } from "./cast/create.js";
+export { Recording } from "./cast/record.js";
+export type { RecordingOptions } from "./cast/record.js";
+export { openInput } from "./input/open.js";
+export type { InputHost } from "./input/open.js";
+export { AgentInputLane } from "./input/lane.js";
+export type { InputLane, InputSession, InputAgent } from "./input/lane.js";
+
 export { LiveServer } from "./live/server.js";
 export type { LiveServerOptions, LiveSource } from "./live/server.js";
 export { LiveState } from "./live/state.js";

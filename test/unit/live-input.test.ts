@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LiveInput } from "../../src/live/input.js";
-import type { InputLane } from "../../src/live/input-lane.js";
+import type { InputLane } from "../../src/input/lane.js";
 
 class FakeLane implements InputLane {
   calls: Array<[string, ...unknown[]]> = [];

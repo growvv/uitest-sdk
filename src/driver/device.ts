@@ -8,13 +8,7 @@ import { Files } from "../transport/files.js";
 import { HdcRunner } from "../transport/hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
 import { deviceTag } from "../trace.js";
-import { H264CastClient } from "../cast/client.js";
-import { WsCastClient } from "../cast/ws-client.js";
-import { MjpegCastClient } from "../cast/mjpeg.js";
 import { CASTING_EXTENSION, resolveCastingExtension } from "../cast/resolve.js";
-import type { CastClient, CastOptions } from "../cast/types.js";
-import { AgentInputLane } from "../live/input-lane.js";
-import type { InputSession } from "../live/input-lane.js";
 import {
   AgentBusyError,
   AgentConnectionError,
@@ -96,7 +90,7 @@ export class Device {
     hdc: HdcRunner,
     private readonly opts: DeviceOptions,
     deviceId: string,
-    private readonly abi: "arm64" | "x86_64",
+    readonly abi: "arm64" | "x86_64",
     private readonly extDir: string,
     agent: AgentClient,
     private readonly localPort: number,
@@ -283,76 +277,9 @@ export class Device {
     return resolveCastingExtension(this.abi, this.extDir);
   }
 
-  /**
-   * Opens a second agent connection dedicated to input.
-   *
-   * The daemon serialises requests per connection, so a click sent on the
-   * read connection waits behind a 300-600 ms layout read. A second forward
-   * and socket give input its own queue: measured p50 12 ms while layout reads
-   * are in flight. No daemon is started and no health check is run - a
-   * read-only `live` page never calls this, and the first failure is reported
-   * to whoever tried to take control.
-   *
-   * No transparent reconnect: replaying a gesture after a socket swap is how
-   * duplicate down/up pairs reach the device. The caller opens a fresh lane
-   * after the failure instead.
-   */
-  async openInputLane(): Promise<InputSession> {
-    this.assertConnected();
-    const port = await this.hdc.fportAdd(this.opts.agentPort ?? 8012, "tcp:8012");
-    let sock: net.Socket;
-    try {
-      sock = await connectTcp(port);
-    } catch (e) {
-      await this.hdc.fportRemove(port).catch(() => undefined);
-      throw e;
-    }
-    const client = new AgentClient(sock, {
-      requestTimeoutMs: this.opts.requestTimeoutMs,
-      retryOnBusy: this.opts.retryOnBusy,
-    });
-    const hdc = this.hdc;
-    return {
-      lane: new AgentInputLane(client),
-      async close() {
-        client.close();
-        await hdc.fportRemove(port).catch(() => undefined);
-      },
-    };
-  }
-
-  /**
-   * Chooses the cast transport explicitly: H.264 where an extension exists,
-   * MJPEG where it cannot (x86_64 has no build). The choice is reported through
-   * `castKind`; it is never a silent downgrade after a failure.
-   *
-   * `transport: "ws"` picks the 7.0 WebSocket build and requires `wsExtension`;
-   * anything else uses the bundled 6.8 gRPC build. The two can coexist on the
-   * device because `--extension-name` is a filename lookup.
-   */
-  async createCast(opts: CastOptions): Promise<CastClient> {
-    this.assertConnected();
-    if (opts.transport === "ws") {
-      if (this.abi === "x86_64") {
-        throw new ExtensionMissingError(
-          `the 7.0 casting extension has no ${this.abi} build`,
-          "ENOCAST",
-        );
-      }
-      return WsCastClient.start(this.hdc, opts);
-    }
-    if (this.resolveCastExtension() !== null) {
-      return H264CastClient.start(this.hdc, opts);
-    }
-    // MJPEG is a stream wrapper with no recorder behind it. Handing back a
-    // client that silently records nothing is the fallback this SDK forbids.
-    if (opts.mode === "record") {
-      throw new ExtensionMissingError(
-        `record mode needs ${CASTING_EXTENSION}, which has no ${this.abi} build`,
-        "ENOCAST",
-      );
-    }
-    return new MjpegCastClient(this.agent, { scale: opts.scale });
+  /** The local port forwarded to the agent daemon, one per connected device. */
+  get agentPort(): number {
+    return this.opts.agentPort ?? 8012;
   }
 
   async dispose(): Promise<void> {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AgentInputLane, type InputAgent } from "../../src/live/input-lane.js";
+import { AgentInputLane, type InputAgent } from "../../src/input/lane.js";
 import type { InputTextMode } from "../../src/transport/model.js";
 
 class FakeAgent implements InputAgent {

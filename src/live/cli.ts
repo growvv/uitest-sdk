@@ -5,7 +5,9 @@ import { Device } from "../driver/device.js";
 import type { DeviceOptions } from "../driver/device.js";
 import { Session } from "../session.js";
 import { parseArgv } from "../cli-main.js";
-import { Recording } from "./record.js";
+import { Recording } from "../cast/record.js";
+import { createCast } from "../cast/create.js";
+import { openInput } from "../input/open.js";
 import { LiveServer } from "./server.js";
 import type { LiveServerOptions } from "./server.js";
 import type { CastOptions } from "../cast/types.js";
@@ -167,17 +169,17 @@ export async function startLive(
   const recording = new Recording({
     stateDir,
     socketName: `uitest_live_record_${socketSuffix}`,
-    createCast: (castOpts) => device.createCast(castOpts),
+    createCast: (castOpts) => createCast(device, castOpts),
     streamCast,
   });
 
   const source: LiveServerOptions["source"] = {
-    createCast: () => device.createCast(streamCast),
+    createCast: () => createCast(device, streamCast),
     // Takeover is always offered: a read-only viewer never triggers it, and
     // the server opens the lane at startup so the first take does not wait on
     // an fport. A second forward and socket keep input out of the layout
     // queue, which is what makes a tap land in tens of milliseconds.
-    openInput: () => device.openInputLane(),
+    openInput: () => openInput(device),
     ...(opts.layout ? { readScreen } : {}),
     // Even with the layout off the page needs the display size: a half-size
     // frame (--scale 2, every MJPEG device) would otherwise make every click

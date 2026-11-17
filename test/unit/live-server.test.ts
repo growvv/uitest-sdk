@@ -6,7 +6,7 @@ import type { H264Chunk } from "../../src/transport/model.js";
 import type { JpegFrame } from "../../src/cast/types.js";
 import type { Screen } from "../../src/driver/agent/screen.js";
 import type { CastClient } from "../../src/cast/types.js";
-import type { InputLane, InputSession } from "../../src/live/input-lane.js";
+import type { InputLane, InputSession } from "../../src/input/lane.js";
 
 const SPS = Buffer.from([0x67, 0x64, 0x00, 0x28, 0xac, 0xd9, 0x40, 0x78]);
 const PPS = Buffer.from([0x68, 0xee, 0x3c, 0xb0]);

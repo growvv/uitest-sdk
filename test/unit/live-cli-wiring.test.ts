@@ -29,45 +29,51 @@ vi.mock("../../src/driver/device.js", () => {
         return { width: 1080, height: 2340 };
       },
     };
-    async createCast(_opts: unknown) {
-      calls.push("createCast");
-      // A stream that never yields and never ends: the point here is the
-      // wiring, not frame relay, and a cast that finished would make the
-      // server start retrying it.
-      return {
-        castKind: "h264" as const,
-        async *stream() {
-          await new Promise(() => undefined);
-        },
-        async requestIDRFrame() {},
-        async dispose() {
-          calls.push("cast.dispose");
-        },
-      };
-    }
-    openInputLane() {
-      calls.push("openInputLane");
-      const noop = async () => undefined;
-      return Promise.resolve({
-        lane: {
-          click: noop,
-          touchDown: noop,
-          touchMove: noop,
-          touchUp: noop,
-          key: noop,
-          text: noop,
-          pinch: noop,
-          scroll: noop,
-        },
-        close: noop,
-      });
-    }
     async dispose() {
       calls.push("device.dispose");
     }
   }
   return { Device: FakeDevice };
 });
+
+vi.mock("../../src/cast/create.js", () => ({
+  async createCast(_host: unknown, _opts: unknown) {
+    calls.push("createCast");
+    // A stream that never yields and never ends: the point here is the
+    // wiring, not frame relay, and a cast that finished would make the
+    // server start retrying it.
+    return {
+      castKind: "h264" as const,
+      async *stream() {
+        await new Promise(() => undefined);
+      },
+      async requestIDRFrame() {},
+      async dispose() {
+        calls.push("cast.dispose");
+      },
+    };
+  },
+}));
+
+vi.mock("../../src/input/open.js", () => ({
+  async openInput() {
+    calls.push("openInput");
+    const noop = async () => undefined;
+    return {
+      lane: {
+        click: noop,
+        touchDown: noop,
+        touchMove: noop,
+        touchUp: noop,
+        key: noop,
+        text: noop,
+        pinch: noop,
+        scroll: noop,
+      },
+      close: noop,
+    };
+  },
+}));
 
 vi.mock("../../src/session.js", () => {
   class FakeSession {

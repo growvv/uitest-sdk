@@ -1,4 +1,4 @@
-import type { InputLane } from "./input-lane.js";
+import type { InputLane } from "../input/lane.js";
 
 export type InputState = "idle" | "down";
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Recording } from "../../src/live/record.js";
+import { Recording } from "../../src/cast/record.js";
 import type { CastClient, CastOptions } from "../../src/cast/types.js";
 
 /**

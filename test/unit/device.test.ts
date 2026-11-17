@@ -4,6 +4,8 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentClient } from "../../src/driver/agent/client.js";
+import { createCast } from "../../src/cast/create.js";
+import { openInput } from "../../src/input/open.js";
 import { AgentConnectionError, DeviceNotConnectedError, ExtensionMissingError } from "../../src/transport/errors.js";
 
 // ------------------------------------------------------------------ fixtures
@@ -326,7 +328,7 @@ describe("Device.connect", () => {
     const agent = await startFakeAgent();
     hdcState.agentPort = agent.port;
     const dev = await Device.connect({ extensionDir: makeExtDir("x86_64", false) });
-    const cast = await dev.createCast({ mode: "stream", frameRate: 15 });
+    const cast = await createCast(dev, { mode: "stream", frameRate: 15 });
     expect(cast.castKind).toBe("mjpeg");
     await cast.dispose();
     await dev.dispose();
@@ -406,7 +408,7 @@ describe("Device.connect", () => {
     const agent = await startFakeAgent();
     hdcState.agentPort = agent.port;
     const dev = await Device.connect({ extensionDir: makeExtDir("x86_64", false) });
-    await expect(dev.createCast({ mode: "record", outputPath: "/tmp/out.mp4" }))
+    await expect(createCast(dev, { mode: "record", outputPath: "/tmp/out.mp4" }))
       .rejects.toThrow(ExtensionMissingError);
     await dev.dispose();
     await agent.close();
@@ -420,7 +422,7 @@ describe("Device.connect", () => {
     const agent = await startFakeAgent();
     hdcState.agentPort = agent.port;
     const dev = await Device.connect({ extensionDir: hdcState.extDir });
-    await expect(dev.createCast({ mode: "stream", transport: "ws" }))
+    await expect(createCast(dev, { mode: "stream", transport: "ws" }))
       .rejects.toThrow(ExtensionMissingError);
     expect(hdcState.shellCalls.some((c) => c.includes("-p 5000"))).toBe(false);
     await dev.dispose();
@@ -439,7 +441,7 @@ describe("Device.connect", () => {
     const wsPath = join(hdcState.extDir, "arm64", "libscreen_casting_ws.z.so");
     writeFileSync(wsPath, "fake 7.0 build");
 
-    const cast = await dev.createCast({
+    const cast = await createCast(dev, {
       mode: "stream",
       transport: "ws",
       wsExtension: wsPath,
@@ -613,7 +615,7 @@ describe("Device.connect", () => {
     hdcState.listening = true;
     hdcState.agentPort = agent.port;
     const dev = await Device.connect({ extensionDir: hdcState.extDir });
-    const input = await dev.openInputLane();
+    const input = await openInput(dev);
     await expect(input.lane.click(10, 20)).resolves.toBeUndefined();
     expect(hdcState.shellCalls.filter((c) => c.includes("start-daemon"))).toHaveLength(0);
     await input.close();

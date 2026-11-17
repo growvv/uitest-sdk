@@ -8,7 +8,7 @@ import { NAL_IDR, avcC, codecString, nalType, parameterSets, splitNalUnits, toAv
 import { LiveState, type LiveStatus } from "./state.js";
 import { PLAYER_HTML } from "./player.js";
 import { LiveInput } from "./input.js";
-import type { InputSession } from "./input-lane.js";
+import type { InputSession } from "../input/lane.js";
 import { originAllowed } from "./origin.js";
 import {
   buildUpgradeResponse,

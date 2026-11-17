@@ -11,6 +11,7 @@ import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Device } from "../src/driver/device.js";
+import { createCast } from "../src/cast/create.js";
 import { AppManager } from "../src/transport/apps.js";
 import { tagOf } from "../src/session.js";
 import type { CastClient } from "../src/cast/types.js";
@@ -237,7 +238,7 @@ const CAPABILITIES: Capability[] = [
   {
     name: "createCast",
     async run(dev, ev) {
-      const cast: CastClient = await dev.createCast({ mode: "stream", frameRate: 15 });
+      const cast: CastClient = await createCast(dev, { mode: "stream", frameRate: 15 });
       try {
         const it = cast.stream()[Symbol.asyncIterator]();
         const f = await it.next();
@@ -256,7 +257,7 @@ const CAPABILITIES: Capability[] = [
     requiresRecord: true,
     async run(dev, ev) {
       const out = join(ROOT, "logs", `record-${ev.env}.mp4`);
-      const cast = await dev.createCast({ mode: "record", frameRate: 15, outputPath: out });
+      const cast = await createCast(dev, { mode: "record", frameRate: 15, outputPath: out });
       const s = await dev.agent.getDisplaySize();
       let alive = true;
       // Keypad taps again: the staged surface is the calculator, and the
@@ -284,8 +285,8 @@ const CAPABILITIES: Capability[] = [
     name: "dualCast",
     requiresCast: true,
     async run(dev, ev) {
-      const a = await dev.createCast({ mode: "stream", socketName: "accept_a", frameRate: 15 });
-      const b = await dev.createCast({ mode: "stream", socketName: "accept_b", frameRate: 15 });
+      const a = await createCast(dev, { mode: "stream", socketName: "accept_a", frameRate: 15 });
+      const b = await createCast(dev, { mode: "stream", socketName: "accept_b", frameRate: 15 });
       try {
         const [fa, fb] = await Promise.all([
           a.stream()[Symbol.asyncIterator]().next(),
