@@ -731,8 +731,9 @@ npx uitest-sdk live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
 - 页头的 **接管**（`{type:"control", action:"take"}`）把页面从只读切到可操作：点击、长按、
   拖动、滚动、双指缩放、键盘输入、`back` / `home` 都落到设备上。输入走第二条通道
   （`device.openInputLane()` 预开的独立 fport + agent 连接），不排在读布局后面。控制权是
-  独占的：另一个页面 `take` 会收到 `busy by <clientId>`；控制者离开、10 s 无输入或输入出错
-  时广播 `readonly`。实测点击 p50 3.4 ms、整轮混合输入 p50 291.8 ms，报告在
+  独占的：另一个页面 `take` 会收到 `busy by <clientId>`；控制者离开或输入出错
+  时广播 `readonly`。按住 10 s 没有移动时只抬起指针，控制权保留。实测点击注入
+  的写通道往返 p50 3.4 ms、整轮混合输入 p50 291.8 ms，报告在
   `docs/acceptance/live/report.md`。
 - 详细协议与实测数字见 [6. 投流与录制](#6-投流与录制) 的 `LiveServer` 一节。
 

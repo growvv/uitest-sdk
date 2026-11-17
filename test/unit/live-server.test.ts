@@ -202,6 +202,8 @@ async function start(
     watchdogMs?: number;
     /** Makes `openInput` reject with this message. */
     inputOpenError?: string;
+    /** Omit `readScreen`, as `--no-layout` does, and report this display size. */
+    displayOnly?: { width: number; height: number } | null;
   } = {},
 ): Promise<Harness> {
   const cast = new FakeCast();
@@ -227,11 +229,15 @@ async function start(
       async createCast() {
         return cast;
       },
-      async readScreen(redact: boolean) {
-        reads++;
-        redactions.push(redact);
-        return redact ? screen : { ...screen, elements: screen.elements.map(({ masked: _m, ...e }) => e) };
-      },
+      ...(over.displayOnly
+        ? { async displaySize() { return over.displayOnly!; } }
+        : {
+            async readScreen(redact: boolean) {
+              reads++;
+              redactions.push(redact);
+              return redact ? screen : { ...screen, elements: screen.elements.map(({ masked: _m, ...e }) => e) };
+            },
+          }),
       async capture() {
         if (over.captureError) throw new Error(over.captureError);
         shots++;
@@ -726,6 +732,45 @@ describe("LiveServer: takeover", () => {
     ).toBe(false);
   });
 
+  it("keeps the controlling tab in control when it asks again", async () => {
+    // A double-click on 接管, or a second click while the first take is still
+    // opening, sends `take` again from the tab that already controls. Answering
+    // `busy` there told that tab it was read-only, and the page believes every
+    // control message: it cleared its own control and the server kept it as the
+    // controller, so every later take from every tab got `busy` and the device
+    // could not be operated until the tab was closed.
+    const h = await start();
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "control", action: "take" });
+    await new Promise((r) => setTimeout(r, 300));
+    const mine = a.texts.filter(
+      (t) => t.type === "control" && t.state === "controlled" && t.clientId !== undefined,
+    );
+    expect(mine.length).toBeGreaterThanOrEqual(2);
+    expect(a.texts.some((t) => t.type === "control" && t.reason === "busy")).toBe(false);
+    // And it can still drive the device.
+    const lane = h.lanes()[0]!;
+    a.send({ type: "input", action: "down", x: 10, y: 20 });
+    a.send({ type: "input", action: "up", x: 10, y: 20 });
+    await until(() => lane.ops("touchUp").length === 1);
+  });
+
+  it("does not tell a tab it is read-only while its own take is opening", async () => {
+    // The 接管 button is not disabled during the round trip, so a double-click
+    // sends two takes from the same tab before the first answers. The second
+    // used to be refused as `busy`, which the page shows as "另一个页面正在操作"
+    // and which clears its control state until the real answer arrives.
+    const h = await start();
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(a.texts.some((t) => t.type === "control" && t.reason === "busy")).toBe(false);
+  });
+
   it("arbitrates two take requests sent in the same tick", async () => {
     const h = await start();
     const a = await connect(h.port);
@@ -746,6 +791,26 @@ describe("LiveServer: takeover", () => {
     a.send({ type: "control", action: "take" });
     await until(() => a.texts.some((t) => t.type === "control" && t.reason === "error"));
     expect(a.texts.some((t) => t.type === "control" && t.state === "controlled")).toBe(false);
+  });
+
+  it("advertises the display size and clamps input against it without layout", async () => {
+    // `--no-layout` is the documented emulator workflow: the emulator has no
+    // H.264 extension, so its cast is MJPEG at half size. With no `readScreen`
+    // the greeting said 0x0, the page converted clicks against the 608-wide
+    // frame instead of the 1216-wide display, and every tap landed in the
+    // top-left quadrant — while the picture and the ripple looked right.
+    const h = await start({ displayOnly: { width: 400, height: 800 } });
+    const a = await connect(h.port);
+    await until(() => a.texts.some((t) => t.type === "hello"));
+    const hello = a.texts.find((t) => t.type === "hello")!;
+    expect([hello.width, hello.height]).toEqual([400, 800]);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "input", action: "down", x: 9000, y: 9000 });
+    a.send({ type: "input", action: "up", x: 9000, y: 9000 });
+    const lane = h.lanes()[0]!;
+    await until(() => lane.ops("touchUp").length === 1);
+    expect(lane.ops("touchDown")).toEqual([[399, 799]]);
   });
 
   it("routes pointer, key, text and matrix input from the controller", async () => {

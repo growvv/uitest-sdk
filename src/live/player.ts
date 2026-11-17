@@ -863,6 +863,11 @@ export const PLAYER_HTML = `<!doctype html>
   function bindSystemKey(id, name) {
     var el = document.getElementById(id);
     el.addEventListener('click', function () {
+      // While the IME is composing, the field holds pinyin, not the person's
+      // characters, and the candidate picker owns Enter. Sending the key now
+      // would submit "hongmeng" — or submit the candidate and then also send
+      // Enter, closing what it just opened.
+      if (composing) return;
       if (name === 'enter') flushText();
       sendInput({ action: 'key', key: name });
       el.disabled = true;

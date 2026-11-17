@@ -32,7 +32,9 @@ import {
   RestartBudget,
   assistantCropHeight,
   clientPointFor,
+  isSearchEntryNode,
   parseOnly,
+  readonlyGuardVerdict,
   shouldRun,
 } from "./live-walk.js";
 
@@ -334,15 +336,7 @@ function pickTabTargets(nodes: NodeInfo[]): NodeInfo[] {
  * through, so it is found by geometry, not by text.
  */
 function isSearchEntry(n: NodeInfo): boolean {
-  return (
-    n.clickable &&
-    !n.masked &&
-    n.cy > 80 &&
-    n.cy < 400 &&
-    n.cx > 300 &&
-    n.cx < 900 &&
-    n.w >= 300
-  );
+  return isSearchEntryNode(n);
 }
 
 function pickSearchEntry(nodes: NodeInfo[]): NodeInfo | null {
@@ -897,10 +891,19 @@ async function runBrowserChecks(
 
 function gitHead(): string {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: ROOT,
       encoding: "utf8",
     }).trim();
+    // A run on a dirty tree cannot be attributed to HEAD: this report was once
+    // stamped with a commit while the script and the browser checks it ran were
+    // uncommitted changes that landed in the next commit, so the line named a
+    // tree that could not have produced it. Say so instead of lying.
+    const dirty = execFileSync("git", ["status", "--porcelain"], {
+      cwd: ROOT,
+      encoding: "utf8",
+    }).trim();
+    return dirty ? `${head}+dirty` : head;
   } catch {
     return "unknown";
   }
@@ -1067,22 +1070,31 @@ async function main(): Promise<number> {
         // The node table is not the invariant: the feed animates and refreshes
         // on its own, so it can change with no input at all. What an injected
         // tap must not do is leave the page it was on, or grant control.
+        //
+        // The tap has to land on something that *would* navigate: a blank
+        // spot proves nothing, because a routed tap there changes nothing
+        // either. The search entry is the one wide clickable node in the top
+        // bar and opens the search page, so a server that forwarded read-only
+        // input would be caught by the feed assertion below.
         const before = a!.nodes();
+        const entry = pickSearchEntry(before.nodes);
+        if (!entry) throw new Error("no search entry to aim the guard at");
         const seq = a!.nodesSeq;
-        a!.sendInput({ action: "down", x: 100, y: 100 });
-        await sleep(300);
-        a!.sendInput({ action: "up", x: 100, y: 100 });
+        a!.sendInput({ action: "down", x: entry.cx, y: entry.cy });
+        await sleep(120);
+        a!.sendInput({ action: "up", x: entry.cx, y: entry.cy });
         await a!.until(() => a!.nodesSeq > seq, 6000, "a layout after the ignored input");
+        // Give a routed tap the same window the keyboard scenario waits for,
+        // so a slow navigation is not mistaken for an ignored one.
+        await sleep(1200);
         const after = a!.nodes();
-        if (after.bundle !== before.bundle) {
-          throw new Error(`the injected tap navigated to ${after.bundle}`);
-        }
-        if (!isFeed(after.nodes)) throw new Error("the injected tap left the feed");
+        const verdict = readonlyGuardVerdict(before, after);
+        if (verdict) throw new Error(verdict);
         if (a!.texts.some((t) => t.type === "control" && t.state === "controlled")) {
           throw new Error("read-only input granted control");
         }
         return {
-          detail: "未接管时注入被忽略：仍在信息流，未获得控制权",
+          detail: "未接管时注入被忽略：点搜索框后仍在信息流，未获得控制权",
           evidence: [await shot(a!, "01-readonly")],
         };
       }),

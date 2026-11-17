@@ -135,8 +135,14 @@ export class LiveInput {
    */
   pinch(cx: number, cy: number, half: number): void {
     if (this.dead) return;
-    const c = this.clampPoint(cx, cy);
+    // The two fingers sit at `cx ± half`. Clamping the centre alone is not
+    // enough: the page's Ctrl+wheel path zooms around the pointer and lets it
+    // be anywhere, so a pointer near an edge put a finger off the display.
+    // The device rejects an out-of-screen touch point and drops the lane, so
+    // the clamp has to keep both endpoints inside.
+    const b = this.bounds?.() ?? null;
     const h = this.clampHalf(half);
+    const c = this.clampCentreForHalf(cx, cy, h, b);
     if (this.current === "down") {
       this.current = "idle";
       this.push({ kind: "up", x: this.sentPoint.x, y: this.sentPoint.y });
@@ -312,6 +318,21 @@ export class LiveInput {
     const b = this.bounds?.() ?? null;
     const max = b ? Math.min(b.width, b.height) / 2 : Number.POSITIVE_INFINITY;
     return Math.round(Math.min(Math.max(half, 20), max));
+  }
+
+  /**
+   * The centre for a two-finger gesture whose fingers sit at `cx ± half`.
+   *
+   * Moves the centre inwards rather than shrinking the half: the page is
+   * asking for a scale, and a zoom that silently shrinks is the "did what it
+   * felt like" behaviour this design avoids. Without a display size there is
+   * nothing to clamp against, and the client is trusted as before.
+   */
+  private clampCentreForHalf(cx: number, cy: number, half: number, b: { width: number; height: number } | null): Point {
+    if (!b) return { x: Math.round(cx), y: Math.round(cy) };
+    const x = Math.max(half, Math.min(b.width - 1 - half, cx));
+    const y = Math.max(half, Math.min(b.height - 1 - half, cy));
+    return { x: Math.round(x), y: Math.round(y) };
   }
 
   private async fail(error: Error): Promise<void> {

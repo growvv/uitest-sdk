@@ -179,6 +179,11 @@ export async function startLive(
     // queue, which is what makes a tap land in tens of milliseconds.
     openInput: () => device.openInputLane(),
     ...(opts.layout ? { readScreen } : {}),
+    // Even with the layout off the page needs the display size: a half-size
+    // frame (--scale 2, every MJPEG device) would otherwise make every click
+    // land at half coordinates. `getDisplaySize` is one agent call, not a
+    // layout read.
+    displaySize: () => device.agent.getDisplaySize(),
     capture,
     startRecording: () => recording.start(),
     stopRecording: () => recording.stop(),

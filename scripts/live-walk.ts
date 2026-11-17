@@ -91,6 +91,57 @@ interface Box {
   height: number;
 }
 
+interface NodeLike {
+  label: string;
+  cx: number;
+  cy: number;
+  w: number;
+  clickable: boolean;
+  input: boolean;
+  masked?: boolean;
+}
+
+/**
+ * The search entry in the top bar: the only wide, clickable node between the
+ * menu button and the search button. Its label is whatever trend it rotates
+ * through, so it is found by geometry, not by text.
+ */
+export function isSearchEntryNode(n: NodeLike): boolean {
+  return (
+    n.clickable &&
+    !n.masked &&
+    n.cy > 80 &&
+    n.cy < 400 &&
+    n.cx > 300 &&
+    n.cx < 900 &&
+    n.w >= 300
+  );
+}
+
+/**
+ * Why a read-only tap was not ignored, or null when it was.
+ *
+ * The guard has to aim at something that *would* navigate. Aiming at blank
+ * space proves nothing: a server that forwarded read-only input would change
+ * nothing there either, so the check could never fail. The search entry opens
+ * the search page, and the search page carries an input in the top bar.
+ */
+export function readonlyGuardVerdict(
+  before: { bundle: string },
+  after: { bundle: string; nodes: NodeLike[] },
+): string | null {
+  if (after.bundle !== before.bundle) return `the injected tap navigated to ${after.bundle}`;
+  const labels = after.nodes.map((n) => n.label.trim());
+  if (!(labels.includes("首页") && (labels.includes("推荐") || labels.includes("关注")))) {
+    return `the injected tap left the feed: ${labels.slice(0, 8).join(" | ")}`;
+  }
+  const field = after.nodes
+    .filter((n) => n.input && !n.masked && n.cy < 400 && n.w >= 300)
+    .sort((a, b) => a.cy - b.cy)[0];
+  if (field) return "the injected tap opened the search page";
+  return null;
+}
+
 /**
  * The client pixel a device pixel appears at.
  *

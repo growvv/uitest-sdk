@@ -351,6 +351,20 @@ describe("live page keyboard composition", () => {
     expect(page.inputs()).toEqual([{ type: "input", action: "text", text: "鸿蒙" }]);
   });
 
+  it("does not send Enter while a composition is still open", () => {
+    // The 回车 button blurs the field, which in a real browser usually fires
+    // compositionend first — but not always, and clicking it mid-composition
+    // sent Enter to the phone with the pinyin still local. Spec §6.4: neither
+    // the text nor a system key goes out until the composition ends.
+    const page = loadPlayer();
+    page.hello(CONTROLLED);
+    page.fire(page.text, "compositionstart");
+    page.text.value = "hongmeng";
+    page.fire(page.text, "input");
+    page.fire(page.el("key-enter"), "click");
+    expect(page.inputs()).toEqual([]);
+  });
+
   it("releases without sending pinyin when Esc ends a composition", () => {
     const page = loadPlayer();
     page.hello(CONTROLLED);

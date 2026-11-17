@@ -3,7 +3,9 @@ import {
   RestartBudget,
   assistantCropHeight,
   clientPointFor,
+  isSearchEntryNode,
   parseOnly,
+  readonlyGuardVerdict,
   shouldRun,
 } from "../../scripts/live-walk.js";
 
@@ -130,5 +132,61 @@ describe("assistantCropHeight", () => {
 
   it("never exceeds the screenshot", () => {
     expect(assistantCropHeight([{ y: 2600, h: 200 }], display, shot)).toBe(shot.height);
+  });
+});
+
+/**
+ * The read-only guard is the only acceptance evidence for the read-only
+ * promise. It used to aim at (100, 100) — blank white in the top bar — and
+ * assert only that the page had not navigated, which a server that forwarded
+ * read-only input would also satisfy. These pin the verdict to the thing that
+ * would actually move if the input were routed.
+ */
+describe("readonlyGuardVerdict", () => {
+  const feed = (extra: Partial<{ input: boolean; cy: number }> = {}) => [
+    { label: "首页", cx: 100, cy: 150, w: 80, clickable: true, input: false },
+    { label: "推荐", cx: 300, cy: 150, w: 120, clickable: true, input: false },
+    { label: "关注", cx: 500, cy: 150, w: 120, clickable: true, input: false },
+    { label: "热榜", cx: 200, cy: 350, w: 120, clickable: true, input: false },
+    ...(extra.input
+      ? [{ label: "搜索", cx: 600, cy: 160, w: 400, clickable: true, input: true }]
+      : []),
+  ];
+
+  it("passes when the tap was ignored and the feed is unchanged", () => {
+    expect(readonlyGuardVerdict({ bundle: "com.zhihu.hmos" }, { bundle: "com.zhihu.hmos", nodes: feed() })).toBeNull();
+  });
+
+  it("fails when the tap opened the search page", () => {
+    expect(
+      readonlyGuardVerdict(
+        { bundle: "com.zhihu.hmos" },
+        { bundle: "com.zhihu.hmos", nodes: feed({ input: true }) },
+      ),
+    ).toBe("the injected tap opened the search page");
+  });
+
+  it("fails when the tap left the feed", () => {
+    const verdict = readonlyGuardVerdict(
+      { bundle: "com.zhihu.hmos" },
+      { bundle: "com.zhihu.hmos", nodes: [{ label: "热榜", cx: 100, cy: 100, w: 100, clickable: true, input: false }] },
+    );
+    expect(verdict).toContain("left the feed");
+  });
+
+  it("fails when the tap left the app", () => {
+    expect(
+      readonlyGuardVerdict(
+        { bundle: "com.zhihu.hmos" },
+        { bundle: "com.ohos.sceneboard", nodes: feed() },
+      ),
+    ).toContain("navigated to com.ohos.sceneboard");
+  });
+
+  it("aims at a node that would navigate if the input were routed", () => {
+    // The guard's target: the wide clickable node in the top bar.
+    expect(isSearchEntryNode({ label: "热榜", cx: 608, cy: 200, w: 700, clickable: true, input: false })).toBe(true);
+    // A tab label is not it: too narrow.
+    expect(isSearchEntryNode({ label: "推荐", cx: 300, cy: 150, w: 120, clickable: true, input: false })).toBe(false);
   });
 });

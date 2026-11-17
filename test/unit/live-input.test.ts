@@ -283,6 +283,43 @@ describe("LiveInput pinch, wheel and text", () => {
     ]);
   });
 
+  it("keeps both pinch fingers on the display when the centre is near an edge", async () => {
+    // Ctrl+wheel zooms around the pointer, and the page lets the centre be
+    // anywhere on the canvas. A pointer near the right edge with half=608 puts
+    // one finger at x=1508 on a 1216-wide phone; the device rejects an
+    // off-screen touch point and drops the lane, so the zoom kicks every tab
+    // back to read-only.
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.pinch(350, 400, 100);
+    await settle();
+    input.pinch(350, 400, 180);
+    await settle();
+    const [, , , from, to] = lane.ops("pinch")[0] as [number, number, number, number, number];
+    // 350 + 180 = 530 > 400, so the centre must move left (or the half shrink)
+    // until both fingers are inside.
+    const cx = (lane.ops("pinch")[0] as [number, number])[0];
+    expect(cx + to).toBeLessThanOrEqual(399);
+    expect(cx - from).toBeGreaterThanOrEqual(0);
+  });
+
+  it("keeps both pinch fingers on the display vertically too", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.pinch(200, 20, 100);
+    await settle();
+    input.pinch(200, 20, 180);
+    await settle();
+    // The pinch axis is horizontal, so only x moves; y stays at the centre and
+    // the half must fit in the short side, which it does. What must not happen
+    // is a centre outside the display.
+    const [cx, cy] = lane.ops("pinch")[0] as [number, number];
+    expect(cx).toBeGreaterThanOrEqual(0);
+    expect(cx).toBeLessThanOrEqual(399);
+    expect(cy).toBeGreaterThanOrEqual(0);
+    expect(cy).toBeLessThanOrEqual(799);
+  });
+
   it("lifts a drag before starting a pinch", async () => {
     const lane = new FakeLane();
     const input = new LiveInput({ lane, bounds });

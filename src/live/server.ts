@@ -46,6 +46,15 @@ export interface LiveSource {
    */
   readScreen?(redact: boolean): Promise<Screen>;
   /**
+   * The display size, without reading the layout.
+   *
+   * `hello` advertises it so the page converts clicks against the display
+   * rather than the decoded frame. Without `readScreen` (`--no-layout`) this
+   * is the only source: a half-size frame would otherwise make every tap land
+   * at half coordinates. Omitted means the page falls back to the frame size.
+   */
+  displaySize?(): Promise<{ width: number; height: number }>;
+  /**
    * Saves one screenshot and returns its path. Omitted means the page shows no
    * capture button — there is nothing to save with.
    */
@@ -111,6 +120,8 @@ export class LiveServer {
   private codec: string | null = null;
   private description: Buffer | null = null;
   private screen: Screen | null = null;
+  /** Display size when layout is off, so the page still converts clicks right. */
+  private displayOnly: { width: number; height: number } | null = null;
   /**
    * Whether the shared screen model is currently unmasked. One model is shared
    * by every tab, so a single tab opting out would otherwise unmask the next
@@ -145,6 +156,8 @@ export class LiveServer {
   /** No takeover attempt before this timestamp; a failed open backs off. */
   private inputRetryAt = 0;
   private taking = false;
+  /** The tab whose `take` is opening the lane, if one is in flight. */
+  private takingFor: Client | null = null;
   private watchdogTimer: NodeJS.Timeout | undefined;
   private statsTimer: NodeJS.Timeout | undefined;
 
@@ -195,7 +208,35 @@ export class LiveServer {
     // player, so the first takeover is fast. A read-only session never opens
     // one: the failure is swallowed and the next take reports it.
     void self.ensureInput().catch(() => undefined);
+    // Ask for the display size up front: the greeting carries it, and a tab
+    // that connects before the first layout read must still convert clicks
+    // against the display rather than the decoded frame. A failure here is
+    // not fatal — the greeting then carries 0x0 and the page falls back.
+    void self.ensureDisplaySize().catch(() => undefined);
     return self;
+  }
+
+  /** Caches the display size for `hello` and for clamping input. */
+  private async ensureDisplaySize(): Promise<void> {
+    if (this.displayOnly) return;
+    const size = this.source.displaySize;
+    if (!size) return;
+    try {
+      const s = await size.call(this.source);
+      if (!this.closing && s.width > 0 && s.height > 0) {
+        this.displayOnly = s;
+        // A tab that connected while the size was unknown was told 0x0; the
+        // page must learn the real display before its first gesture.
+        if (this.clients.size > 0) this.broadcastHello();
+      }
+    } catch {
+      // The greeting falls back to the layout's size once a read succeeds.
+    }
+  }
+
+  /** The display the page should convert clicks against. */
+  private displaySize(): { width: number; height: number } | null {
+    return this.screen?.display ?? this.displayOnly;
   }
 
   /** The port actually bound; useful when `port: 0` asked for an ephemeral one. */
@@ -448,11 +489,30 @@ export class LiveServer {
     if (this.closing || !this.clients.has(client)) return;
     // Another take is opening the lane. Refuse instead of queueing: letting
     // both tabs think they are operating is worse than refusing one.
-    if (this.taking || this.controller) {
+    // The tab that already holds control is not a competitor: a repeated
+    // `take` from it (double-click, or a click while the first open is still
+    // in flight) must confirm its state, not tell it that it is read-only.
+    // The page believes every control message, so a `busy` there made the
+    // controller drop its own control while the server kept it — and then no
+    // tab could ever take control again.
+    if (this.controller === client) {
+      this.sendText(client, { type: "control", state: "controlled", clientId: client.id });
+      return;
+    }
+    if (this.taking) {
+      // The same tab asking again while its own open is in flight is a
+      // double-click, not a competitor: the answer it is waiting for is
+      // already on its way.
+      if (this.takingFor === client) return;
+      this.sendBusy(client);
+      return;
+    }
+    if (this.controller) {
       this.sendBusy(client);
       return;
     }
     this.taking = true;
+    this.takingFor = client;
     try {
       const session = await this.ensureInput();
       if (this.closing || !this.clients.has(client)) return;
@@ -465,7 +525,7 @@ export class LiveServer {
         lane: session.lane,
         // The server clamps to the latest known display; LiveInput clamps too,
         // as a second line of defence for tests and old pages.
-        bounds: () => this.screen?.display ?? null,
+        bounds: () => this.displaySize(),
         focusPoint: () => focusedCenter(this.screen),
         holdMs: this.watchdogMs,
         onError: (error) => this.onInputError(error),
@@ -487,6 +547,7 @@ export class LiveServer {
       });
     } finally {
       this.taking = false;
+      this.takingFor = null;
     }
   }
 
@@ -829,8 +890,8 @@ export class LiveServer {
       control: this.controlState(),
       codec: this.codec,
       description: this.description ? this.description.toString("base64") : null,
-      width: this.screen?.display.width ?? 0,
-      height: this.screen?.display.height ?? 0,
+      width: this.displaySize()?.width ?? 0,
+      height: this.displaySize()?.height ?? 0,
       state: this.live.state,
       privacy: this.privacy,
       // What this session can do, so the page shows a button only when
