@@ -30,6 +30,26 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./commands": {
+      "types": "./dist/exports/commands.d.ts",
+      "import": "./dist/exports/commands.js"
+    },
+    "./cast": {
+      "types": "./dist/exports/cast.d.ts",
+      "import": "./dist/exports/cast.js"
+    },
+    "./viewer": {
+      "types": "./dist/exports/viewer.d.ts",
+      "import": "./dist/exports/viewer.js"
+    },
+    "./govern": {
+      "types": "./dist/exports/govern.d.ts",
+      "import": "./dist/exports/govern.js"
+    },
+    "./drivers": {
+      "types": "./dist/exports/drivers.d.ts",
+      "import": "./dist/exports/drivers.js"
     }
   },
   "files": [

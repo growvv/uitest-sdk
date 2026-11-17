@@ -4,17 +4,12 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import * as sdk from "../../src/index.js";
-import { DeviceStateError } from "../../src/transport/errors.js";
 
 /**
- * The package entry, `src/index.ts`, is the only thing an `import "uitest-sdk"`
- * reaches — `package.json` maps the root export to `dist/index.js` and nothing
- * else. So a name that exists in `src/transport/errors.ts` but is missing here is not
- * exported at all: no amount of reading the docs would tell you why
- * `instanceof sdk.DeviceStateError` throws.
- *
- * These tests read the source rather than a hand-written list, so a class added
- * to `errors.ts` later cannot quietly miss the barrel.
+ * The root entry is deliberately small. Everything beyond connect and the
+ * category-shaped session has a subpath, so an accidental `export *` or a
+ * convenience re-export is a design regression, not a nicety: the root is what
+ * every consumer loads, and it must not grow back into the old 130-name barrel.
  */
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -25,9 +20,8 @@ function errorClassNames(): string[] {
   return [...read("src/transport/errors.ts").matchAll(/^export class (\w+Error)\b/gm)].map((m) => m[1]!);
 }
 
-/** Every name the barrel's `export { … }` statements publish at runtime. */
-function barrelValueNames(): string[] {
-  const source = read("src/index.ts");
+/** Every name the root barrel publishes at runtime (type-only exports are erased). */
+function rootValueNames(source: string): string[] {
   const names: string[] = [];
   for (const m of source.matchAll(/^export \{([^}]*)\} from/gm)) {
     for (const part of m[1]!.split(",")) {
@@ -38,53 +32,92 @@ function barrelValueNames(): string[] {
   return names;
 }
 
+const BASE = ["connect", "connectDevice", "Session", "Device", "tagOf", "VERSION"];
+
 describe("package entry", () => {
   it("parses the error classes out of errors.ts", () => {
-    // Guards the two tests below: a regex that matched nothing would make them
+    // Guards the tests below: a regex that matched nothing would make them
     // vacuously true.
     const names = errorClassNames();
     expect(names.length).toBeGreaterThan(10);
     expect(names).toContain("UitestError");
   });
 
-  it("exports every error class, so `instanceof` works from the package root", () => {
-    const missing = errorClassNames().filter((name) => !(name in sdk));
-    expect(missing, `not exported from src/index.ts: ${missing.join(", ")}`).toEqual([]);
+  it("exports exactly the small root set", () => {
+    const expected = new Set([...BASE, ...errorClassNames()]);
+    const actual = Object.keys(sdk);
+    expect(actual.sort()).toEqual([...expected].sort());
   });
 
-  it("publishes every error class as a constructor, not just a type", () => {
+  it("publishes every error class as a constructor, so `instanceof` works", () => {
     for (const name of errorClassNames()) {
-      const ctor = (sdk as Record<string, unknown>)[name];
-      expect(typeof ctor, `${name} is exported but is not a class`).toBe("function");
+      expect(typeof (sdk as Record<string, unknown>)[name], `${name} is not a class`).toBe("function");
     }
   });
 
-  it("exports DeviceStateError with its state carried through", () => {
-    // The one class that was missing. Its `state` is what a caller branches on,
-    // so it is the reason the class exists at all.
-    const e = new DeviceStateError("device_locked", "phone is locked", "ENODEVICE");
-    expect(e).toBeInstanceOf(sdk.DeviceStateError);
-    expect(e).toBeInstanceOf(sdk.DeviceNotConnectedError);
-    expect(e).toBeInstanceOf(sdk.UitestError);
-    expect(e.state).toBe("device_locked");
-    expect(e.code).toBe("ENODEVICE");
+  it("keeps the root at or below 20 runtime exports", () => {
+    expect(Object.keys(sdk).length).toBeLessThanOrEqual(20);
   });
 
-  it("resolves every name the barrel publishes", () => {
-    // A re-export of a name that no longer exists is a type error but survives
-    // a stale build; at runtime it is `undefined` and fails at the call site.
-    const names = barrelValueNames();
-    expect(names.length).toBeGreaterThan(80);
-    const unresolved = names.filter((name) => (sdk as Record<string, unknown>)[name] === undefined);
-    expect(unresolved, `exported but undefined at runtime: ${unresolved.join(", ")}`).toEqual([]);
-  });
-
-  it("does not publish a name twice", () => {
+  it("does not publish a name twice in the source barrel", () => {
     // Two `export { X } from` lines for one name is a silent shadowing bug: the
     // later one wins and the first module's value is unreachable.
-    const names = barrelValueNames();
+    const names = rootValueNames(read("src/index.ts"));
     const seen = new Set<string>();
     const dupes = names.filter((n) => (seen.has(n) ? true : (seen.add(n), false)));
     expect(dupes).toEqual([]);
+  });
+
+  it("imports every subpath and publishes the advanced surface there", async () => {
+    const commands = await import("../../src/exports/commands.js");
+    expect(typeof commands.CommandRunner).toBe("function");
+    expect(Array.isArray(commands.COMMANDS)).toBe(true);
+    expect(typeof commands.parseArgv).toBe("function");
+    expect(typeof commands.exitCodeForError).toBe("function");
+    // The roots stays small: these names are subpath-only.
+    expect("COMMANDS" in sdk).toBe(false);
+    expect("CommandRunner" in sdk).toBe(false);
+
+    const cast = await import("../../src/exports/cast.js");
+    expect(typeof cast.createCast).toBe("function");
+    expect(typeof cast.CastConfig).toBe("function");
+    expect(typeof cast.FpsMeter).toBe("function");
+    expect("createCast" in sdk).toBe(false);
+
+    const viewer = await import("../../src/exports/viewer.js");
+    expect(typeof viewer.startViewerServer).toBe("function");
+    expect(typeof viewer.renderPlayerPage).toBe("function");
+    expect(typeof viewer.openInput).toBe("function");
+    expect("startViewerServer" in sdk).toBe(false);
+
+    const govern = await import("../../src/exports/govern.js");
+    expect(typeof govern.Policy).toBe("function");
+    expect(typeof govern.Approvals).toBe("function");
+    expect(typeof govern.readRecentTrace).toBe("function");
+    expect("Policy" in sdk).toBe(false);
+
+    const drivers = await import("../../src/exports/drivers.js");
+    expect(typeof drivers.Device).toBe("function");
+    expect(typeof drivers.HypiumDriver).toBe("function");
+    expect(typeof drivers.AgentDriver).toBe("function");
+    expect("HypiumDriver" in sdk).toBe(false);
+  });
+
+  it("maps every subpath to a built file in package.json", () => {
+    const pkg = JSON.parse(read("package.json")) as {
+      exports: Record<string, { types: string; import: string }>;
+    };
+    expect(Object.keys(pkg.exports).sort()).toEqual([
+      ".",
+      "./cast",
+      "./commands",
+      "./drivers",
+      "./govern",
+      "./viewer",
+    ]);
+    for (const [subpath, entry] of Object.entries(pkg.exports)) {
+      expect(entry.types, `${subpath} types`).toMatch(/^\.\/dist\/.+\.d\.ts$/);
+      expect(entry.import, `${subpath} import`).toMatch(/^\.\/dist\/.+\.js$/);
+    }
   });
 });

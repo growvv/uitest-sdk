@@ -35,6 +35,14 @@ describe("parseArgv", () => {
     expect(parseArgv([]).command).toBeNull();
   });
 
+  it("collects the words after the command as positionals", () => {
+    // `approvals allow abc123` has no flags: the id is positional, and
+    // dropping it would make the command silently unusable.
+    const parsed = parseArgv(["approvals", "allow", "abc123"]);
+    expect(parsed.command).toBe("approvals");
+    expect(parsed.positionals).toEqual(["allow", "abc123"]);
+  });
+
   it("reads --trace-shots as a session option, not a command argument", () => {
     const parsed = parseArgv(["tap", "--ref", "3", "--trace-shots"]);
     expect(parsed.options.traceShots).toBe(true);
