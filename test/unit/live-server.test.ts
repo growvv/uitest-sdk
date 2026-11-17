@@ -563,6 +563,48 @@ describe("LiveServer", () => {
     await until(() => h.cast.disposed, 3000);
   });
 
+  it("disposes a cast whose stream ended before it opens the replacement", async () => {
+    // `dispose()` is what kills the device daemon. When the stream ended or
+    // errored, the server dropped its reference and retried — but never
+    // disposed the dead cast, so every stream loss left an orphaned cast
+    // daemon on the phone. Each orphan competes for the encoder, and a
+    // ten-minute acceptance run dropped from ~18 fps to 13 fps because of the
+    // ones earlier runs had left behind.
+    let made = 0;
+    const casts: FakeCast[] = [];
+    /** A cast whose stream returns on its own, as a dying daemon's would. */
+    class EndingCast extends FakeCast {
+      async *stream(): AsyncIterable<H264Chunk> {
+        yield keyframe();
+        // Ends without dispose(): the server must collect it.
+      }
+    }
+    const server = await LiveServer.start({
+      port: 0,
+      host: "127.0.0.1",
+      graceMs: 200,
+      layoutMs: 1000,
+      source: {
+        async createCast() {
+          const cast = made === 0 ? new EndingCast() : new FakeCast();
+          casts.push(cast);
+          made++;
+          return cast;
+        },
+        async readScreen() {
+          return fakeScreen();
+        },
+      },
+    });
+    running.push(server);
+    const c = await connect(server.port);
+    await until(() => made === 2, 8000);
+    // The server, not this test, must have handed the ended cast to dispose().
+    expect(casts[0]!.disposed).toBe(true);
+    expect(casts[1]!.disposed).toBe(false);
+    c.close();
+  });
+
   it("reports its state in every hello", async () => {
     const h = await start();
     const c = await connect(h.port);

@@ -1006,6 +1006,13 @@ export class LiveServer {
     } finally {
       this.startingCast = false;
       if (this.cast === cast) this.cast = null;
+      // `dispose()` is what stops the device-side daemon and removes the port
+      // forward. A stream that ended or threw leaves the client unusable, and
+      // the retry opens a fresh one; without this, every loss leaves an
+      // orphaned cast daemon on the phone, and each one competes for the
+      // encoder (measured: ten-minute runs decayed from ~18 fps to 13 fps
+      // after a few had accumulated).
+      if (cast) await cast.dispose().catch(() => undefined);
     }
   }
 
