@@ -5,7 +5,32 @@ export type InputState = "idle" | "down";
 export interface LiveStats {
   p50: number;
   p95: number;
+  /**
+   * Timed operations still in the percentile buffer.
+   *
+   * This is a buffer size, not a count: it stops at `MAX_TIMINGS` (200). Use
+   * `total` to ask "has another op happened since I last looked".
+   */
   n: number;
+  /**
+   * Timed operations since the lane opened, never capped.
+   *
+   * `n` saturates, so a waiter that compares it against a target derived from
+   * the gestures it just made stops being satisfiable after 200 injections —
+   * a passing run then times out instead. Slow operations are counted here
+   * too, because they are injections the device saw.
+   */
+  total: number;
+  /**
+   * Slow operations (scroll, paste) that were measured but kept out of p50/p95.
+   *
+   * A scroll is ~456 ms of device-side work and a paste 1.3-1.9 s, while a tap
+   * is 3-4 ms. Averaging them into one percentile reports a latency that
+   * describes no gesture: the page then says "输入 275 ms" after a tap that
+   * took 4 ms. Slow ops are counted here so the number is not silently
+   * dropped, and the page can say what it measured.
+   */
+  slow: number;
 }
 
 export interface LiveInputOptions {
@@ -42,6 +67,15 @@ type Op =
 
 const MAX_TIMINGS = 200;
 const CANCEL_LIFT_MS = 500;
+/**
+ * Upper bound for a pinch half when no display size is known (`--no-layout`).
+ *
+ * The real bound is half the short edge of the display; without one, a client
+ * could send any number and the device would reject the touch point, dropping
+ * the lane. 1080 covers the short edge of every phone this targets, so the cap
+ * only ever rejects values no device could accept.
+ */
+const MAX_UNBOUNDED_HALF = 1080;
 
 /**
  * Serialises everything that touches the device into one ordered stream.
@@ -83,6 +117,10 @@ export class LiveInput {
   /** Set when a lane op failed; nothing more is sent on this lane. */
   private dead = false;
   private readonly timings: number[] = [];
+  /** Slow ops measured but kept out of the percentiles; see `LiveStats.slow`. */
+  private slowOps = 0;
+  /** Timed ops since the lane opened; never capped, unlike `timings`. */
+  private timedOps = 0;
 
   constructor(opts: LiveInputOptions) {
     this.lane = opts.lane;
@@ -185,22 +223,44 @@ export class LiveInput {
     if (this.dead) return;
     const normalized = text.replace(/\r\n?|\n/g, " ").trim();
     if (normalized === "") return;
+    // No point, no focus, no earlier press and no display size: there is
+    // nowhere to put the text. Sending it to (0,0) types into the top-left
+    // corner — the status bar — which is worse than dropping it, because the
+    // person sees nothing happen and cannot tell why.
+    const p = this.textPoint(point);
+    if (!p) return;
     const mode: TextMode =
       /^[\x00-\x7F]*$/.test(normalized) && normalized.length <= 12 ? "typing" : "paste";
-    const p = this.textPoint(point);
     this.push({ kind: "text", x: p.x, y: p.y, text: normalized, mode });
   }
 
-  /** Called when the controlling client leaves, disconnects or is replaced. */
+  /**
+   * Called when the controlling client leaves, disconnects or is replaced.
+   *
+   * Pointer and wheel operations belong to the takeover that just ended and
+   * are dropped. Text does not: the page flushes its buffer before releasing
+   * (spec §6.4) and clears the input box as it does, so a text op that is
+   * still queued here is the person's characters with no other copy. Dropping
+   * it types nothing and leaves them unable to retype what they already
+   * watched disappear. Keys are dropped with the gesture — pressing Back
+   * again is one click, and a stale key must not act on the next takeover.
+   */
   async cancel(): Promise<void> {
+    const keepText = this.queue.filter((op) => op.kind === "text");
     this.queue = [];
     this.current = "idle";
     this.pinchBase = null;
     this.wheelBusy = false;
     this.pendingWheel = 0;
-    if (!this.downSent) return;
-    this.downSent = false;
-    await this.lift(this.sentPoint);
+    if (this.downSent) {
+      this.downSent = false;
+      await this.lift(this.sentPoint);
+    }
+    // After the lift, so the text does not land under a finger still down.
+    if (keepText.length > 0 && !this.dead) {
+      this.queue.push(...keepText);
+      void this.pump();
+    }
   }
 
   tick(now: number = this.now()): void {
@@ -216,9 +276,16 @@ export class LiveInput {
   /** p50/p95 of the last successful lane calls, or null before the first. */
   stats(): LiveStats | null {
     const n = this.timings.length;
-    if (n === 0) return null;
+    if (n === 0 && this.slowOps === 0) return null;
+    if (n === 0) return { p50: 0, p95: 0, n: 0, total: this.timedOps + this.slowOps, slow: this.slowOps };
     const sorted = [...this.timings].sort((a, b) => a - b);
-    return { p50: percentile(sorted, 0.5), p95: percentile(sorted, 0.95), n };
+    return {
+      p50: percentile(sorted, 0.5),
+      p95: percentile(sorted, 0.95),
+      n,
+      total: this.timedOps + this.slowOps,
+      slow: this.slowOps,
+    };
   }
 
   private push(op: Op): void {
@@ -250,8 +317,17 @@ export class LiveInput {
           await this.fail(e instanceof Error ? e : new Error(String(e)));
           return;
         }
-        this.timings.push(performance.now() - started);
-        if (this.timings.length > MAX_TIMINGS) this.timings.shift();
+        const elapsed = performance.now() - started;
+        // Scroll and paste are device-side work an order of magnitude slower
+        // than a touch op; counting them here is what made the readout
+        // describe no gesture at all.
+        if (op.kind === "scroll" || (op.kind === "text" && op.mode === "paste")) {
+          this.slowOps++;
+        } else {
+          this.timedOps++;
+          this.timings.push(elapsed);
+          if (this.timings.length > MAX_TIMINGS) this.timings.shift();
+        }
       }
     } finally {
       this.running = false;
@@ -304,19 +380,24 @@ export class LiveInput {
     this.push({ kind: "scroll", x: point.x, y: point.y, down: dy > 0, steps });
   }
 
-  private textPoint(point?: { x: number; y: number }): Point {
+  /** Where text should go, or null when no point is known. */
+  private textPoint(point?: { x: number; y: number }): Point | null {
     if (point) return this.clampPoint(point.x, point.y);
     const focus = this.focusPoint?.() ?? null;
     if (focus) return this.clampPoint(focus.x, focus.y);
     if (this.lastPoint) return this.clampPoint(this.lastPoint.x, this.lastPoint.y);
     const b = this.bounds?.() ?? null;
     if (b) return this.clampPoint(Math.floor(b.width / 2), Math.floor(b.height / 2));
-    return { x: 0, y: 0 };
+    return null;
   }
 
   private clampHalf(half: number): number {
     const b = this.bounds?.() ?? null;
-    const max = b ? Math.min(b.width, b.height) / 2 : Number.POSITIVE_INFINITY;
+    // Without a display size there is nothing to bound the half against, but a
+    // value the device cannot represent must still be refused rather than
+    // forwarded: the lane would drop the connection, not report a bad point.
+    if (!Number.isFinite(half) || half <= 0) return 20;
+    const max = b ? Math.min(b.width, b.height) / 2 : MAX_UNBOUNDED_HALF;
     return Math.round(Math.min(Math.max(half, 20), max));
   }
 

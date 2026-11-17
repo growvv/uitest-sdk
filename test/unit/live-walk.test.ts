@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   RestartBudget,
   assistantCropHeight,
+  chromeKillSteps,
   clientPointFor,
   isSearchEntryNode,
   parseOnly,
   readonlyGuardVerdict,
+  reportFileName,
   shouldRelaunch,
   shouldRun,
   stabilityStep,
@@ -134,6 +136,58 @@ describe("assistantCropHeight", () => {
 
   it("never exceeds the screenshot", () => {
     expect(assistantCropHeight([{ y: 2600, h: 200 }], display, shot)).toBe(shot.height);
+  });
+
+  it("keeps more room under a taller bar", () => {
+    // The bar's own padding below its last node is not in the layout, so a
+    // fixed 24 px margin clips the bottom edge of a taller bar. The margin
+    // follows the bar's height: a 600 px bar keeps 60, not 24.
+    const height = assistantCropHeight([{ y: 1000, h: 600 }], display, shot);
+    expect(height).toBe(Math.round((1600 + 60) / 2));
+  });
+
+  it("keeps the small margin for a normal bar", () => {
+    // The device's bar is 220 px tall; 10% of that is 22, below the floor.
+    expect(assistantCropHeight([{ y: 1230, h: 220 }], display, shot)).toBe(
+      Math.round((1450 + 24) / 2),
+    );
+  });
+});
+
+describe("reportFileName", () => {
+  // A partial run used to write `report.md`, replacing the committed
+  // full-acceptance report with one whose own header says it is not a full
+  // acceptance. `--only` is for iterating on the script; its output must not
+  // be able to stand in for the record.
+  it("uses report.md for a complete run", () => {
+    expect(reportFileName(null)).toBe("report.md");
+  });
+
+  it("keeps a filtered run out of the committed report's path", () => {
+    expect(reportFileName(["tap"])).toBe("report-only.md");
+  });
+});
+
+describe("chromeKillSteps", () => {
+  // The acceptance run drives a real browser and kills it in a finally block.
+  // `taskkill` exists only on Windows, so on macOS and Linux the call threw,
+  // was swallowed as "already exited", and left a headless Chrome holding the
+  // debug port — the next run then found a stale page instead of its own.
+  it("uses taskkill on Windows", () => {
+    expect(chromeKillSteps(4242, "win32")).toEqual([
+      { kind: "exec", command: "taskkill", args: ["/PID", "4242", "/T", "/F"] },
+    ]);
+  });
+
+  it("signals the process group on Linux and macOS", () => {
+    for (const platform of ["linux", "darwin"] as const) {
+      // The group first (Chrome spawns renderers under it), then the process
+      // itself in case the spawn was not detached and the group kill missed.
+      expect(chromeKillSteps(4242, platform)).toEqual([
+        { kind: "signal", pid: -4242, signal: "SIGKILL" },
+        { kind: "signal", pid: 4242, signal: "SIGKILL" },
+      ]);
+    }
   });
 });
 

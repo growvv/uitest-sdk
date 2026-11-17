@@ -31,10 +31,12 @@ import { assertCapturable } from "./acceptance.js";
 import {
   RestartBudget,
   assistantCropHeight,
+  chromeKillSteps,
   clientPointFor,
   isSearchEntryNode,
   parseOnly,
   readonlyGuardVerdict,
+  reportFileName,
   shouldRelaunch,
   shouldRun,
   stabilityStep,
@@ -92,7 +94,11 @@ interface NodesMessage {
 interface Stats {
   p50: number;
   p95: number;
+  /** Percentile buffer size; saturates at 200. */
   n: number;
+  /** Injections since the lane opened; never capped. */
+  total?: number;
+  slow?: number;
 }
 
 /**
@@ -204,14 +210,20 @@ class LiveClient {
    *
    * Stats go out once a second, so the first message after a gesture can be
    * from before it: measuring that one reports one op's latency as the tap's.
+   * The comparison is against `total`, not `n`: `n` is the size of a 200-entry
+   * percentile buffer and stops growing, so past 200 injections a target
+   * computed from the gestures just made can never be reached.
    */
   async waitForStatsAtLeast(n: number, ms = 6000): Promise<Stats> {
-    await this.until(
-      () => (this.latestStats()?.n ?? 0) >= n,
-      ms,
-      `stats covering ${n} injections`,
-    );
+    const covered = (s: Stats | null) => (s?.total ?? s?.n ?? 0) >= n;
+    await this.until(() => covered(this.latestStats()), ms, `stats covering ${n} injections`);
     return this.latestStats()!;
+  }
+
+  /** Injections the device has seen, from the latest broadcast. */
+  injectionCount(): number {
+    const s = this.latestStats();
+    return s?.total ?? s?.n ?? 0;
   }
 
   latestStats(): Stats | null {
@@ -687,7 +699,9 @@ async function runBrowserChecks(
       "--mute-audio",
       "about:blank",
     ],
-    { stdio: "ignore" },
+    // Detached, so Chrome's renderers share a process group the non-Windows
+    // path can signal as a whole; see chromeKillSteps.
+    { stdio: "ignore", detached: process.platform !== "win32" },
   );
 
   let socket: WebSocket | undefined;
@@ -697,10 +711,17 @@ async function runBrowserChecks(
     } catch {
       // Already closed.
     }
-    try {
-      execFileSync("taskkill", ["/PID", String(chrome.pid), "/T", "/F"], { stdio: "ignore" });
-    } catch {
-      // Chrome already exited.
+    // A spawn that failed has no pid; `-0` is this process's own group, so
+    // killing it would take the acceptance run down with the browser.
+    const pid = chrome.pid;
+    if (pid === undefined) return;
+    for (const step of chromeKillSteps(pid)) {
+      try {
+        if (step.kind === "exec") execFileSync(step.command, step.args, { stdio: "ignore" });
+        else process.kill(step.pid, step.signal);
+      } catch {
+        // Already exited, or the group is gone.
+      }
     }
   };
   try {
@@ -992,7 +1013,7 @@ ${rows}
 ${browser}
 
 > 本报告由 \`npx tsx scripts/acceptance-live.ts --target <id>\` 生成；设备只以 8 位标签出现。
-> 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标）；长按证据只保留输入助手条及其下 ${ASSISTANT_MARGIN_PX} px（其下是搜索历史，位置随搜索词变化，所以按节点几何裁）。其余保持原始分辨率。
+> 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标）；长按证据只保留输入助手条及其下至少 ${ASSISTANT_MARGIN_PX} px（其下是搜索历史，位置随搜索词变化，所以按节点几何裁；条更高时留白按比例增加）。其余保持原始分辨率。
 > \`docs/acceptance/live/demo/\` 是官网动画用的整屏原图，同样裁去底部 ${BOTTOM_CROP_PX} px。
 `;
 }
@@ -1156,7 +1177,7 @@ async function main(): Promise<number> {
           seen.add(key);
           candidates.push(n);
         }
-        const n0 = a!.latestStats()?.n ?? 0;
+        const n0 = a!.injectionCount();
         let taps = 0;
         for (const node of candidates) {
           if (!node) continue;
@@ -1219,7 +1240,7 @@ async function main(): Promise<number> {
         const field = pickSearchEntry(a!.nodes().nodes);
         if (!field) throw new Error("no search field on the search page");
         const known = new Set(a!.nodes().nodes.map((n) => n.label.trim()));
-        const beforeN = a!.latestStats()?.n ?? 0;
+        const beforeN = a!.injectionCount();
         await longPress(a!, field.cx, field.cy);
         const deadline = Date.now() + 5000;
         let assist: NodeInfo[] = [];
@@ -1236,7 +1257,7 @@ async function main(): Promise<number> {
             .filter(Boolean)
             .slice(0, 12)
             .join("|");
-          const afterN = a!.latestStats()?.n ?? 0;
+          const afterN = a!.injectionCount();
           throw new Error(
             `the hold did not open the input assistant at ${field.cx},${field.cy} (ops ${beforeN}→${afterN}, screen: ${seen})`,
           );
@@ -1313,7 +1334,7 @@ async function main(): Promise<number> {
         await tap(a!, field.cx, field.cy);
         await sleep(800);
         const beforeText = labelKey(a!.nodes().nodes);
-        const n0 = a!.latestStats()?.n ?? 0;
+        const n0 = a!.injectionCount();
         a!.sendInput({ action: "text", text: QUERY, x: field.cx, y: field.cy });
         // Suggestions appear as the query lands; typing alone is not the proof.
         await a!.waitForStatsAtLeast(n0 + 1, 8000);
@@ -1835,7 +1856,8 @@ async function main(): Promise<number> {
   // The last controller's broadcast is the run's final latency picture; `a`
   // was closed at the handover, so its stats stop mid-run.
   const report = renderReport(env, results, b?.latestStats() ?? a?.latestStats() ?? null, browserChecks);
-  await writeFile(join(OUT_DIR, "report.md"), report, "utf8");
+  const reportPath = join(OUT_DIR, reportFileName(onlyFilter));
+  await writeFile(reportPath, report, "utf8");
 
   for (const r of results) {
     process.stdout.write(`${r.status} ${r.name} (${r.ms} ms) — ${r.detail}\n`);
@@ -1843,7 +1865,7 @@ async function main(): Promise<number> {
   const failed = results.filter((r) => r.status === "FAIL").length;
   const ran = results.filter((r) => r.status !== "SKIP").length;
   process.stdout.write(
-    `${ran - failed}/${ran} passed · report ${relative(ROOT, join(OUT_DIR, "report.md")).replace(/\\/g, "/")}\n`,
+    `${ran - failed}/${ran} passed · report ${relative(ROOT, reportPath).replace(/\\/g, "/")}\n`,
   );
   return failed === 0 && ran > 0 ? 0 : 1;
 }

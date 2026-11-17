@@ -202,6 +202,8 @@ async function start(
     watchdogMs?: number;
     /** Makes `openInput` reject with this message. */
     inputOpenError?: string;
+    /** Makes `openInput` throw synchronously, before returning a promise. */
+    inputOpenThrows?: string;
     /** Omit `readScreen`, as `--no-layout` does, and report this display size. */
     displayOnly?: { width: number; height: number } | null;
   } = {},
@@ -256,9 +258,11 @@ async function start(
         recording = false;
         return "/tmp/rec.mp4";
       },
-      async openInput() {
+      openInput() {
         openInputs++;
-        if (over.inputOpenError) throw new Error(over.inputOpenError);
+        // Not `async`: a synchronous throw is the case under test.
+        if (over.inputOpenThrows) throw new Error(over.inputOpenThrows);
+        if (over.inputOpenError) return Promise.reject(new Error(over.inputOpenError));
         const lane = new FakeInputLane();
         lanes.push(lane);
         const session: InputSession = {
@@ -267,7 +271,7 @@ async function start(
             lane.closed = true;
           },
         };
-        return session;
+        return Promise.resolve(session);
       },
     },
   });
@@ -353,6 +357,8 @@ async function until(fn: () => boolean, ms = 3000): Promise<void> {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function http(port: number, path: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
@@ -916,6 +922,26 @@ describe("LiveServer: takeover", () => {
     await until(() => a.texts.some((t) => t.type === "control" && t.reason === "error"));
     expect(a.texts.some((t) => t.type === "control" && t.state === "controlled")).toBe(false);
   });
+
+  it("retries the lane when opening throws before it returns a promise", async () => {
+    // `openInput` is a caller-supplied function. One that throws synchronously
+    // — a missing extension name, a bad path — used to leave the shared
+    // "opening" promise holding the rejection: the finally that clears it had
+    // already run, so the field was assigned afterwards and never reset. Every
+    // later takeover returned that same rejected promise, and the lane could
+    // not be opened again for the life of the process.
+    const h = await start({ inputOpenThrows: "no extension named agent.so" });
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.reason === "error"));
+    expect(h.openInputs()).toBe(1);
+
+    // Past the five-second cooldown, a second attempt must reach the source.
+    await sleep(5100);
+    a.send({ type: "control", action: "take" });
+    await until(() => h.openInputs() === 2, 4000);
+    expect(h.openInputs()).toBe(2);
+  }, 15_000);
 
   it("advertises the display size and clamps input against it without layout", async () => {
     // `--no-layout` is the documented emulator workflow: the emulator has no
