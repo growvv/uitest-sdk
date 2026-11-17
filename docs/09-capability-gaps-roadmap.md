@@ -434,15 +434,15 @@ npm `uitest-sdk@0.8.0`、tag `v0.8.0`、GitHub Release 与官网同一时间上�
 所属进程的租约）、`triggerKey` 按电源键锁屏导致后续截图全是通知栏、以及第一次把它归因成
 「没清通知栏」的错误诊断。细节见 [13](13-stage-log.md)。
 
-### 0.9.0（代码已合入 master，**未发版**，2026-11-17）
+### 0.9.0（已发，2026-11-17）
 
-`package.json` 已是 `0.9.0`，功能、验收报告与官网内容都进了 `master`；但 **npm publish、
-`v0.9.0` tag、GitHub Release 都还没做**（npm 上 `latest` 仍是 0.8.0）。剩下的是发版动作，
-不是开发动作：
+npm `uitest-sdk@0.9.0`、tag `v0.9.0`、GitHub Release 与官网同一时间上线。进这一版的：
+`live` 页的接管输入（点击 / 长按 / 拖动 / 滚动 / 双指 / 键盘 / 返回 / Home），输入走独立的
+第二条 `hdc fport` 通道，控制权独占且可恢复。
 
-1. 按下面第 2 步跑全量验收（`docs/acceptance/report.md` 目前还是 0.8.0 那次 2026-11-16 的）。
-2. `git tag v0.9.0 && git push origin master v0.9.0`（推送会把官网一起发出去）。
-3. `npm publish`，再 `gh release create v0.9.0`。
+发版前跑全量验收又抓出两个真缺陷，都已修掉并留了测试：`isDisplayLocked()` 读的是字段名而
+不是值（按完电源键的手机亮着且锁着，被判成未锁，锁屏守卫形同虚设），以及 `touch` 能力从
+状态栏起手、把通知栏拉了下来。细节见 [13](13-stage-log.md)。
 
 ### 下一次发版的步骤
 
