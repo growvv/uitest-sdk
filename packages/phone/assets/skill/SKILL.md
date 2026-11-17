@@ -9,7 +9,7 @@ Drive a HarmonyOS device with one CLI. Each command opens the device, runs one
 step, waits for the UI to settle, and prints the resulting screen or a diff.
 
 ```bash
-npx uitest-sdk doctor
+npx uitest-phone doctor
 ```
 
 `doctor` must report a target and a `waitForIdle=yes` capability. `npx` runs the
@@ -17,8 +17,8 @@ package's only binary; once installed, the command itself is `uitest-phone`.
 Then work in steps:
 
 ```bash
-npx uitest-sdk observe --task "check whether WLAN is on"
-npx uitest-sdk tap --ref 12 --task "check whether WLAN is on"
+npx uitest-phone observe --task "check whether WLAN is on"
+npx uitest-phone tap --ref 12 --task "check whether WLAN is on"
 ```
 
 Every command takes the same global flags, so the session is reconstructed per
@@ -44,7 +44,7 @@ and enforces approvals.
 ## Setup
 
 ```
-npx uitest-sdk connect [--agent claude|codex|gemini|copilot]
+npx uitest-phone connect [--agent claude|codex|gemini|copilot]
 ```
 
 One command makes an agent ready: it registers the MCP server in that agent's
@@ -121,7 +121,7 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Inspect a window | `window --bundle com.example.app` |
 | Save a screenshot | `screenshot --out shot.jpg` |
 | See where each element is | `inspect --html panel.html` |
-| Watch the phone in a browser | `live` (a person's tool, not an agent command) |
+| Watch the phone in a browser | `uitest-console` (a separate product for people) |
 | Write a report | `report --title "WLAN check"` |
 | Session info | `status` |
 
@@ -185,7 +185,7 @@ unlocking the phone, or a screen the policy blocks. Do not type a credential
 and do not look for another way to reach the phone. Call:
 
 ```bash
-npx uitest-sdk handoff --reason "Sign in to Dinely"
+npx uitest-phone handoff --reason "Sign in to Dinely"
 ```
 
 Or the MCP tool `uitest_handoff` with `reason`. It returns `handoff` at once
@@ -240,7 +240,7 @@ instruction; credentials and read-only still apply.
 ## Finish
 
 ```bash
-npx uitest-sdk report --title "WLAN check"
+npx uitest-phone report --title "WLAN check"
 ```
 
 This writes an HTML report with every step to `<state-dir>/traces/`. It reads

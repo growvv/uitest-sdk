@@ -91,7 +91,7 @@ describe("mcpEntry", () => {
       binPath: "/home/me/.npm/_npx/abc123/node_modules/uitest-sdk/dist/bin.js",
       version: "0.2.0",
     });
-    expect(entry).toEqual({ command: "npx", args: ["-y", "uitest-sdk@0.2.0", "mcp"] });
+    expect(entry).toEqual({ command: "npx", args: ["-y", "uitest-phone@0.2.0", "mcp"] });
   });
 });
 

@@ -25,9 +25,9 @@ releases. There is no background daemon: state that must outlive a command
 - Node.js 20 or newer.
 - `hdc` on `PATH`, or `HDC_PATH` pointing at it, with one phone or emulator
   attached.
-- No other install step: `npx uitest-sdk` fetches the package, which carries
-  the device extension for arm64 and x86_64. The installed command is
-  `uitest-phone`; `npx uitest-sdk` runs it without a global install.
+- No other install step: `npx uitest-phone` fetches this package. It depends
+  on `uitest-sdk`, which carries the device extension for arm64 and x86_64.
+  The installed command is `uitest-phone`.
 
 Environment variables:
 
@@ -39,7 +39,7 @@ Environment variables:
 Install the skill for an agent:
 
 ```
-npx uitest-sdk install-skill [--dir <path>] [--force]
+npx uitest-phone install-skill [--dir <path>] [--force]
 ```
 
 It writes both directories agents read: `<home>/.claude/skills/uitest-phone`
@@ -60,7 +60,7 @@ its published digests and adopted.
 ## Connect an agent
 
 ```
-npx uitest-sdk connect [--agent claude|codex|gemini|copilot] [--force]
+npx uitest-phone connect [--agent claude|codex|gemini|copilot] [--force]
 ```
 
 Does the whole setup in one step: registers the MCP server in the agent's own
@@ -90,7 +90,7 @@ npm sweeps that cache.
 ## MCP server
 
 ```
-npx uitest-sdk mcp [--device <id>] [--read-only] [--apps a.b] [--confirm rules]
+npx uitest-phone mcp [--device <id>] [--read-only] [--apps a.b] [--confirm rules]
 ```
 
 Serves every command as a tool named `uitest_<command>` over stdio, JSON-RPC
@@ -102,7 +102,7 @@ the text, not as a transport failure.
 `connect` writes the entry for you. By hand it is:
 
 ```json
-{"mcpServers": {"uitest-phone": {"command": "npx", "args": ["-y", "uitest-sdk", "mcp"]}}}
+{"mcpServers": {"uitest-phone": {"command": "npx", "args": ["-y", "uitest-phone", "mcp"]}}}
 ```
 
 ## Screen model
@@ -409,65 +409,20 @@ when a person wants to look at the layout, or when a ref is ambiguous.
 
 Both files default to `<state-dir>/shots/inspect-<timestamp>.jpg`.
 
-### live (not a command)
+### live (moved to uitest-console)
 
-```
-live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
-     [--scale 1..5] [--fps 15|30|60|120] [--transport grpc|ws]
-```
+The browser mirror and inspect page is its own product now:
 
-Serves the phone in a browser tab: the screen on the left, the node table on the
-right. Clicking a node (or its box on the picture) copies its ref, role, label
-and centre; the refs are the same ones `tap --ref` takes. H.264 is decoded by
-the browser's own WebCodecs decoder, so no plugin or build step is involved.
-
-Credentials are masked by default — password values and codes are hidden in the
-node table and boxed over on the picture. `--privacy off` only sets the page's
-initial state; the switch in the page still works, and the server follows it.
-
-The page header has two buttons for the person watching: **Shot** saves a JPEG
-under `<state-dir>/shots/` (through the same masking path as the node table),
-and **Record** writes an MP4 there. Recording runs on a second cast daemon so
-the picture keeps streaming; only one recording runs at a time, and closing the
-page stops and finishes it.
-
-Like `mcp`, `hold` and `resume`, this is not one of the commands: it runs until
-interrupted and holds the device lease the whole time, so agent commands stop
-with `lease_held` while a person is watching. It listens on `127.0.0.1` unless
-`--host` says otherwise.
-
-### report
-
-```
-report [--title "WLAN check"] [--task "WLAN check"]
+```bash
+npm i -g uitest-console
+uitest-console
 ```
 
-Writes a self-contained HTML file with every step to `<state-dir>/traces/`.
-With `--trace-shots`, each row also links to the screenshot saved for that
-step; the link is relative to the report, so the pair can be moved together.
+`uitest-phone live` prints that migration line and exits 1. Everything the
+page shows — the stream, the node table, masking, screenshots, recording — is
+served by `uitest-sdk` and reused by the console; the phone package no longer
+starts a page.
 
-Every command is recorded, including the ones that never read the screen
-(`apps`, `launch`, `doctor`, `window`), so the step that changed the app is in
-the report too.
-
-Each command is its own process and writes its own trace file, so the report
-reads the task's files back from disk and renumbers the steps across them. It
-covers the most recent run of the task — files more than 30 minutes apart start
-a new run, so an old attempt at the same task name does not get mixed in.
-
-`--task` picks a task other than this session's. With neither `--task` nor a
-task that recorded steps, it falls back to the newest task and prints which one
-it covered, rather than writing an empty report. The status line says how many
-steps and trace files went in.
-
-### status
-
-```
-status
-```
-
-Prints the task name, device hash, read-only flag, confirm rules and app
-allow-list.
 
 ## Selectors
 

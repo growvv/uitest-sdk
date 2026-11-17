@@ -9,7 +9,7 @@
  * by its hashed tag.
  *
  * Usage: node scripts/acceptance-handoff.mjs [--state-dir <dir>]
- * Prerequisite: npm run build (the script runs dist/bin.js). One device attached.
+ * Prerequisite: npm run build (the script runs packages/phone/dist/bin.js). One device attached.
  */
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -17,11 +17,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const BIN = join(ROOT, "dist", "bin.js");
+const BIN = join(ROOT, "packages", "phone", "dist", "bin.js");
 const REASON = "Acceptance: unlock the phone, then open Settings";
 
 if (!existsSync(BIN)) {
-  console.error("dist/bin.js is missing; run `npm run build` first");
+  console.error("packages/phone/dist/bin.js is missing; run `npm run build` first");
   process.exit(1);
 }
 

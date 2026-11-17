@@ -35,7 +35,7 @@ describe("skillFiles", () => {
   it("describes the CLI the package actually ships", () => {
     const skill = skillFiles().find((f) => f.path === "SKILL.md")!;
     // `npx` resolves the *package* name; the binary is `uitest-phone`.
-    expect(skill.content).toContain("npx uitest-sdk");
+    expect(skill.content).toContain("npx uitest-phone");
     expect(skill.content).toContain("uitest-phone");
     // The skill must not tell an agent to drive the SDK or raw hdc itself.
     expect(skill.content).toMatch(/do not write ad-hoc scripts/i);
@@ -120,7 +120,7 @@ describe("installSkill", () => {
       const target = join(dir, "skill");
       await installSkill({ dir: target });
       const marker = JSON.parse(await readFile(join(target, SKILL_MARKER), "utf8"));
-      expect(marker.package).toBe("uitest-sdk");
+      expect(marker.package).toBe("uitest-phone");
       expect(marker.version).toBe(VERSION);
       const skill = skillFiles().find((f) => f.path === "SKILL.md")!;
       expect(marker.files["SKILL.md"]).toBe(digest(skill.content));
@@ -144,7 +144,7 @@ function digest(text: string): string {
 
 function marker(files: SkillFile[], version: string) {
   return {
-    package: "uitest-sdk",
+    package: "uitest-phone",
     version,
     files: Object.fromEntries(files.map((f) => [f.path, digest(f.content)])),
   };
@@ -170,6 +170,36 @@ describe("refreshSkill", () => {
       const record = JSON.parse(await readFile(join(target, SKILL_MARKER), "utf8"));
       expect(record.version).toBe("9.9.9");
       expect(record.files["SKILL.md"]).toBe(digest(NEW_FILES[0]!.content));
+    });
+  });
+
+  it("adopts a 0.9.4 marker and rewrites it under the product name", async () => {
+    // 0.9.4 shipped one package, and its skill marker says `uitest-sdk`. An
+    // upgrade must recognise that copy, refresh it, and leave the new marker
+    // naming the product that owns the CLI.
+    await withDir(async (dir) => {
+      const target = join(dir, "skills", "uitest-phone");
+      await plantSkill(target, OLD_FILES, { ...marker(OLD_FILES, "0.9.4"), package: "uitest-sdk" });
+
+      const result = await refreshSkill({ dirs: [target], files: NEW_FILES, version: "9.9.9" });
+
+      expect(result.updated).toEqual([target]);
+      const record = JSON.parse(await readFile(join(target, SKILL_MARKER), "utf8"));
+      expect(record.package).toBe("uitest-phone");
+      expect(record.version).toBe("9.9.9");
+    });
+  });
+
+  it("keeps a legacy-marked copy the person edited", async () => {
+    await withDir(async (dir) => {
+      const target = join(dir, "skills", "uitest-phone");
+      await plantSkill(target, OLD_FILES, { ...marker(OLD_FILES, "0.9.4"), package: "uitest-sdk" });
+      await writeFile(join(target, "SKILL.md"), "---\nname: uitest-phone\n---\nmy notes\n");
+
+      const result = await refreshSkill({ dirs: [target], files: NEW_FILES, version: "9.9.9" });
+
+      expect(result.skipped).toEqual([{ dir: target, reason: "modified" }]);
+      expect(await readFile(join(target, "SKILL.md"), "utf8")).toContain("my notes");
     });
   });
 

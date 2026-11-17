@@ -1,8 +1,7 @@
 import { createInterface } from "node:readline";
-import { EXIT_CODE } from "./driver/agent/result.js";
-import { COMMANDS } from "./operations/commands.js";
-import type { RunResult } from "./operations/commands.js";
-import { DeviceStateError } from "./transport/errors.js";
+import { COMMANDS, EXIT_CODE } from "uitest-sdk/commands";
+import type { RunResult } from "uitest-sdk/commands";
+import { DeviceStateError } from "uitest-sdk";
 import { VERSION } from "./version.js";
 
 /** The subset of CommandRunner the server uses; keeps the tests device-free. */

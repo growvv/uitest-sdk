@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-import { CommandRunner } from "./operations/commands.js";
+import { CommandRunner } from "uitest-sdk/commands";
+import { connect, UitestError } from "uitest-sdk";
+import {
+  HOLD_TASK,
+  handoffDevice,
+  holdDevice,
+  readHold,
+  resolveTag,
+  resumeDevice,
+} from "uitest-sdk/govern";
 import { main, parseArgv } from "./cli-main.js";
-import { agentConnected, connectAgent, mcpEntry } from "./connect.js";
+import { connectAgent, mcpEntry } from "./connect.js";
 import type { AgentId } from "./connect.js";
-import { Device } from "./driver/device.js";
-import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevice } from "./governance/hold.js";
 import { installSkill, refreshSkill } from "./install-skill.js";
-import { liveMain } from "./live/cli.js";
 import { McpServer } from "./mcp.js";
-import { Session } from "./operations/session.js";
-import { UitestError } from "./transport/errors.js";
-import { VERSION } from "./version.js";
+import { CORE_VERSION, VERSION } from "./version.js";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -23,14 +27,22 @@ import { fileURLToPath } from "node:url";
 async function run(argv: string[]): Promise<number> {
   const [first] = argv;
   if (first === "mcp") return mcpMain(argv.slice(1));
-  if (first === "live") return liveMain(argv.slice(1));
+  if (first === "live") {
+    // The mirror and inspect page is a product of its own now. Saying where it
+    // went is more useful than "unknown command", because the people who type
+    // this are the ones upgrading from 0.9.4.
+    process.stderr.write(
+      "live moved to uitest-console · npm i -g uitest-console · uitest-console\n",
+    );
+    return 1;
+  }
   if (first === "install-skill") return installSkillMain(argv.slice(1));
   if (first === "connect") return connectMain(argv.slice(1));
   if (first === "hold") return holdMain(argv.slice(1));
   if (first === "handoff") return handoffMain(argv.slice(1));
   if (first === "resume") return resumeMain(argv.slice(1));
   if (first === "--version" || first === "-v") {
-    process.stdout.write(`${VERSION}\n`);
+    process.stdout.write(`uitest-phone ${VERSION} (uitest-sdk ${CORE_VERSION})\n`);
     return 0;
   }
   return main(argv);
@@ -60,11 +72,9 @@ async function mcpMain(argv: string[]): Promise<number> {
   // this build implements, and an old copy teaches calls that may not exist.
   await refreshSkillQuietly();
 
-  const device = await Device.connect({
-    deviceId: parsed.options.device,
-  });
   const stateDir = parsed.options.stateDir ?? ".uitest-phone";
-  const session = await Session.open(device, {
+  const session = await connect({
+    deviceId: parsed.options.device,
     task: parsed.options.task ?? "mcp",
     stateDir,
     policy: {
@@ -76,12 +86,11 @@ async function mcpMain(argv: string[]): Promise<number> {
     traceShots: parsed.options.traceShots,
   });
   try {
-    const runner = new CommandRunner(session, { stateDir, device });
+    const runner = new CommandRunner(session.core, { stateDir, device: session.device });
     await new McpServer(runner).serve();
     return 0;
   } finally {
-    await session.release();
-    await device.dispose();
+    await session.close();
   }
 }
 

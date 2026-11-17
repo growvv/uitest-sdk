@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { UitestError } from "./transport/errors.js";
+import { UitestError } from "uitest-sdk";
 import { installSkill } from "./install-skill.js";
 import type { InstallSkillResult } from "./install-skill.js";
 import { isMcpRegistered, registerJsonMcp, registerTomlMcp } from "./mcp-register.js";
@@ -110,7 +110,7 @@ export function mcpEntry(opts: McpEntryOptions): McpEntry {
   const cached = /[\\/]_npx[\\/]|[\\/]npm-cache[\\/]_npx[\\/]/.test(opts.binPath);
   if (cached) {
     const version = opts.version ? `@${opts.version}` : "";
-    return { command: "npx", args: ["-y", `uitest-sdk${version}`, "mcp"] };
+    return { command: "npx", args: ["-y", `uitest-phone${version}`, "mcp"] };
   }
   return { command: opts.nodePath, args: [opts.binPath, "mcp"] };
 }

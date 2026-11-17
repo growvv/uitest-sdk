@@ -1,20 +1,11 @@
-import { COMMANDS, CommandRunner } from "./operations/commands.js";
-import type { RunResult } from "./operations/commands.js";
-import { Device } from "./driver/device.js";
-import { AppManager, resolveAppList } from "./transport/apps.js";
-import { Session } from "./operations/session.js";
-import { DeviceStateError, LeaseHeldError, UitestError } from "./transport/errors.js";
-import type { DeviceOptions } from "./driver/device.js";
-import { exitCodeForError, parseArgv } from "./operations/argv.js";
-import type { ParsedArgv } from "./operations/argv.js";
+import { COMMANDS, CommandRunner, exitCodeForError, parseArgv } from "uitest-sdk/commands";
+import type { ParsedArgv, RunResult } from "uitest-sdk/commands";
+import { connect, DeviceStateError, LeaseHeldError, UitestError } from "uitest-sdk";
+import type { ConnectOptions, DeviceOptions, Session } from "uitest-sdk";
+import { AppManager, HdcRunner, resolveAppList } from "uitest-sdk/drivers";
 
-/**
- * The CLI-side parser lives in the commands layer so a product that embeds the
- * command surface can parse the same flags without importing this file.
- */
 export { exitCodeForError, parseArgv };
 export type { ParsedArgv };
-
 
 export function formatHelp(): string {
   const lines = [
@@ -51,11 +42,13 @@ export function formatHelp(): string {
     "",
     "not commands (they do not open the device the same way):",
     "  connect              register the MCP server in an agent's settings and install the skill",
+    "  handoff              ask a person to take the phone for a step only they can do",
     "  hold                 take the device for yourself; agent commands then stop with lease_held",
-    "  resume               hand a held device back to agents",
-    "  live                 serve the screen and layout in a browser tab (mirror + inspect)",
-    "  mcp                  serve every command as an MCP tool over stdio",
     "  install-skill        write the bundled skill into the directories agents read",
+    "  mcp                  serve every command as an MCP tool over stdio",
+    "  resume               hand a held device back to agents",
+    "",
+    "The browser mirror moved to the console product: npm i -g uitest-console",
   );
   return lines.join("\n");
 }
@@ -71,59 +64,54 @@ export function formatResult(result: RunResult, opts: { json?: boolean } = {}): 
 /**
  * Opens a session from the global flags, runs one command, and releases.
  *
- * `connect` is a seam for tests; it defaults to the real `Device.connect`.
+ * `open` is a seam for tests; it defaults to core's `connect`, which opens the
+ * device and the session together and disposes the device when either fails.
  */
 export async function runCommand(
   parsed: ParsedArgv,
   deviceOptions: DeviceOptions = {},
-  connect: (opts: DeviceOptions) => Promise<Device> = (opts) => Device.connect(opts),
+  open: (opts: ConnectOptions) => Promise<Session> = connect,
 ): Promise<RunResult> {
   if (!parsed.command) {
     throw new UitestError("no command; run `uitest-phone --help`", "ENOCOMMAND");
   }
-  const device = await connect({
-    ...deviceOptions,
-    deviceId: parsed.options.device ?? deviceOptions.deviceId,
-  });
   const stateDir = parsed.options.stateDir ?? ".uitest-phone";
+  const deviceId = parsed.options.device ?? deviceOptions.deviceId;
+
   // The allow-list is written by a person and can name apps the way `launch`
   // does — "settings", not only "com.huawei.hmos.settings". Resolve it before
   // the session opens: a list that matches nothing would otherwise block every
-  // app while looking correct.
+  // app while looking correct. Resolution needs only hdc, not a session, so a
+  // bad name fails before the device is taken.
   let appList: string[] | undefined;
   if (parsed.options.apps) {
     const names = parsed.options.apps.split(",").map((s) => s.trim()).filter(Boolean);
-    appList = device.hdc ? await resolveAppList(new AppManager(device.hdc), names) : names;
+    const hdc = new HdcRunner({ ...deviceOptions, ...(deviceId ? { deviceId } : {}) });
+    appList = await resolveAppList(new AppManager(hdc), names);
   }
-  let session: Session;
+
+  const session = await open({
+    ...deviceOptions,
+    ...(deviceId ? { deviceId } : {}),
+    task: parsed.options.task ?? parsed.command,
+    stateDir,
+    policy: {
+      readOnly: parsed.options.readOnly,
+      confirm: parsed.options.confirm,
+      apps: appList,
+    },
+    settleMs: parsed.options.settleMs,
+    traceShots: parsed.options.traceShots,
+  });
   try {
-    session = await Session.open(device, {
-      task: parsed.options.task ?? parsed.command,
-      stateDir,
-      policy: {
-        readOnly: parsed.options.readOnly,
-        confirm: parsed.options.confirm,
-        apps: appList,
-      },
-      settleMs: parsed.options.settleMs,
-      traceShots: parsed.options.traceShots,
-    });
-  } catch (e) {
-    // The device is already open at this point. A held lease throws here, and
-    // leaving the connection open keeps the process alive until something
-    // kills it — a `lease_held` command must exit immediately, not hang.
-    await device.dispose?.().catch(() => undefined);
-    throw e;
-  }
-  try {
-    const runner = new CommandRunner(session, { stateDir, device });
+    const runner = new CommandRunner(session.core, { stateDir, device: session.device });
     return await runner.run(parsed.command, {
       ...parsed.args,
       approvalId: parsed.args["approvalId"] ?? parsed.options.approvalId,
       approvalScope: parsed.args["approvalScope"] ?? parsed.options.approvalScope,
     });
   } finally {
-    await session.release();
+    await session.close();
   }
 }
 

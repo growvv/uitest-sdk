@@ -1,0 +1,49 @@
+{
+  "name": "uitest-phone",
+  "version": "0.10.0",
+  "description": "Headless HarmonyOS device agent: a 21-command CLI, an MCP server and a skill on top of uitest-sdk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/growvv/uitest-sdk.git",
+    "directory": "packages/phone"
+  },
+  "homepage": "https://growvv.github.io/uitest-sdk/",
+  "keywords": [
+    "harmonyos",
+    "openharmony",
+    "uitest",
+    "automation",
+    "mcp",
+    "ai-agent",
+    "cli",
+    "agent-skill"
+  ],
+  "type": "module",
+  "bin": {
+    "uitest-phone": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "assets",
+    "NOTICE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build && npm test",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "uitest-sdk": "~0.10.0"
+  }
+}

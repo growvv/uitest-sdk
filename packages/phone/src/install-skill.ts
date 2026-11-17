@@ -4,7 +4,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UitestError } from "./transport/errors.js";
+import { UitestError } from "uitest-sdk";
 import { VERSION } from "./version.js";
 
 export interface SkillFile {
@@ -67,7 +67,15 @@ const SKILL_FILES = ["SKILL.md", "REFERENCE.md"] as const;
 
 /** The record written beside an installed skill, so an upgrade knows the copy is ours. */
 export const SKILL_MARKER = ".uitest-skill.json";
-export const SKILL_PACKAGE = "uitest-sdk";
+/**
+ * The package name the marker records.
+ *
+ * It is the product that owns the CLI the skill teaches, not the library the
+ * product is built on: a skill installed by 0.9.4 said `uitest-sdk`, and an
+ * upgrade adopts that marker rather than leaving the copy unmanaged.
+ */
+export const SKILL_PACKAGE = "uitest-phone";
+const LEGACY_PACKAGES = new Set(["uitest-sdk"]);
 
 /**
  * Line endings are normalised before hashing: the same skill checked out with
@@ -167,17 +175,25 @@ function readMarker(dir: string): SkillMarker | null {
   }
 }
 
-/** The recorded digests, or null when the marker is not a usable one of ours. */
-function markerDigests(marker: SkillMarker | null): Record<string, string> | null {
-  if (!marker || marker.package !== SKILL_PACKAGE || typeof marker.version !== "string") {
-    return null;
-  }
+/**
+ * The recorded digests, or null when the marker is not a usable one of ours.
+ *
+ * `legacy` marks a file written by 0.9.4 and earlier, when the skill belonged
+ * to the single `uitest-sdk` package. The digests still prove whether the
+ * copy is ours; only the package name has to be migrated.
+ */
+function markerDigests(
+  marker: SkillMarker | null,
+): { digests: Record<string, string>; legacy: boolean } | null {
+  if (!marker || typeof marker.version !== "string") return null;
+  const pkg = String(marker.package ?? "");
+  if (pkg !== SKILL_PACKAGE && !LEGACY_PACKAGES.has(pkg)) return null;
   if (!marker.files || typeof marker.files !== "object") return null;
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(marker.files)) {
     if (typeof value === "string") out[name] = value;
   }
-  return out;
+  return { digests: out, legacy: pkg !== SKILL_PACKAGE };
 }
 
 async function filesMatch(
@@ -244,14 +260,14 @@ export async function refreshSkill(opts: RefreshSkillOptions = {}): Promise<Refr
 
     const marker = readMarker(dir);
     const recorded = markerDigests(marker);
-    let known = recorded;
+    let known = recorded?.digests;
     if (!known) {
       if (!(await filesMatch(dir, files, legacy))) {
         result.skipped.push({ dir, reason: "unmanaged" });
         continue;
       }
       known = legacy;
-    } else if (marker?.version === version) {
+    } else if (!recorded!.legacy && marker?.version === version) {
       result.current.push(dir);
       continue;
     }
