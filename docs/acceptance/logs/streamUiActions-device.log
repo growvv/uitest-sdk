@@ -21,3 +21,4 @@ AgentConnectionError: agent connection closed
 [2026-11-17T11:13:27.069Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
 [2026-11-17T11:23:09.116Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
 [2026-11-17T11:26:10.835Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
+[2026-11-17T13:30:39.171Z] startCaptureUiAction / stopCaptureUiAction round-trip ok; session closes after stop
