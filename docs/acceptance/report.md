@@ -1,6 +1,6 @@
 # uitest SDK 验收报告
 
-> 本文件由 `scripts/acceptance.ts` 生成，请勿手改。生成时间：2026-11-16T15:33:06.917Z
+> 本文件由 `scripts/acceptance.ts` 生成，请勿手改。生成时间：2026-11-17T11:26:11.056Z
 
 ## 1. 环境清单
 
@@ -18,42 +18,42 @@
 | 能力 | device |
 |---|---|
 | `connect` | ✅ 1216x2688 |
-| `click` | ✅ 17 ms |
-| `swipe` | ✅ 399 ms |
+| `click` | ✅ 43 ms |
+| `swipe` | ✅ 403 ms |
 | `touch` | ✅ ok |
 | `triggerKey` | ✅ ok |
-| `captureLayout` | ✅ 214 nodes |
-| `captureScreen` | ✅ 176 ms, 88014 B |
-| `cropToWindow` | ✅ com.zhihu.hmos, 107610 B |
-| `streamScreen` | ✅ 11.8 fps |
+| `captureLayout` | ✅ 428 nodes |
+| `captureScreen` | ✅ 204 ms, 78949 B |
+| `cropToWindow` | ✅ com.zhihu.hmos, 96598 B |
+| `streamScreen` | ✅ 11.3 fps |
 | `createCast` | ✅ h264, 31 B |
-| `createCastRecord` | ✅ 1796167 B mp4 |
+| `createCastRecord` | ✅ 1379221 B mp4 |
 | `dualCast` | ✅ 31 B / 31 B |
-| `dumpLayout` | ✅ 324 nodes |
-| `queue` | ✅ 10 calls, 75 ms |
-| `rpcDuringStream` | ✅ 5 ms |
+| `dumpLayout` | ✅ 317 nodes |
+| `queue` | ✅ 10 calls, 89 ms |
+| `rpcDuringStream` | ✅ 8 ms |
 | `streamUiActions` | ✅ session opens; synthetic touches are not reported (device behaviour) |
 
 ## 3. 性能（各能力端到端耗时）
 
 | 能力 | 环境 | 耗时 |
 |---|---|---|
-| `connect` | device | 861 ms |
-| `click` | device | 467 ms |
-| `swipe` | device | 749 ms |
-| `touch` | device | 394 ms |
-| `triggerKey` | device | 721 ms |
-| `captureLayout` | device | 819 ms |
-| `captureScreen` | device | 530 ms |
-| `cropToWindow` | device | 1264 ms |
-| `streamScreen` | device | 1201 ms |
-| `createCast` | device | 1410 ms |
-| `createCastRecord` | device | 5121 ms |
-| `dualCast` | device | 36765 ms |
-| `dumpLayout` | device | 1895 ms |
-| `queue` | device | 779 ms |
-| `rpcDuringStream` | device | 881 ms |
-| `streamUiActions` | device | 1079 ms |
+| `connect` | device | 1102 ms |
+| `click` | device | 567 ms |
+| `swipe` | device | 763 ms |
+| `touch` | device | 386 ms |
+| `triggerKey` | device | 630 ms |
+| `captureLayout` | device | 1854 ms |
+| `captureScreen` | device | 601 ms |
+| `cropToWindow` | device | 2128 ms |
+| `streamScreen` | device | 1301 ms |
+| `createCast` | device | 1507 ms |
+| `createCastRecord` | device | 5034 ms |
+| `dualCast` | device | 3821 ms |
+| `dumpLayout` | device | 1899 ms |
+| `queue` | device | 669 ms |
+| `rpcDuringStream` | device | 765 ms |
+| `streamUiActions` | device | 1163 ms |
 
 ## 4. 失败与跳过项
 
