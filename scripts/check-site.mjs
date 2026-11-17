@@ -777,6 +777,7 @@ for (const needle of [
   "approval_pending · approval_id",
   "lease_held",
   // Step 9 and the lessons.
+  "cfdba0e4",
   "6554253b",
   "UITEST_ACCEPTANCE_DIR",
   "0.2 fps",

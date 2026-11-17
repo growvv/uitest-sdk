@@ -61,14 +61,14 @@
           <tbody>
             <tr><td>0</td><td>环境：Node、hdc、两台设备可见</td><td>✓</td><td>✓</td></tr>
             <tr><td>1</td><td>无设备自动化：类型检查、单元测试、官网检查、打包清单</td><td colspan="2">✓ 860 个测试 / 68 个文件 · 141 个文件 · 1.09 MB</td></tr>
-            <tr><td>2</td><td>干净目录安装当时已发布的包，核对导出与文件</td><td colspan="2">✓ 126 个运行时导出 · VERSION 0.9.3 · ESM-only</td></tr>
+            <tr><td>2</td><td>干净目录安装已发布的包，核对导出与文件</td><td colspan="2">✓ 126 个运行时导出 · VERSION 0.9.4 · ESM-only</td></tr>
             <tr><td>3</td><td>连接、诊断、截图、UI 树</td><td>✓</td><td>✓</td></tr>
             <tr><td>4</td><td>16 项能力矩阵 + 设备侧测试</td><td>✓ 16/16</td><td>✓ 16/16</td></tr>
             <tr><td>5</td><td>接管页 10 个场景（含 10 分钟稳定性）</td><td>✓ 10/10</td><td>✓ 10/10</td></tr>
             <tr><td>6</td><td>来源校验 7 种握手</td><td>✓ 7/7</td><td>✓ 7/7</td></tr>
             <tr><td>7</td><td>MCP 21 个工具、Skill 安装、交接闭环</td><td>✓</td><td>✓</td></tr>
             <tr><td>8</td><td>只读、应用白名单、状态、接管与交还、审批</td><td>✓</td><td>✓</td></tr>
-            <tr><td>9</td><td>npm 版本、shasum、GitHub Release、官网</td><td colspan="2">✓ 当时 latest 为 0.9.3 · shasum <code>6554253b</code></td></tr>
+            <tr><td>9</td><td>npm 版本、shasum、GitHub Release、官网</td><td colspan="2">✓ latest 0.9.4 · shasum <code>cfdba0e4</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -130,11 +130,11 @@ npm pack --dry-run --json → version 0.9.3 · files 141 · size 1090753 · unpa
 
       <h2 id="step2">2 · 装包验证</h2>
 
-      <p>跑测试验证的是源码。这一步验证<strong>发到 npm 上的那个包</strong>：在一个空目录里装它，然后从外面看它。下面是当时那次运行（<code>0.9.3</code> 是当时的 <code>latest</code>）；以后重跑把版本号换成当时的 <code>latest</code> 即可。</p>
+      <p>跑测试验证的是源码。这一步验证<strong>发到 npm 上的那个包</strong>：在一个空目录里装它，然后从外面看它。</p>
 
       <pre><code>mkdir clean &amp;&amp; cd clean
 npm init -y
-npm install uitest-sdk@0.9.3</code></pre>
+npm install uitest-sdk@0.9.4</code></pre>
 
       <pre><code>node --input-type=module -e "
 import * as sdk from 'uitest-sdk';
@@ -145,8 +145,10 @@ console.log('state', e.state, 'instanceof UitestError', e instanceof sdk.UitestE
 "</code></pre>
 
       <pre><code>exports 126
-VERSION 0.9.3
+VERSION 0.9.4
 state device_offline instanceof UitestError true</code></pre>
+
+      <p class="note">第一次跑这一步时 <code>latest</code> 还是 <code>0.9.3</code>，输出是 <code>VERSION 0.9.3</code>，其余数字相同。修完<a href="#found">那 7 条</a>之后 <code>0.9.4</code> 发布，这一段在 0.9.4 上重跑过：导出数不变（126），并且包里的 <code>dist/apps.js</code> 确实带上了 <code>resolveAppList</code>、<code>dist/hold.js</code> 确实认 <code>HDC_TARGET</code>——这一页测的能力矩阵，就是 <code>npm install uitest-sdk</code> 装到的东西。</p>
 
       <p>再确认两件容易漏的事：包里的扩展文件在不在，以及它是不是真的 ESM-only。</p>
 
@@ -404,17 +406,17 @@ released · 7544d645 is free for the next command</code></pre>
       <h2 id="step9">9 · 发布产物</h2>
 
       <pre><code>$ npm view uitest-sdk version dist-tags
-version: 0.9.3
-dist-tags: { latest: "0.9.3", legacy: "0.3.0" }
+version: 0.9.4
+dist-tags: { latest: "0.9.4", legacy: "0.3.0" }
 
 $ npm view uitest-sdk dist.shasum
-6554253b3ab5a89eec83c2f93dcba729172482b9</code></pre>
+cfdba0e43d57bd05c5c7c773d001305bdc5111a4</code></pre>
 
-      <p>这个 shasum 与<strong>发版当时</strong>（提交 <code>6ea19a2</code>）本地 <code>npm pack</code> 算出来的一致，说明发上去的字节就是那次打包出来的字节。验收修完那 7 条之后代码变了，所以 <code>0.9.4</code> 是另一次打包、另一个 shasum——发布后可以同样用 <code>npm view uitest-sdk dist.shasum</code> 核对。另外三项：</p>
+      <p>这个 shasum 与本地 <code>npm pack</code> 算出来的一致（141 个文件 · 1.09 MB），说明发上去的字节就是这里打包出来的字节。验收当时的 <code>0.9.3</code> 是另一次打包（shasum <code>6554253b…</code>），两者的差别就是<a href="#found">修掉的那 7 条</a>。另外三项：</p>
 
       <ul>
-        <li><strong>Git tag</strong>：<code>v0.9.3</code> 指向提交 <code>6ea19a2</code>。</li>
-        <li><strong>GitHub Release</strong>：<code>0.9.3 — 投屏页只接受自己的来源</code>，已发布。</li>
+        <li><strong>Git tag</strong>：<code>v0.9.4</code> 指向提交 <code>896de44</code>。</li>
+        <li><strong>GitHub Release</strong>：<code>0.9.4 — 两台真机验收修出来的东西</code>，已发布。</li>
         <li><strong>官网</strong>：<code>node scripts/check-site.mjs</code> 通过，版本号从 <code>dist/version.js</code> 读，不写死。</li>
       </ul>
 
@@ -500,7 +502,7 @@ $ npm view uitest-sdk dist.shasum
         <li><strong>先把设备放在一个没有个人内容的界面上。</strong>截图是要给人看的，验收脚本默认在计算器上拍。</li>
         <li><strong>一次只跑一台设备。</strong>同一个设备不能同时被两个验收占用——设备侧的锁会拒绝第二个，这不是 bug，是设计。</li>
         <li><strong>看失败的第一行，不要看最后一行。</strong><code>FAILED:</code> 后面那句通常已经写清了原因（比如「通知栏还开着」「屏幕没在动」），比堆栈有用。</li>
-        <li><strong>验收前先决定「测的是哪个版本」。</strong>这一轮的矩阵从 <code>0.9.3</code> 开始，测的却是修完那 7 条之后的代码——也就是 <code>0.9.4</code>。想让报告和包完全一致，要么先发版再验收，要么在报告里写清楚差在哪里（这一页选了后者）。</li>
+        <li><strong>验收前先决定「测的是哪个版本」。</strong>这一轮的矩阵从 <code>0.9.3</code> 开始，测的却是修完那 7 条之后的代码——也就是 <code>0.9.4</code>。想让报告和包完全一致，要么先发版再验收，要么在报告里写清楚差在哪里（这一页选了后者，发完 <code>0.9.4</code> 后又把<a href="#step2">步骤 2</a>和<a href="#step9">步骤 9</a>在新包上重跑了一遍）。</li>
       </ul>
 
       <p class="note">这一页的所有数字来自 2026-11-17 夜间的两轮完整运行，机器是同一台 Windows 主机、同一个 <code>hdc</code>、同样的 USB 连接。换一台机器或换一根线，耗时会有差异；判定标准（通过/失败）不会。</p>
