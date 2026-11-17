@@ -35,6 +35,7 @@ import {
   isSearchEntryNode,
   parseOnly,
   readonlyGuardVerdict,
+  shouldRelaunch,
   shouldRun,
   stabilityStep,
 } from "./live-walk.js";
@@ -1612,13 +1613,50 @@ async function main(): Promise<number> {
         // alone. The baseline here is the same mixed input for one minute,
         // and the ten-minute run is compared against it — which measures what
         // the claim is about: input does not decay over a long session.
+        let relaunches = 0;
+        let lastRelaunchAt = Number.NEGATIVE_INFINITY;
+        // Per-minute fps, so a decay can be told from device throttling: a
+        // monotonic fall points at the device heating up, an oscillation at
+        // measurement noise, and a step at a code path.
+        let segStart = performance.now();
+        let segFrames = 0;
+        let segOwner: LiveClient | null = null;
+        const segment = (client: LiveClient): void => {
+          const now = performance.now();
+          if (now - segStart < 60_000) return;
+          const secs = (now - segStart) / 1000;
+          const frames = client.binaries - segFrames;
+          if (process.env.UITEST_TRACE_TICKS) {
+            process.stderr.write(`segment ${secs.toFixed(0)}s ${(frames / secs).toFixed(2)} fps\n`);
+          }
+          segStart = now;
+          segFrames = client.binaries;
+          segOwner = client;
+        };
         const tick = (client: LiveClient, n: number): void => {
           const nodes = client.nodes();
+          if (segOwner !== client) {
+            segOwner = client;
+            segStart = performance.now();
+            segFrames = client.binaries;
+          }
+          segment(client);
           const step = stabilityStep(nodes.bundle, ZHIHU_BUNDLE, isFeed(nodes.nodes), n);
+          if (process.env.UITEST_TRACE_TICKS) {
+            const labels = nodes.nodes.map((x) => x.label.trim()).filter(Boolean).slice(0, 5).join("|");
+            process.stderr.write(`tick ${n} bundle=${nodes.bundle} feed=${isFeed(nodes.nodes)} step=${step} [${labels}]\n`);
+          }
           if (step === "relaunch") {
             // Back on a backgrounded app only walks the launcher; the app has
-            // to be brought back before any input means anything.
-            void relaunchZhihu();
+            // to be brought back before any input means anything. Not on every
+            // tick: a relaunch is a cold start whose splash carries almost no
+            // frames, and firing one every 500 ms kept restarting Zhihu.
+            const now = performance.now();
+            if (shouldRelaunch(step, now - lastRelaunchAt)) {
+              lastRelaunchAt = now;
+              relaunches++;
+              void relaunchZhihu();
+            }
             return;
           }
           if (step === "scroll") {
@@ -1635,15 +1673,16 @@ async function main(): Promise<number> {
           // Text. ASCII keeps the typing path (a paste would clobber the device
           // clipboard on every tick); the Chinese paste path is already covered
           // by the keyboard scenario.
+          //
+          // Only where a field already exists: tapping the search entry opens
+          // the search page, and the next scroll then runs over results — or
+          // over an article the entry resolved to — which streams far fewer
+          // frames. Spec §9 says "不点任意卡片" for this scenario, and the
+          // measured cost of ignoring that was a 25% fps step that read as
+          // decay.
           const field = pickField(nodes.nodes);
           if (field) {
             client.sendInput({ action: "text", text: "hm", x: field.cx, y: field.cy });
-          } else if (isFeed(nodes.nodes)) {
-            const entry = pickSearchEntry(nodes.nodes);
-            if (entry) {
-              client.sendInput({ action: "down", x: entry.cx, y: entry.cy });
-              client.sendInput({ action: "up", x: entry.cx, y: entry.cy });
-            }
           }
         };
 
@@ -1687,6 +1726,11 @@ async function main(): Promise<number> {
           if (!handedOver && performance.now() - runStart >= handoverAt) {
             aFrames = a!.binaries - aStart;
             aSecs = (performance.now() - runStart) / 1000;
+            if (process.env.UITEST_TRACE_TICKS) {
+              process.stderr.write(
+                `handover: aFrames=${aFrames} aSecs=${aSecs.toFixed(1)} aFps=${(aFrames / aSecs).toFixed(2)}\n`,
+              );
+            }
             a!.close();
             const readonlyFrom = b!.texts.length;
             await b!.waitForControl("readonly", readonlyFrom, 8000);
@@ -1723,9 +1767,20 @@ async function main(): Promise<number> {
               `the new tab's Home key to leave ${beforeBundle}`,
             );
             // Back to Zhihu for the rest of the run, through the same relaunch
-            // every other scenario uses.
+            // every other scenario uses — and back to its feed, because Zhihu
+            // restores whatever page it was on. Measured without this: the
+            // second half sat on a restored search/article page and streamed
+            // 14.5 fps against 19.4 fps on the feed, a 25% step at the
+            // handover that read as decay.
             await relaunchZhihu();
             await sleep(2500);
+            await ensureFeed(b!, relaunchZhihu);
+            await settle(b!);
+            // Both halves must measure the same thing, so the second half's
+            // frame window starts once the feed is back, not at the handover.
+            bStart = b!.binaries;
+            segStart = performance.now();
+            segFrames = b!.binaries;
             handedOver = true;
             continue;
           }
@@ -1759,6 +1814,7 @@ async function main(): Promise<number> {
             `基线 ${baseline.fps.toFixed(2)} fps（${baseline.secs.toFixed(0)} s 同样输入）· ` +
             `长跑 ${fps.toFixed(2)} fps（${secs.toFixed(0)} s，${ticks} 次）· ` +
             `换手 ack ${ackMs.toFixed(0)} ms · ` +
+            (relaunches > 0 ? `回前台 ${relaunches} 次 · ` : "") +
             `p50 ${stats.p50.toFixed(1)} ms · p95 ${stats.p95.toFixed(1)} ms`,
           evidence: [],
         };

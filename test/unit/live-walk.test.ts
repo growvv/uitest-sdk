@@ -6,6 +6,7 @@ import {
   isSearchEntryNode,
   parseOnly,
   readonlyGuardVerdict,
+  shouldRelaunch,
   shouldRun,
   stabilityStep,
 } from "../../scripts/live-walk.js";
@@ -230,5 +231,22 @@ describe("stabilityStep", () => {
     expect(stabilityStep("com.ohos.sceneboard", ZHIHU, false, 17)).toBe("relaunch");
     expect(stabilityStep("com.ohos.sceneboard", ZHIHU, false, 0)).toBe("relaunch");
     expect(stabilityStep("com.ohos.sceneboard", ZHIHU, true, 5)).toBe("relaunch");
+  });
+});
+
+describe("shouldRelaunch", () => {
+  it("does not restart the app on every tick", () => {
+    // A relaunch is a cold start, and the splash carries almost no frames.
+    // Firing one every 500 ms kept Zhihu restarting and dragged the measured
+    // fps down.
+    expect(shouldRelaunch("relaunch", 0)).toBe(false);
+    expect(shouldRelaunch("relaunch", 500)).toBe(false);
+    expect(shouldRelaunch("relaunch", 4000)).toBe(true);
+  });
+
+  it("never relaunches on a tick that does something else", () => {
+    expect(shouldRelaunch("scroll", 10_000)).toBe(false);
+    expect(shouldRelaunch("back", 10_000)).toBe(false);
+    expect(shouldRelaunch("text", 10_000)).toBe(false);
   });
 });

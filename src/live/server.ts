@@ -294,6 +294,12 @@ export class LiveServer {
     const cast = this.cast;
     this.cast = null;
     if (cast) await cast.dispose().catch(() => undefined);
+    // A cast that died mid-run is disposed beside the retry, not here. The
+    // caller may exit the process as soon as `close()` resolves, so this wait
+    // is what keeps the device daemon from being left behind.
+    const disposal = this.castDisposal;
+    this.castDisposal = null;
+    if (disposal) await disposal;
 
     await new Promise<void>((resolve) => {
       this.server.close(() => resolve());

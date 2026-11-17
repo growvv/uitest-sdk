@@ -648,6 +648,45 @@ describe("LiveServer", () => {
     c.close();
   });
 
+  it("waits for a dead cast's disposal before it finishes closing", async () => {
+    // The acceptance script exits the process right after `close()`. A cast
+    // that died mid-run is disposed beside the retry, so `close()` has to wait
+    // for that disposal too — otherwise the process exits before the device
+    // daemon is killed, and the run leaves one behind (measured: every run
+    // left exactly one cast daemon until this was awaited).
+    let disposed = false;
+    class SlowEndingCast extends FakeCast {
+      async *stream(): AsyncIterable<H264Chunk> {
+        yield keyframe();
+      }
+      async dispose(): Promise<void> {
+        await new Promise((r) => setTimeout(r, 500));
+        disposed = true;
+        this.disposed = true;
+      }
+    }
+    const server = await LiveServer.start({
+      port: 0,
+      host: "127.0.0.1",
+      graceMs: 200,
+      layoutMs: 1000,
+      source: {
+        async createCast() {
+          return new SlowEndingCast();
+        },
+        async readScreen() {
+          return fakeScreen();
+        },
+      },
+    });
+    const c = await connect(server.port);
+    // Wait until the stream has ended and its disposal is in flight.
+    await new Promise((r) => setTimeout(r, 200));
+    await server.close();
+    expect(disposed).toBe(true);
+    c.close();
+  });
+
   it("reports its state in every hello", async () => {
     const h = await start();
     const c = await connect(h.port);

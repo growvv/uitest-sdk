@@ -111,6 +111,18 @@ export function stabilityStep(
   return onFeed ? "scroll" : "back";
 }
 
+/**
+ * Whether a tick should bring the app back to the front.
+ *
+ * A relaunch is a cold start: while it runs the screen is a splash, which
+ * carries almost no frames. Firing one every tick (500 ms) kept restarting
+ * Zhihu and dragged the measured fps down. One every few seconds is enough to
+ * recover, and the count is reported so the number can be read.
+ */
+export function shouldRelaunch(step: StabilityStep, msSinceRelaunch: number, cooldownMs = 4000): boolean {
+  return step === "relaunch" && msSinceRelaunch >= cooldownMs;
+}
+
 interface Box {
   left: number;
   top: number;
