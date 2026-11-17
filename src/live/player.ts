@@ -670,14 +670,25 @@ export const PLAYER_HTML = `<!doctype html>
     return true;
   }
 
+  // The picture is the decoded frame, which is not always the display: a
+  // --scale 2 cast and every MJPEG device (x86_64 emulators) deliver half
+  // the size. Input is in device pixels, so it is converted against the
+  // display, not the frame — otherwise every tap lands in the top-left
+  // quadrant of the phone.
+  function viewSize() {
+    if (display.width > 0 && display.height > 0) return display;
+    return { width: canvas.width, height: canvas.height };
+  }
+
   function devicePoint(ev) {
     var r = canvas.getBoundingClientRect();
+    var view = viewSize();
     if (!r.width || !r.height) return { x: 0, y: 0 };
-    var x = Math.round((ev.clientX - r.left) * canvas.width / r.width);
-    var y = Math.round((ev.clientY - r.top) * canvas.height / r.height);
+    var x = Math.round((ev.clientX - r.left) * view.width / r.width);
+    var y = Math.round((ev.clientY - r.top) * view.height / r.height);
     return {
-      x: Math.max(0, Math.min(canvas.width - 1, x)),
-      y: Math.max(0, Math.min(canvas.height - 1, y))
+      x: Math.max(0, Math.min(view.width - 1, x)),
+      y: Math.max(0, Math.min(view.height - 1, y))
     };
   }
 
@@ -716,7 +727,7 @@ export const PLAYER_HTML = `<!doctype html>
     var b = pointers[ids[1]];
     var dx = a.x - b.x;
     var dy = a.y - b.y;
-    var max = Math.min(canvas.width, canvas.height) / 2;
+    var max = Math.min(viewSize().width, viewSize().height) / 2;
     return {
       cx: Math.round((a.x + b.x) / 2),
       cy: Math.round((a.y + b.y) / 2),
@@ -805,7 +816,7 @@ export const PLAYER_HTML = `<!doctype html>
     ev.preventDefault();
     if (ev.ctrlKey) {
       var p = devicePoint(ev);
-      var max = Math.min(canvas.width, canvas.height) / 2;
+      var max = Math.min(viewSize().width, viewSize().height) / 2;
       var base = pinchHalf === null ? Math.max(20, max / 3) : pinchHalf;
       var half = Math.round(Math.max(20, Math.min(max, base * Math.exp(-ev.deltaY * 0.002))));
       if (pinchHalf !== null && Math.abs(half - pinchHalf) < 2) return;
@@ -824,6 +835,11 @@ export const PLAYER_HTML = `<!doctype html>
   function flushText() {
     clearTimeout(textTimer);
     textTimer = null;
+    // Mid-composition the field holds the IME's pinyin, not the person's
+    // characters. Enter to pick a candidate, Esc and the 回车 button all call
+    // this; sending now would put "hongmeng" on the phone and lose 鸿蒙. The
+    // compositionend that follows schedules the real flush.
+    if (composing) return;
     var text = textEl.value;
     if (!text) return;
     textEl.value = '';
@@ -919,6 +935,9 @@ export const PLAYER_HTML = `<!doctype html>
   });
   textEl.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Enter') return;
+    // While the IME owns the keyboard, Enter picks a candidate; the phone must
+    // not also receive an Enter, which would submit the screen underneath.
+    if (composing) return;
     ev.preventDefault();
     flushText();
     sendInput({ action: 'key', key: 'enter' });

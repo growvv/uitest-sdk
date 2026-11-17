@@ -28,6 +28,7 @@ import { startLive, liveOptions } from "../src/live/cli.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../src/cast/ws.js";
 import { deviceTag } from "../src/trace.js";
 import { assertCapturable } from "./acceptance.js";
+import { RestartBudget } from "./live-walk.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "docs/acceptance/live");
@@ -565,9 +566,11 @@ const BOTTOM_CROP_PX = 200;
  * Keeps the top strip of the screen and drops the rest.
  *
  * The long-press evidence is the input assistant above the keyboard; below it
- * sits the search page's history, which is the person's own.
+ * sits the search page's history, which is the person's own. 280 px still
+ * caught the first history row (`北京全路通信信号研究…`), so the cut is 228 px —
+ * the assistant bar ends at 192, and the history starts at 232.
  */
-const TOP_CROP_PX = 280;
+const TOP_CROP_PX = 228;
 
 /** The launcher's app grid; its search history sits below. */
 const LAUNCHER_CROP_PX = 360;
@@ -1420,6 +1423,12 @@ async function main(): Promise<number> {
         // video channel, whose page has no viewer. So the walk tries the
         // results in order and checks each landing by what the screen becomes
         // — a viewer is black behind its toolbar, an answer is white.
+        //
+        // A landing that is neither (a hot-topic module, an unrecognised page)
+        // means a cold restart and another search. That is bounded: an
+        // unbounded walk never fails, so it never finishes either, and the
+        // run's finally-block never restores the screen-off timeout.
+        const restarts = new RestartBudget(2);
         const openViewer = async (): Promise<{ cx: number; cy: number; dark: number }> => {
           // A cold start resets the tab and the scroll position: the previous
           // scenario leaves the device wherever Home sent it.
@@ -1495,7 +1504,12 @@ async function main(): Promise<number> {
               a!.sendInput({ action: "key", key: "back" });
               await sleep(1500);
               await settle(a!);
-              if (!isSearchResults(a!.nodes().nodes)) return await openViewer();
+              if (!isSearchResults(a!.nodes().nodes)) {
+                if (!restarts.take()) {
+                  throw new Error("no result led to an image viewer, and the cold-start budget is spent");
+                }
+                return await openViewer();
+              }
             }
             await swipe(
               a!,

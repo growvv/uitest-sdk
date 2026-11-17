@@ -146,6 +146,114 @@ describe("LiveInput pointer", () => {
     expect(lane.ops("touchUp")).toEqual([[10, 20]]);
   });
 
+  it("lifts the pointer before it reports the failure", async () => {
+    // The server's onError handler releases control and closes the lane at
+    // once, so a lift issued after it lands on a dead socket and the phone
+    // keeps its finger down. The lift has to be on the wire first.
+    const lane = new FakeLane();
+    const seen: number[] = [];
+    const input = new LiveInput({
+      lane,
+      bounds,
+      onError: () => seen.push(lane.ops("touchUp").length),
+    });
+    input.down(10, 20);
+    await settle();
+    lane.failMove = true;
+    input.move(12, 22);
+    await settle();
+    expect(seen).toEqual([1]);
+    expect(lane.ops("touchUp")).toEqual([[10, 20]]);
+  });
+
+  it("still reports the failure when the lift itself fails", async () => {
+    // A dead lane is the common case; the person must still learn that input
+    // stopped, and the error must not be swallowed by the lift's rejection.
+    class NoLift extends FakeLane {
+      override touchUp(x: number, y: number): Promise<void> {
+        this.calls.push(["touchUp", x, y]);
+        return Promise.reject(new Error("lift failed"));
+      }
+    }
+    const lane = new NoLift();
+    const errors: Error[] = [];
+    const input = new LiveInput({ lane, bounds, onError: (e) => errors.push(e) });
+    input.down(10, 20);
+    await settle();
+    lane.failMove = true;
+    input.move(12, 22);
+    await settle();
+    expect(errors.map((e) => e.message)).toEqual(["lane gone"]);
+    expect(input.state()).toBe("idle");
+  });
+
+  it("gives up on a lift that never answers, still reporting the failure", async () => {
+    // onError closes the lane; a lift that hangs must not hold the report
+    // hostage for longer than cancel()'s 500 ms cap.
+    class HangingLift extends FakeLane {
+      override touchUp(x: number, y: number): Promise<void> {
+        this.calls.push(["touchUp", x, y]);
+        return new Promise<void>(() => {});
+      }
+    }
+    const lane = new HangingLift();
+    const errors: Error[] = [];
+    let reported = () => {};
+    const onError = new Promise<void>((resolve) => {
+      reported = resolve;
+    });
+    const input = new LiveInput({
+      lane,
+      bounds,
+      onError: (e) => {
+        errors.push(e);
+        reported();
+      },
+    });
+    input.down(10, 20);
+    await settle();
+    lane.failMove = true;
+    const started = Date.now();
+    input.move(12, 22);
+    await Promise.race([onError, new Promise<void>((r) => setTimeout(r, 900))]);
+    expect(errors).toHaveLength(1);
+    expect(Date.now() - started).toBeLessThan(900);
+  });
+
+  it("ignores input that arrives after a failure", async () => {
+    // The report waits for the lift, so the page can still send for up to
+    // half a second after the lane died. None of it may be replayed onto the
+    // next takeover's lane.
+    const lane = new FakeLane();
+    let reported = () => {};
+    const failed = new Promise<void>((resolve) => {
+      reported = resolve;
+    });
+    const input = new LiveInput({ lane, bounds, onError: () => reported() });
+    input.down(10, 20);
+    await settle();
+    lane.failMove = true;
+    input.move(12, 22);
+    await failed;
+    input.down(30, 40);
+    input.move(31, 41);
+    input.up(31, 41);
+    input.key("back");
+    input.type("late");
+    input.pinch(100, 200, 50);
+    input.wheel(100, 200, 100);
+    await settle();
+    expect(lane.ops("touchDown")).toEqual([[10, 20]]);
+    // The rejected move was attempted; nothing after it reached the lane.
+    expect(lane.ops("touchMove")).toEqual([[12, 22]]);
+    expect(lane.ops("key")).toEqual([]);
+    expect(lane.ops("text")).toEqual([]);
+    expect(lane.ops("pinch")).toEqual([]);
+    expect(lane.ops("scroll")).toEqual([]);
+    expect(lane.ops("touchUp")).toEqual([[10, 20]]);
+    expect(input.state()).toBe("idle");
+  });
+
   it("records injection timings for the stats broadcast", async () => {
     const lane = new FakeLane();
     const input = new LiveInput({ lane, bounds });

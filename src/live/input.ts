@@ -80,6 +80,8 @@ export class LiveInput {
   private pendingWheel = 0;
   private wheelBusy = false;
   private wheelPoint: Point | null = null;
+  /** Set when a lane op failed; nothing more is sent on this lane. */
+  private dead = false;
   private readonly timings: number[] = [];
 
   constructor(opts: LiveInputOptions) {
@@ -92,6 +94,7 @@ export class LiveInput {
   }
 
   down(x: number, y: number): void {
+    if (this.dead) return;
     const p = this.clampPoint(x, y);
     if (this.current === "down") {
       // A second down without an up would be reinterpreted by the device as a
@@ -109,7 +112,7 @@ export class LiveInput {
   }
 
   move(x: number, y: number): void {
-    if (this.current !== "down") return;
+    if (this.dead || this.current !== "down") return;
     const p = this.clampPoint(x, y);
     this.lastPoint = p;
     this.lastPointerAt = this.now();
@@ -117,7 +120,7 @@ export class LiveInput {
   }
 
   up(x: number, y: number): void {
-    if (this.current !== "down") return;
+    if (this.dead || this.current !== "down") return;
     const p = this.clampPoint(x, y);
     this.current = "idle";
     this.push({ kind: "up", x: p.x, y: p.y });
@@ -131,6 +134,7 @@ export class LiveInput {
    * the scale follows the fingers instead of jumping.
    */
   pinch(cx: number, cy: number, half: number): void {
+    if (this.dead) return;
     const c = this.clampPoint(cx, cy);
     const h = this.clampHalf(half);
     if (this.current === "down") {
@@ -154,12 +158,14 @@ export class LiveInput {
    * instead of queueing per event.
    */
   wheel(x: number, y: number, dy: number): void {
+    if (this.dead) return;
     this.wheelPoint = this.clampPoint(x, y);
     this.pendingWheel += dy;
     if (!this.wheelBusy) this.flushWheel();
   }
 
   key(name: LiveKey): void {
+    if (this.dead) return;
     this.push({ kind: "key", code: KEY_CODES[name] });
   }
 
@@ -170,6 +176,7 @@ export class LiveInput {
    * non-ASCII text takes the faster paste path.
    */
   type(text: string, point?: { x: number; y: number }): void {
+    if (this.dead) return;
     const normalized = text.replace(/\r\n?|\n/g, " ").trim();
     if (normalized === "") return;
     const mode: TextMode =
@@ -187,18 +194,7 @@ export class LiveInput {
     this.pendingWheel = 0;
     if (!this.downSent) return;
     this.downSent = false;
-    const at = this.sentPoint;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        this.lane.touchUp(at.x, at.y).catch(() => undefined),
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, CANCEL_LIFT_MS);
-        }),
-      ]);
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-    }
+    await this.lift(this.sentPoint);
   }
 
   tick(now: number = this.now()): void {
@@ -220,6 +216,9 @@ export class LiveInput {
   }
 
   private push(op: Op): void {
+    // The lane is gone: the server has been told, and anything the page sends
+    // before it hears back belongs to the next takeover, not this one.
+    if (this.dead) return;
     if (op.kind === "move" && this.queue.length > 0) {
       const tail = this.queue[this.queue.length - 1]!;
       if (tail.kind === "move") {
@@ -242,7 +241,7 @@ export class LiveInput {
         try {
           await this.runOp(op);
         } catch (e) {
-          this.fail(e instanceof Error ? e : new Error(String(e)));
+          await this.fail(e instanceof Error ? e : new Error(String(e)));
           return;
         }
         this.timings.push(performance.now() - started);
@@ -315,20 +314,38 @@ export class LiveInput {
     return Math.round(Math.min(Math.max(half, 20), max));
   }
 
-  private fail(error: Error): void {
+  private async fail(error: Error): Promise<void> {
     const wasHolding = this.downSent;
     const at = this.sentPoint;
+    this.dead = true;
     this.downSent = false;
     this.current = "idle";
     this.queue = [];
     this.pinchBase = null;
     this.wheelBusy = false;
     this.pendingWheel = 0;
-    this.onError?.(error);
     // The lane rejected an op, so the gesture is over; release the pointer
-    // without waiting. A dead lane makes the lift fail too, which is fine —
-    // the caller's page is already being told to go read-only.
-    if (wasHolding) void this.lane.touchUp(at.x, at.y).catch(() => undefined);
+    // first. The caller's onError releases control and closes the lane, so a
+    // lift issued after it would reach a dead socket and leave the phone
+    // pressed. A lane that cannot even lift is fine — there is nothing left to
+    // do — but it must not delay the report past cancel()'s cap.
+    if (wasHolding) await this.lift(at);
+    this.onError?.(error);
+  }
+
+  /** Best-effort lift, capped so a silent lane cannot stall the caller. */
+  private async lift(at: Point): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.lane.touchUp(at.x, at.y).catch(() => undefined),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, CANCEL_LIFT_MS);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   private clampPoint(x: number, y: number): Point {
