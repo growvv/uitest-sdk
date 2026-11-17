@@ -939,3 +939,20 @@ artifact，`deploy-pages` 看到两个同名 artifact 直接报错。正确做�
 
 全套 807 passed / 1 skipped，两个 tsconfig 干净，`check-site.mjs` 通过（含无头 Chrome 的
 `js-ready` 检查）。
+
+### K. 0.9.1：十条修补之后又跑了一遍两个验收
+
+0.9.1 是 0.9.0 的补丁版，功能不变，只进 J 节那十条。发版流程照旧，两条验收都跑：
+
+- `npm run acceptance:handoff` —— 16/16，接管闭环（handoff → `lease_held` → `resume` → 续跑）。
+- `npx tsx scripts/acceptance.ts --targets <id>` —— 16/16，`connect` / `click` / `swipe` /
+  `touch` / `triggerKey` / `captureLayout` / `captureScreen` / `cropToWindow` / `streamScreen` /
+  `createCast` / `createCastRecord` / `dualCast` / `dumpLayout` / `queue` / `rpcDuringStream` /
+  `streamUiActions`。`streamScreen` 14.6 fps（上一版同机 11.3 fps）。
+
+跑之前把设备收拾干净：`power-shell timeout -o 3600000` 常亮、确认 `screenLocked false`、
+`SCBDropdownPanel` 的 z 序是 -1（通知栏关着）、知乎停在一个公开回答页。跑完 16 张截图
+**逐张看过**：全部是同一个知乎公开回答页，无锁屏、无通知栏、无账号或聊天内容。
+
+`git diff --ignore-cr-at-eol docs/acceptance/` 的差异只有耗时、节点数与录制文件大小，
+这正是发版清单要求的形态。

@@ -590,6 +590,12 @@ for (const needle of [
   // screen on GPU-less machines, and the changelog must record the fix.
   "解码器由浏览器挑",
   "重开解码器",
+  // 0.9.1: the fixes the branch review and the release run turned up. The
+  // changelog must record them, because two of them changed what a person
+  // sees: their text no longer disappears on release.
+  "0.9.1",
+  "退出接管不再吞掉刚输入的字",
+  "report-only.md",
   // 0.9.0: takeover, the second input lane, and the acceptance numbers.
   "0.9.0",
   "接管",
