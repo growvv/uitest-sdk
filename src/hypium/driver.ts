@@ -373,6 +373,33 @@ export class HypiumDriver {
     return !(await this.isDisplayOn());
   }
 
+  /**
+   * True while the notification shade is pulled down.
+   *
+   * Read from the window manager rather than from a screenshot: the shade is a
+   * separate window (`SCBDropdownPanel`) that only gets a z-order when it is
+   * showing — at rest it sits at -1, which is how a closed shade looks. A
+   * screenshot cannot tell the difference between "the shade" and "an app that
+   * looks like the shade", and the whole point is to never photograph it.
+   */
+  async isShadeOpen(): Promise<boolean> {
+    const out = await this.hdcRunner.shell("hidumper -s WindowManagerService -a -a");
+    for (const line of out.split(/\r?\n/)) {
+      if (!line.includes("SCBDropdownPanel")) continue;
+      const fields = line.split(/\s+/).filter(Boolean);
+      const zOrder = Number(fields[7]);
+      return Number.isFinite(zOrder) && zOrder >= 0;
+    }
+    return false;
+  }
+
+  /** Closes the notification shade if it is open. */
+  async closeShade(): Promise<void> {
+    if (!(await this.isShadeOpen())) return;
+    this.before({ operate_type: "key", key: 2 });
+    await this.triggerKey(2); // KEYCODE_BACK
+  }
+
   async wakeUpDisplay(): Promise<void> {
     this.before({ operate_type: "wake" });
     await this.hdcRunner.shell("power-shell wakeup");

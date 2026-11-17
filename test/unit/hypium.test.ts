@@ -586,3 +586,32 @@ describe("HypiumDriver · lock state", () => {
     expect(await w.driver.isDisplayLocked()).toBe(false);
   });
 });
+
+describe("HypiumDriver · notification shade", () => {
+  // Measured on the device: the shade is a window called SCBDropdownPanel
+  // whose z-order is -1 while it is hidden and 2201 while it is pulled down.
+  const row = (z: number) =>
+    `SCBDropdownPanel17 0 6500 22 2109 1 0 ${z} 0 [ 0 0 1216 2688 ] [ 0 0 ] [ 1 1 0.5 0.5 ]`;
+  const closed = `SCBStatusBar18 0 6500 23 2108 1 0 2202 0 [ 0 0 1216 107 ]\n${row(-1)}`;
+  const open = `SCBStatusBar18 0 6500 23 2108 1 0 2202 0 [ 0 0 1216 197 ]\n${row(2201)}`;
+
+  it("reports the shade open only when its window is in the z-order", async () => {
+    const w = world({ "shell:hidumper -s WindowManagerService -a -a": () => open });
+    expect(await w.driver.isShadeOpen()).toBe(true);
+  });
+
+  it("reports a hidden shade as closed", async () => {
+    const w = world({ "shell:hidumper -s WindowManagerService -a -a": () => closed });
+    expect(await w.driver.isShadeOpen()).toBe(false);
+  });
+
+  it("sends back to close an open shade and nothing when it is already closed", async () => {
+    const w = world({ "shell:hidumper -s WindowManagerService -a -a": () => open });
+    await w.driver.closeShade();
+    expect(w.calls).toContainEqual({ api: "Driver.triggerKey", args: [2], thisRef: "Driver#0" });
+
+    const w2 = world({ "shell:hidumper -s WindowManagerService -a -a": () => closed });
+    await w2.driver.closeShade();
+    expect(w2.calls.some((c) => c.api === "Driver.triggerKey")).toBe(false);
+  });
+});

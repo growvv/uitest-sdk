@@ -311,6 +311,33 @@ export interface DisplayLike {
   unlock(): Promise<void>;
 }
 
+/** The part of `dev.hypium` the shade guard needs. */
+export interface ShadeLike {
+  isShadeOpen(): Promise<boolean>;
+  closeShade(): Promise<void>;
+}
+
+/**
+ * Makes sure the notification shade is not covering the app before evidence is
+ * written.
+ *
+ * The `touch` capability starts at (100,100) — inside the status bar — and
+ * drags from there, which on this ROM pulls the shade down. Every screenshot
+ * after it would then be the person's messages, bank alerts and delivery
+ * notices, which is exactly what the lock-screen guard exists to keep out of a
+ * published repository. The shade is read from the window manager, not from a
+ * picture, and a shade that will not close stops the run.
+ */
+export async function assertShadeClosed(display: ShadeLike): Promise<void> {
+  if (!(await display.isShadeOpen())) return;
+  await display.closeShade();
+  if (await display.isShadeOpen()) {
+    throw new Error(
+      "the notification shade is still open: close it and run again, or the next capture publishes its contents",
+    );
+  }
+}
+
 /**
  * Makes sure the screen is worth photographing before evidence is written.
  *
@@ -409,6 +436,7 @@ async function runTarget(target: string): Promise<{ results: Result[]; info: Env
         // the phone may be asleep; every capture after it would otherwise be
         // the lock screen.
         await assertCapturable(dev.hypium);
+        await assertShadeClosed(dev.hypium);
         const detail = await cap.run(dev, ev);
         results.push({
           capability: cap.name,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assertCapturable, pressPowerKey } from "../../scripts/acceptance.js";
+import { assertCapturable, assertShadeClosed, pressPowerKey } from "../../scripts/acceptance.js";
 
 /** A stand-in for `dev.hypium`: only the two calls the guard uses. */
 function fakeDisplay(opts: { locked: boolean; unlockWorks: boolean }) {
@@ -62,5 +62,53 @@ describe("acceptance capture guard", () => {
     expect(pressed).toEqual([26]);
     expect(calls).toContain("unlock");
     expect(await display.isDisplayLocked()).toBe(false);
+  });
+});
+
+// The `touch` capability starts at (100,100), which is inside the status bar,
+// and drags to (120,120): on this ROM that gesture pulls the notification
+// shade down. Every later screenshot is then the person's notifications — the
+// same leak the lock-screen guard exists to prevent, from a different door.
+describe("acceptance capture guard · notification shade", () => {
+  function fakeShade(opts: { open: boolean; closes: boolean }) {
+    const calls: string[] = [];
+    let open = opts.open;
+    return {
+      calls,
+      display: {
+        async isShadeOpen() {
+          calls.push("isShadeOpen");
+          return open;
+        },
+        async closeShade() {
+          calls.push("closeShade");
+          if (opts.closes) open = false;
+        },
+      },
+    };
+  }
+
+  it("closes an open shade before evidence is captured", async () => {
+    const { display, calls } = fakeShade({ open: true, closes: true });
+
+    await assertShadeClosed(display);
+
+    expect(calls).toEqual(["isShadeOpen", "closeShade", "isShadeOpen"]);
+  });
+
+  it("leaves a closed shade alone", async () => {
+    const { display, calls } = fakeShade({ open: false, closes: true });
+
+    await assertShadeClosed(display);
+
+    expect(calls).toEqual(["isShadeOpen"]);
+  });
+
+  // A shade that will not close means the next capture publishes whatever was
+  // waiting in it, so the run stops instead.
+  it("refuses to capture while the shade is still open", async () => {
+    const { display } = fakeShade({ open: true, closes: false });
+
+    await expect(assertShadeClosed(display)).rejects.toThrow(/notification shade/i);
   });
 });
