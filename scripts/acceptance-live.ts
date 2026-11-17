@@ -982,7 +982,7 @@ ${rows}
 
 ## 真实页面键盘检查
 
-`browser keyboard` 场景用无头 Chrome 打开同一个 live 页面、同一台设备，键盘事件走页面的真实监听器（不是模拟服务器）：
+\`browser keyboard\` 场景用无头 Chrome 打开同一个 live 页面、同一台设备，键盘事件走页面的真实监听器（不是模拟服务器）：
 
 ${browser}
 
