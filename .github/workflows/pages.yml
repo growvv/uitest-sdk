@@ -35,6 +35,13 @@ jobs:
       # test/ unseen. This project file adds test/ and scripts/ to the same
       # strict settings so they cannot drift again.
       - run: npm run typecheck:tests
+      # One-way edges: core never imports a product, a product never imports
+      # another product, no deep imports into dist/ or src/. The checker
+      # accepts a missing packages/ tree, so this is live from the first split.
+      - run: node scripts/check-layers.mjs
+      # Site links and version banners were only checked at deploy time, so a
+      # PR could merge a site that the deploy job would then refuse to publish.
+      - run: node scripts/check-site.mjs
       - run: npm test
   deploy:
     needs: test

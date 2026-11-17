@@ -70,6 +70,7 @@
     "test": "vitest run test/unit",
     "test:device": "vitest run test/device",
     "acceptance:handoff": "node scripts/acceptance-handoff.mjs",
+    "check:layers": "node scripts/check-layers.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc -p tsconfig.test.json"
   },
