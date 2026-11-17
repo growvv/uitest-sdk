@@ -95,10 +95,17 @@ const CAPABILITIES: Capability[] = [
   {
     name: "touch",
     async run(dev, ev) {
-      await dev.agent.touchDown(100, 100);
-      await dev.agent.touchMove(120, 120);
-      await dev.agent.touchUp(120, 120);
-      await ev.log("touchDown/Move/Up completed");
+      // The touch protocol, not a gesture: a down, a move and an up at fixed
+      // points. Start it in the middle of the screen — (100,100) is inside the
+      // status bar, and a drag from there pulls the notification shade down
+      // over every screenshot that follows.
+      const s = await dev.agent.getDisplaySize();
+      const x = Math.round(s.width / 2);
+      const y = Math.round(s.height / 2);
+      await dev.agent.touchDown(x, y);
+      await dev.agent.touchMove(x + 20, y + 20);
+      await dev.agent.touchUp(x + 20, y + 20);
+      await ev.log(`touchDown/Move/Up completed at ${x},${y}`);
       await ev.screenshot(await dev.agent.captureScreen());
       return "ok";
     },
