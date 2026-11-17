@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { FpsMeter } from "../../src/fps.js";
+import { FpsMeter } from "../../src/cast/fps.js";
 
 describe("FpsMeter", () => {
   it("reports zero until it has two frames", () => {

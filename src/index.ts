@@ -139,10 +139,10 @@ export { HdcRunner } from "./transport/hdc.js";
 export type { HdcOptions } from "./transport/hdc.js";
 export { Files } from "./transport/files.js";
 export type { FileEntry } from "./transport/files.js";
-export { CastConfig, castConfigPath } from "./config.js";
-export type { CastSettings } from "./config.js";
-export { FpsMeter } from "./fps.js";
-export type { FpsStats, FpsMeterOptions } from "./fps.js";
+export { CastConfig, castConfigPath } from "./cast/config.js";
+export type { CastSettings } from "./cast/config.js";
+export { FpsMeter } from "./cast/fps.js";
+export type { FpsStats, FpsMeterOptions } from "./cast/fps.js";
 
 export { CliRunner } from "./driver/cli.js";
 export type { DumpLayoutOptions } from "./driver/cli.js";

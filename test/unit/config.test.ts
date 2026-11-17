@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CastConfig, castConfigPath } from "../../src/config.js";
+import { CastConfig, castConfigPath } from "../../src/cast/config.js";
 import { UitestError } from "../../src/transport/errors.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {

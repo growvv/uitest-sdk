@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { CastOptions } from "./cast/types.js";
-import { UitestError } from "./transport/errors.js";
+import type { CastOptions } from "./types.js";
+import { UitestError } from "../transport/errors.js";
 
 /** Cast defaults, one field per `start-daemon` flag the SDK passes through. */
 export interface CastSettings {
