@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import vm from "node:vm";
-import { PLAYER_HTML } from "../../src/live/player.js";
+import { PLAYER_HTML, renderPlayerPage } from "../../src/viewer/player.js";
 
 /**
  * Runs the live page's inline script against a minimal DOM.
@@ -277,6 +277,14 @@ function loadPlayer() {
       return this.frames().filter((m) => m.type === "input");
     },
     advance: clock.advance,
+    /** The product-facing extension API the page installs on `window`. */
+    viewer(): {
+      send(message: Record<string, unknown>): void;
+      on(type: string, handler: (message: Record<string, unknown>) => void): void;
+      hello(): Record<string, unknown> | null;
+    } {
+      return (sandbox.window as unknown as { uitestViewer: never }).uitestViewer;
+    },
   };
 }
 
@@ -457,5 +465,54 @@ describe("live page latency readout", () => {
     const text = page.el("input-ms").textContent;
     expect(text).toContain("慢操作");
     expect(text).not.toContain("0 ms");
+  });
+});
+
+describe("player extensions", () => {
+  it("exposes window.uitestViewer and re-emits server messages", () => {
+    const page = loadPlayer();
+    const seen: Record<string, unknown>[] = [];
+    page.viewer().on("hello", (m) => seen.push(m));
+    page.viewer().on("control", (m) => seen.push(m));
+
+    page.hello({ width: 400, height: 800, clientId: "tab-1" });
+    page.server({ stats: { p50: 4, p95: 9, n: 1, slow: 0 } });
+
+    expect(seen.map((m) => m.type)).toEqual(["hello", "control"]);
+    // An MJPEG hello carries no decoder config, so the page keeps none.
+    expect(page.viewer().hello()).toBeNull();
+  });
+
+  it("sends product messages on the page's own socket", () => {
+    const page = loadPlayer();
+    page.hello({ width: 400, height: 800 });
+    page.viewer().send({ type: "console:list" });
+    expect(page.frames().at(-1)).toEqual({ type: "console:list" });
+  });
+
+  it("hides the inspector, privacy switch and takeover on the hello flags", () => {
+    const page = loadPlayer();
+    page.hello({
+      width: 400,
+      height: 800,
+      canInspect: false,
+      canPrivacy: false,
+      canInput: false,
+      mode: "off",
+    });
+    expect(page.el("side").hidden).toBe(true);
+    expect(page.el("privacy-switch").hidden).toBe(true);
+    expect(page.el("takeover").hidden).toBe(true);
+  });
+
+  it("builds a page with a title and product markup", () => {
+    const html = renderPlayerPage({
+      title: "<b>x</b>",
+      extraHtml: '<div id="inbox"></div>',
+      extraScript: "console.log(1);",
+    });
+    expect(html).toContain("<title>&lt;b&gt;x&lt;/b&gt;</title>");
+    expect(html).toContain('<div id="inbox"></div>');
+    expect(html).toContain("<script>console.log(1);</script>");
   });
 });

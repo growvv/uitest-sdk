@@ -1,17 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { Device } from "../driver/device.js";
 import type { DeviceOptions } from "../driver/device.js";
 import { Session } from "../operations/session.js";
 import { parseArgv } from "../cli-main.js";
-import { Recording } from "../cast/record.js";
-import { createCast } from "../cast/create.js";
-import { openInput } from "../input/open.js";
-import { LiveServer } from "./server.js";
-import type { LiveServerOptions } from "./server.js";
+import { ViewerServer } from "../viewer/server.js";
+import { createViewerSource } from "../viewer/source.js";
 import type { CastOptions } from "../cast/types.js";
-import type { Screen } from "../driver/agent/screen.js";
 
 /**
  * `uitest-phone live`
@@ -107,7 +101,7 @@ function openBrowser(url: string): void {
 }
 
 export interface LiveRun {
-  server: LiveServer;
+  server: ViewerServer;
   url: string;
   /** Stops the server and releases the device. */
   close(): Promise<void>;
@@ -136,64 +130,18 @@ export async function startLive(
     throw e;
   }
 
-  const readScreen = async (redact: boolean): Promise<Screen> => {
-    session.reader.builder.setRedact(redact);
-    return session.reader.read();
-  };
-
-  // A screenshot goes through the session, so it is masked the same way the
-  // node table is: a password the page hides in text must not be readable in
-  // the saved pixels. The session already owns that rule (`saveShot`), and a
-  // second implementation here would be a second place to get it wrong.
-  const stateDir = over.stateDir ?? ".uitest-phone";
-  const capture = async (): Promise<string> => {
-    const out = join(stateDir, "shots", `live-${Date.now()}.jpg`);
-    await mkdir(dirname(out), { recursive: true });
-    await session.observe({ out });
-    return out;
-  };
-
-  // Each page gets its own daemons: a fixed socket name lets a second `live`
-  // on the same device take over the first one's socket, and the two then
-  // fight over it. The suffix is the process id, which is unique on this host.
-  const socketSuffix = String(process.pid);
-  const streamCast: CastOptions = {
-    mode: "stream",
-    ...opts.cast,
-    ...(opts.cast.transport === "ws" ? {} : { socketName: `uitest_live_${socketSuffix}` }),
-  };
-
-  // Recording lives in its own module: the record daemon has to run beside the
-  // stream daemon, and the client is already recording when it is created, so
-  // opening a stream on it would start a second `onStart` the extension refuses.
-  const recording = new Recording({
-    stateDir,
-    socketName: `uitest_live_record_${socketSuffix}`,
-    createCast: (castOpts) => createCast(device, castOpts),
-    streamCast,
+  // Each page gets its own daemons and its own state dir, so two viewers on
+  // different devices (or the same device after a restart) never share a
+  // socket or an artifact directory.
+  const source = createViewerSource(session, device, {
+    stateDir: over.stateDir ?? ".uitest-phone",
+    cast: opts.cast,
+    layout: opts.layout,
   });
 
-  const source: LiveServerOptions["source"] = {
-    createCast: () => createCast(device, streamCast),
-    // Takeover is always offered: a read-only viewer never triggers it, and
-    // the server opens the lane at startup so the first take does not wait on
-    // an fport. A second forward and socket keep input out of the layout
-    // queue, which is what makes a tap land in tens of milliseconds.
-    openInput: () => openInput(device),
-    ...(opts.layout ? { readScreen } : {}),
-    // Even with the layout off the page needs the display size: a half-size
-    // frame (--scale 2, every MJPEG device) would otherwise make every click
-    // land at half coordinates. `getDisplaySize` is one agent call, not a
-    // layout read.
-    displaySize: () => device.agent.getDisplaySize(),
-    capture,
-    startRecording: () => recording.start(),
-    stopRecording: () => recording.stop(),
-  };
-
-  let server: LiveServer;
+  let server: ViewerServer;
   try {
-    server = await LiveServer.start({
+    server = await ViewerServer.start({
       port: opts.httpPort,
       host: opts.host,
       privacy: opts.privacy,

@@ -207,7 +207,7 @@ describe("SECURITY.md", () => {
     // Both halves of the allow-list: the port must match, and a loopback-bound
     // server must be dialled by a loopback name (that is the rebinding guard).
     expect(doc.toLowerCase()).toContain("dns rebinding");
-    expect(read("src/live/origin.ts")).toContain("isAddressLiteral");
+    expect(read("src/viewer/origin.ts")).toContain("isAddressLiteral");
   });
 
   it("does not promise a protection it disclaims", () => {

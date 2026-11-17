@@ -163,12 +163,21 @@ export type { InputHost } from "./input/open.js";
 export { AgentInputLane } from "./input/lane.js";
 export type { InputLane, InputSession, InputAgent } from "./input/lane.js";
 
-export { LiveServer } from "./live/server.js";
-export type { LiveServerOptions, LiveSource } from "./live/server.js";
-export { LiveState } from "./live/state.js";
-export type { LiveStatus } from "./live/state.js";
-export { avcC, codecString, parameterSets, splitNalUnits, toAvcc } from "./live/avc.js";
-export { PLAYER_HTML } from "./live/player.js";
+export { ViewerServer, startViewerServer } from "./viewer/server.js";
+export type {
+  ViewerServerOptions,
+  ViewerSource,
+  ViewerFeatures,
+  ViewerClient,
+  ViewerHooks,
+  ViewerInputMode,
+} from "./viewer/server.js";
+export { createViewerSource } from "./viewer/source.js";
+export type { ViewerSourceOptions } from "./viewer/source.js";
+export { LiveState } from "./viewer/state.js";
+export type { LiveStatus } from "./viewer/state.js";
+export { avcC, codecString, parameterSets, splitNalUnits, toAvcc } from "./viewer/avc.js";
+export { PLAYER_HTML, renderPlayerPage } from "./viewer/player.js";
 export { startLive, liveOptions } from "./live/cli.js";
 export type { LiveCommandOptions, LiveRun } from "./live/cli.js";
 

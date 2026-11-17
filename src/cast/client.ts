@@ -252,7 +252,7 @@ export class H264CastClient implements CastClient {
     //
     // The wait is bounded: a unary gRPC call on a channel that is stuck
     // mid-handshake is never timed out, and after a long stream the daemon can
-    // be gone. Waiting for that callback with no end hung `LiveServer.close()`
+    // be gone. Waiting for that callback with no end hung `ViewerServer.close()`
     // for half an hour, leaving the live HTTP port listening. A stop that
     // cannot complete is a recording that cannot be collected either — the
     // cleanup below (kill, pull) still runs, and `stub.close()` cancels the

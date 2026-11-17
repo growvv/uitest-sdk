@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { originAllowed } from "../../src/live/origin.js";
+import { originAllowed } from "../../src/viewer/origin.js";
 
 /**
  * Which `Origin` headers may open the live WebSocket.

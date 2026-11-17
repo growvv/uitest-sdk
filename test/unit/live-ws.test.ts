@@ -6,7 +6,7 @@ import {
   encodeServerBinary,
   encodeServerText,
   frameHeader,
-} from "../../src/live/ws-server.js";
+} from "../../src/viewer/ws-server.js";
 
 // RFC6455 §1.3's example pair, held as hex so the literal is unambiguous: the
 // key is the base64 of "the sample nonce" and the accept is SHA-1(key + GUID).

@@ -2,13 +2,13 @@
  * The live inspector's browser page.
  *
  * One self-contained document: no CDN, no build step, no framework. It is
- * served by `LiveServer` and speaks one WebSocket to it. Video is decoded with
+ * served by `ViewerServer` and speaks one WebSocket to it. Video is decoded with
  * WebCodecs `VideoDecoder` — the browser's own H.264 path — so a frame is one
  * `decode()` call and one `drawImage`, with no MSE, no fMP4 remux and no
  * buffering layer that would add latency we cannot measure.
  */
 
-export const PLAYER_HTML = `<!doctype html>
+const BASE = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -174,7 +174,7 @@ export const PLAYER_HTML = `<!doctype html>
   <span id="control-state" class="readonly"><span class="dot"></span><span id="control-text">只读</span></span>
   <span id="input-ms" class="stat" hidden>输入 –</span>
   <button id="takeover" title="接管设备：点击与键盘将发送到手机" aria-label="Take control of the device">接管</button>
-  <label class="switch"><input id="privacy" type="checkbox" checked> mask credentials</label>
+  <label class="switch" id="privacy-switch"><input id="privacy" type="checkbox" checked> mask credentials</label>
   <button id="shot" title="Save a masked screenshot of the phone" hidden>Shot</button>
   <button id="record" title="Record an MP4 on the device" hidden>Record</button>
   <button id="reconnect" title="Ask the device for a fresh keyframe">Reconnect</button>
@@ -188,7 +188,7 @@ export const PLAYER_HTML = `<!doctype html>
     </div>
     <div id="notice">connecting…</div>
   </div>
-  <aside>
+  <aside id="side">
     <div class="tools">
       <input id="q" type="search" placeholder="filter nodes…" autocomplete="off">
       <button id="copyJson" title="Copy the selected node as JSON">JSON</button>
@@ -243,6 +243,28 @@ export const PLAYER_HTML = `<!doctype html>
   // The last hello, kept so a decoder that dies mid-stream can be replaced
   // without waiting for the server to announce the format again.
   var lastHello = null;
+  var inputMode = 'takeover';
+  var listeners = {};
+
+  // Extension API for product pages (the console adds an approval inbox):
+  // the page's own protocol stays private, and a product talks through this.
+  window.uitestViewer = {
+    send: function (message) {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify(message));
+    },
+    on: function (type, handler) {
+      (listeners[type] = listeners[type] || []).push(handler);
+    },
+    hello: function () { return lastHello; }
+  };
+
+  function emit(msg) {
+    var handlers = listeners[msg.type];
+    if (!handlers) return;
+    for (var i = 0; i < handlers.length; i++) {
+      try { handlers[i](msg); } catch (e) { /* a product bug is not a page bug */ }
+    }
+  }
   var nodes = [];
   var display = { width: 0, height: 0 };
   var selected = null;
@@ -560,6 +582,14 @@ export const PLAYER_HTML = `<!doctype html>
       // a video-only mirror has no capture and no recorder behind it.
       shotEl.hidden = !msg.canShot;
       recordEl.hidden = !msg.canRecord;
+      // The three product-level switches: a console without an inspector, a
+      // page with no takeover, and a privacy switch the product turned off.
+      inputMode = msg.mode === 'always' || msg.mode === 'off' ? msg.mode : 'takeover';
+      var sideEl = document.getElementById('side');
+      if (sideEl && msg.canInspect === false) sideEl.hidden = true;
+      var privacySwitchEl = document.getElementById('privacy-switch');
+      if (privacySwitchEl && msg.canPrivacy === false) privacySwitchEl.hidden = true;
+      takeoverEl.hidden = !msg.canInput || inputMode !== 'takeover';
       setRecording(!!msg.recording);
       // The private greeting names this tab; the broadcast hello does not, so
       // an unnamed hello must not erase the identity we already have.
@@ -588,6 +618,7 @@ export const PLAYER_HTML = `<!doctype html>
     } else if (msg.type === 'saved') {
       toast(msg.error ? 'failed: ' + msg.error : 'saved ' + msg.path);
     }
+    emit(msg);
   }
 
   // The record button is a toggle: the label says what the next click does, and
@@ -605,7 +636,21 @@ export const PLAYER_HTML = `<!doctype html>
     return controlledId !== null && controlledId === clientId;
   }
 
+  function canInputNow() {
+    return inputMode === 'always' || isController();
+  }
+
   function updateControlUi() {
+    if (inputMode === 'always') {
+      // There is no controller to hand off to; the page is always able to
+      // send input, and the takeover button has nothing to toggle.
+      takeoverEl.hidden = true;
+      document.body.classList.add('controlled');
+      controlStateEl.className = 'mine';
+      controlTextEl.textContent = '输入已开启';
+      inputMsEl.hidden = false;
+      return;
+    }
     var mine = isController();
     document.body.classList.toggle('controlled', mine);
     if (!mine) resetLocalInput();
@@ -670,10 +715,11 @@ export const PLAYER_HTML = `<!doctype html>
     }
   }
 
-  // Only the controlling tab's gestures reach the wire. A stale read-only tab
-  // cannot inject anything, even if its handlers run.
+  // In takeover mode only the controlling tab's gestures reach the wire; a
+  // stale read-only tab cannot inject anything. always mode is the product's
+  // explicit decision to let every tab drive.
   function sendInput(msg) {
-    if (!isController() || !ws || ws.readyState !== 1) return false;
+    if (!canInputNow() || !ws || ws.readyState !== 1) return false;
     msg.type = 'input';
     ws.send(JSON.stringify(msg));
     return true;
@@ -758,7 +804,7 @@ export const PLAYER_HTML = `<!doctype html>
   }
 
   function onPointerDown(ev) {
-    if (!isController()) return;
+    if (!canInputNow()) return;
     if (ev.pointerType === 'mouse' && ev.button !== 0) return;
     ev.preventDefault();
     try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
@@ -821,7 +867,7 @@ export const PLAYER_HTML = `<!doctype html>
   }
 
   function onWheel(ev) {
-    if (!isController()) return;
+    if (!canInputNow()) return;
     ev.preventDefault();
     if (ev.ctrlKey) {
       var p = devicePoint(ev);
@@ -1061,3 +1107,39 @@ export const PLAYER_HTML = `<!doctype html>
 </body>
 </html>
 `;
+
+/**
+ * Escapes text for interpolation into markup. The title is the caller's, so a
+ * product name with `<` must render, not become a tag.
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const EXTRA_MARK = "</body>";
+
+/**
+ * The built-in page, optionally retitled or extended.
+ *
+ * `extraHtml` is product markup placed before `</body>`; `extraScript` runs
+ * after the page's own script and talks to it through `window.uitestViewer`.
+ * Injecting through a function replacement keeps `$&` in a product's text from
+ * being read as a replacement pattern.
+ */
+export function renderPlayerPage(
+  opts: { title?: string; extraHtml?: string; extraScript?: string } = {},
+): string {
+  const title = escapeHtml(opts.title ?? "uitest viewer");
+  let html = BASE.replace("<title>uitest live</title>", () => `<title>${title}</title>`);
+  if (opts.extraHtml) html = html.replace(EXTRA_MARK, () => `${opts.extraHtml}\n${EXTRA_MARK}`);
+  if (opts.extraScript) {
+    html = html.replace(EXTRA_MARK, () => `<script>${opts.extraScript}</script>\n${EXTRA_MARK}`);
+  }
+  return html;
+}
+
+export const PLAYER_HTML = renderPlayerPage();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { LiveState } from "../../src/live/state.js";
+import { LiveState } from "../../src/viewer/state.js";
 
 const ALL = [
   "idle",

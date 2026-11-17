@@ -38,7 +38,7 @@ const CONGESTION_IDR_MS = 250;
 /** Restart backoff for a cast that died while a tab was watching. */
 const RETRY_MS = [500, 1000, 2000, 4000, 5000] as const;
 
-export interface LiveSource {
+export interface ViewerSource {
   createCast(): Promise<CastClient>;
   /**
    * The current screen. `redact` is the privacy switch, passed down to the
@@ -77,7 +77,34 @@ export interface LiveSource {
   openInput?(): Promise<InputSession>;
 }
 
-export interface LiveServerOptions {
+/** What a product wants the page to expose; unset means "whatever the source can do". */
+export interface ViewerFeatures {
+  inspect?: boolean;
+  privacy?: boolean;
+  capture?: boolean;
+  record?: boolean;
+  control?: boolean;
+}
+
+/** One attached tab, as a product's hook sees it. */
+export interface ViewerClient {
+  readonly id: string;
+  send(message: Record<string, unknown>): void;
+}
+
+/**
+ * Product hooks. `onMessage` returns true when it handled the message; the
+ * built-in types are answered first and never reach a hook.
+ */
+export interface ViewerHooks {
+  onClient?(client: ViewerClient): void;
+  onClientGone?(clientId: string): void;
+  onMessage?(client: ViewerClient, message: Record<string, unknown>): boolean;
+}
+
+export type ViewerInputMode = "takeover" | "always" | "off";
+
+export interface ViewerServerOptions {
   port?: number;
   host?: string;
   /** Mask credentials. Default true; a tab can turn it off for its own session. */
@@ -92,7 +119,22 @@ export interface LiveServerOptions {
    * in a press.
    */
   watchdogMs?: number;
-  source: LiveSource;
+  source: ViewerSource;
+  /** Narrow what the page offers; defaults follow what the source provides. */
+  features?: ViewerFeatures;
+  /** The page to serve. Defaults to the built-in player. */
+  page?: string;
+  /**
+   * How input is arbitrated. Defaults to `takeover` when the source can open a
+   * lane, `off` otherwise. `always` accepts gestures from every tab; `off`
+   * rejects them and hides the controls.
+   */
+  input?: { mode: ViewerInputMode; open(): Promise<InputSession> };
+  hooks?: ViewerHooks;
+}
+
+export function startViewerServer(opts: ViewerServerOptions): Promise<ViewerServer> {
+  return ViewerServer.start(opts);
 }
 
 interface Client {
@@ -106,13 +148,18 @@ interface Client {
   unmasked: boolean;
 }
 
-export class LiveServer {
+export class ViewerServer {
   private readonly live = new LiveState();
   private readonly clients = new Set<Client>();
   private readonly graceMs: number;
   private readonly layoutMs: number;
   private readonly watchdogMs: number;
-  private readonly source: LiveSource;
+  private readonly source: ViewerSource;
+  private readonly hooks: ViewerHooks | undefined;
+  private readonly page: string;
+  private readonly inputSpec: { mode: ViewerInputMode; open(): Promise<InputSession> } | undefined;
+  private readonly inputMode: ViewerInputMode;
+  private readonly features: Required<ViewerFeatures>;
   /** The address the server bound, for the Origin check. */
   private readonly boundHost: string;
 
@@ -182,7 +229,7 @@ export class LiveServer {
 
   private constructor(
     private readonly server: Server,
-    opts: LiveServerOptions,
+    opts: ViewerServerOptions,
   ) {
     this.graceMs = opts.graceMs ?? 5000;
     this.layoutMs = opts.layoutMs ?? 250;
@@ -190,6 +237,20 @@ export class LiveServer {
     this.maskByDefault = opts.privacy !== false;
     this.privacy = this.maskByDefault;
     this.source = opts.source;
+    this.hooks = opts.hooks;
+    this.page = opts.page ?? PLAYER_HTML;
+    this.inputSpec = opts.input;
+    this.inputMode = opts.input?.mode ?? (opts.source.openInput ? "takeover" : "off");
+    const features = opts.features ?? {};
+    this.features = {
+      inspect: features.inspect ?? Boolean(opts.source.readScreen),
+      privacy: features.privacy ?? true,
+      capture: features.capture ?? Boolean(opts.source.capture),
+      record:
+        features.record ??
+        Boolean(opts.source.startRecording && opts.source.stopRecording),
+      control: features.control ?? Boolean(opts.source.openInput || opts.input),
+    };
     this.boundHost = opts.host ?? "127.0.0.1";
     this.live.onChange((next) => {
       if (next === "live") this.retryIndex = 0;
@@ -197,9 +258,9 @@ export class LiveServer {
     });
   }
 
-  static async start(opts: LiveServerOptions): Promise<LiveServer> {
+  static async start(opts: ViewerServerOptions): Promise<ViewerServer> {
     const server = createServer();
-    const self = new LiveServer(server, opts);
+    const self = new ViewerServer(server, opts);
     server.on("request", (req, res) => self.onRequest(req, res));
     server.on("upgrade", (req, socket, head) => self.onUpgrade(req, socket as Socket, head));
     await new Promise<void>((resolve, reject) => {
@@ -212,8 +273,14 @@ export class LiveServer {
     });
     // Open the write lane now, while the first tab is still loading its
     // player, so the first takeover is fast. A read-only session never opens
-    // one: the failure is swallowed and the next take reports it.
-    void self.ensureInput().catch(() => undefined);
+    // one: the failure is swallowed and the next take reports it. In `always`
+    // mode the lane is the only path for input, so attach it as soon as it
+    // opens.
+    if (self.inputMode === "always") {
+      void self.enableAlwaysInput().catch(() => undefined);
+    } else if (self.inputMode === "takeover") {
+      void self.ensureInput().catch(() => undefined);
+    }
     // Ask for the display size up front: the greeting carries it, and a tab
     // that connects before the first layout read must still convert clicks
     // against the display rather than the decoded frame. A failure here is
@@ -322,7 +389,7 @@ export class LiveServer {
         "Cache-Control": "no-store",
         Connection: "close",
       });
-      res.end(PLAYER_HTML);
+      res.end(this.page);
       return;
     }
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", Connection: "close" });
@@ -412,6 +479,7 @@ export class LiveServer {
     // previous tab chose: the shared model is re-masked if this tab wants it.
     client.unmasked = !this.maskByDefault;
     this.refreshPrivacy();
+    this.hooks?.onClient?.(this.viewerClient(client));
     this.sendHello(client);
     if (this.screen) this.sendText(client, this.nodesMessage());
     void this.readLayout(true);
@@ -427,6 +495,7 @@ export class LiveServer {
     // else about this disconnect is processed.
     if (this.controller === client) void this.releaseControl("disconnected");
     this.clients.delete(client);
+    this.hooks?.onClientGone?.(client.id);
     try {
       client.socket.destroy();
     } catch {
@@ -503,12 +572,28 @@ export class LiveServer {
     if (type === "record") {
       if (message.action === "stop") void this.stopRecording(client);
       else void this.startRecording(client);
+      return;
     }
+    // Product messages (console approvals, activity) are answered last: a hook
+    // can never shadow a built-in type.
+    this.hooks?.onMessage?.(this.viewerClient(client), message);
+  }
+
+  private viewerClient(client: Client): ViewerClient {
+    return { id: client.id, send: (message) => this.sendText(client, message) };
   }
 
   // ---- Takeover -----------------------------------------------------------
 
   private onControl(client: Client, message: Record<string, unknown>): void {
+    if (this.inputMode !== "takeover") {
+      this.sendText(client, {
+        type: "control",
+        state: "readonly",
+        reason: "unavailable",
+      });
+      return;
+    }
     const action = String(message.action ?? "");
     if (action === "take") {
       void this.takeControl(client);
@@ -564,15 +649,7 @@ export class LiveServer {
         return;
       }
       this.controller = client;
-      this.input = new LiveInput({
-        lane: session.lane,
-        // The server clamps to the latest known display; LiveInput clamps too,
-        // as a second line of defence for tests and old pages.
-        bounds: () => this.displaySize(),
-        focusPoint: () => focusedCenter(this.screen),
-        holdMs: this.watchdogMs,
-        onError: (error) => this.onInputError(error),
-      });
+      this.input = this.makeInput(session);
       this.startWatchdog();
       this.startStats();
       this.broadcastText({
@@ -594,6 +671,32 @@ export class LiveServer {
     }
   }
 
+  /** Builds the gesture translator over an open lane. */
+  private makeInput(session: InputSession): LiveInput {
+    return new LiveInput({
+      lane: session.lane,
+      // The server clamps to the latest known display; LiveInput clamps too,
+      // as a second line of defence for tests and old pages.
+      bounds: () => this.displaySize(),
+      focusPoint: () => focusedCenter(this.screen),
+      holdMs: this.watchdogMs,
+      onError: (error) => this.onInputError(error),
+    });
+  }
+
+  /**
+   * In `always` mode there is no controller: the lane is opened once and every
+   * tab may send gestures on it.
+   */
+  private async enableAlwaysInput(): Promise<void> {
+    if (this.inputMode !== "always" || this.closing) return;
+    const session = await this.ensureInput();
+    if (this.closing || this.input) return;
+    this.input = this.makeInput(session);
+    this.startWatchdog();
+    this.startStats();
+  }
+
   /**
    * Returns the write lane, opening it if needed.
    *
@@ -607,7 +710,7 @@ export class LiveServer {
       throw new Error("the input lane is cooling down after a failure");
     }
     if (this.inputOpening) return this.inputOpening;
-    const open = this.source.openInput;
+    const open = this.inputSpec?.open ?? this.source.openInput;
     if (!open) throw new Error("this session cannot send input");
     const opening = (async (): Promise<InputSession> => {
       try {
@@ -670,8 +773,12 @@ export class LiveServer {
    * LiveInput against the latest display.
    */
   private routeInput(client: Client, message: Record<string, unknown>): void {
+    if (this.inputMode === "off") return;
     const input = this.input;
-    if (!input || this.controller !== client) return;
+    if (!input) return;
+    // `always` is a product decision to let any tab drive (a kiosk-style
+    // mirror); `takeover` keeps the single-controller arbitration.
+    if (this.inputMode === "takeover" && this.controller !== client) return;
     const finite = (v: unknown): number | null =>
       typeof v === "number" && Number.isFinite(v) ? v : null;
     switch (String(message.action ?? "")) {
@@ -947,8 +1054,12 @@ export class LiveServer {
       privacy: this.privacy,
       // What this session can do, so the page shows a button only when
       // clicking it would work. A video-only mirror has neither.
-      canShot: Boolean(this.source.capture),
-      canRecord: Boolean(this.source.startRecording && this.source.stopRecording),
+      canInspect: this.features.inspect,
+      canInput: this.features.control && this.inputMode !== "off",
+      canShot: this.features.capture,
+      canRecord: this.features.record,
+      canPrivacy: this.features.privacy,
+      mode: this.inputMode,
       recording: this.recording !== null,
     };
   }
@@ -983,6 +1094,7 @@ export class LiveServer {
 
   private async readLayout(force = false): Promise<void> {
     if (this.closing || this.clients.size === 0) return;
+    if (!this.features.inspect) return;
     const read = this.source.readScreen;
     if (!read) return;
     if (!force && Date.now() - this.lastReadAt < this.layoutMs) {

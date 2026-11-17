@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { LiveInput } from "../../src/live/input.js";
+import { LiveInput } from "../../src/viewer/input.js";
 import type { InputLane } from "../../src/input/lane.js";
 
 class FakeLane implements InputLane {

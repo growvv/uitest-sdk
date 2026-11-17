@@ -1,6 +1,12 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createConnection, type Socket } from "node:net";
-import { LiveServer } from "../../src/live/server.js";
+import {
+  ViewerServer,
+  startViewerServer,
+  type ViewerHooks,
+  type ViewerInputMode,
+} from "../../src/viewer/server.js";
+import { renderPlayerPage } from "../../src/viewer/player.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../../src/cast/ws.js";
 import type { H264Chunk } from "../../src/transport/model.js";
 import type { JpegFrame } from "../../src/cast/types.js";
@@ -164,7 +170,7 @@ function fakeScreen(label = "Save"): Screen {
 }
 
 interface Harness {
-  server: LiveServer;
+  server: ViewerServer;
   cast: FakeCast;
   port: number;
   setScreen(s: Screen): void;
@@ -185,7 +191,7 @@ interface Harness {
   openInputs(): number;
 }
 
-const running: LiveServer[] = [];
+const running: ViewerServer[] = [];
 
 afterEach(async () => {
   for (const s of running.splice(0)) await s.close().catch(() => undefined);
@@ -206,6 +212,12 @@ async function start(
     inputOpenThrows?: string;
     /** Omit `readScreen`, as `--no-layout` does, and report this display size. */
     displayOnly?: { width: number; height: number } | null;
+    /** Override the input arbitration for this server. */
+    inputMode?: ViewerInputMode;
+    /** Product hooks under test. */
+    hooks?: ViewerHooks;
+    /** A page to serve instead of the built-in player. */
+    page?: string;
   } = {},
 ): Promise<Harness> {
   const cast = new FakeCast();
@@ -220,13 +232,33 @@ async function start(
   const redactions: boolean[] = [];
   const lanes: FakeInputLane[] = [];
   let openInputs = 0;
-  const server = await LiveServer.start({
+  const server = await startViewerServer({
     port: 0,
     host: "127.0.0.1",
     privacy: over.privacy ?? true,
     graceMs: over.graceMs ?? 200,
     layoutMs: over.layoutMs ?? 30,
     ...(over.watchdogMs !== undefined ? { watchdogMs: over.watchdogMs } : {}),
+    ...(over.hooks ? { hooks: over.hooks } : {}),
+    ...(over.page ? { page: over.page } : {}),
+    ...(over.inputMode
+      ? {
+          input: {
+            mode: over.inputMode,
+            open() {
+              openInputs++;
+              const lane = new FakeInputLane();
+              lanes.push(lane);
+              return Promise.resolve({
+                lane,
+                close: async () => {
+                  lane.closed = true;
+                },
+              });
+            },
+          },
+        }
+      : {}),
     source: {
       async createCast() {
         return cast;
@@ -400,7 +432,30 @@ async function http(port: number, path: string): Promise<{ status: number; body:
   });
 }
 
-describe("LiveServer", () => {
+/** Sends a raw upgrade request and returns the status line's code. */
+async function upgradeStatus(port: number, request: string): Promise<number> {
+  const sock = createConnection({ host: "127.0.0.1", port });
+  await new Promise<void>((resolve, reject) => {
+    sock.once("connect", resolve);
+    sock.once("error", reject);
+  });
+  let raw = "";
+  sock.on("data", (d) => (raw += d.toString("latin1")));
+  sock.write(request);
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 1000);
+    sock.once("close", done);
+    sock.once("end", done);
+  });
+  sock.destroy();
+  return Number(/^HTTP\/1\.1 (\d{3})/.exec(raw)?.[1] ?? 0);
+}
+
+describe("ViewerServer", () => {
   it("serves the player page", async () => {
     const h = await start();
     const res = await http(h.port, "/");
@@ -605,7 +660,7 @@ describe("LiveServer", () => {
         // Ends without dispose(): the server must collect it.
       }
     }
-    const server = await LiveServer.start({
+    const server = await ViewerServer.start({
       port: 0,
       host: "127.0.0.1",
       graceMs: 200,
@@ -650,7 +705,7 @@ describe("LiveServer", () => {
         this.disposed = true;
       }
     }
-    const server = await LiveServer.start({
+    const server = await ViewerServer.start({
       port: 0,
       host: "127.0.0.1",
       graceMs: 200,
@@ -691,7 +746,7 @@ describe("LiveServer", () => {
         this.disposed = true;
       }
     }
-    const server = await LiveServer.start({
+    const server = await ViewerServer.start({
       port: 0,
       host: "127.0.0.1",
       graceMs: 200,
@@ -731,7 +786,7 @@ describe("LiveServer", () => {
     // connects and never paints — the one failure mode a person cannot tell
     // from a broken phone.
     const cast = new FakeMjpegCast();
-    const server = await LiveServer.start({
+    const server = await ViewerServer.start({
       port: 0,
       host: "127.0.0.1",
       graceMs: 200,
@@ -761,7 +816,7 @@ describe("LiveServer", () => {
   });
 });
 
-describe("LiveServer: capture and record", () => {
+describe("ViewerServer: capture and record", () => {
   it("saves a screenshot and tells every tab where it went", async () => {
     const h = await start();
     const c = await connect(h.port);
@@ -847,7 +902,7 @@ describe("LiveServer: capture and record", () => {
   });
 });
 
-describe("LiveServer: takeover", () => {
+describe("ViewerServer: takeover", () => {
   it("lets one tab take control and tells every tab", async () => {
     const h = await start();
     const a = await connect(h.port);
@@ -1132,5 +1187,124 @@ describe("LiveServer: takeover", () => {
     expect(a.texts).toEqual([]);
     expect(h.lanes().flatMap((l) => l.calls)).toEqual([]);
     a.socket.destroy();
+  });
+});
+describe("ViewerServer: features, hooks and page", () => {
+  it("advertises what the source can do and hides the rest", async () => {
+    const h = await start({ displayOnly: { width: 400, height: 800 } });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    const hello = c.texts.find((t) => t.type === "hello")!;
+    expect(hello.canInspect).toBe(false);
+    expect(hello.canInput).toBe(true);
+    expect(hello.mode).toBe("takeover");
+    c.close();
+  });
+
+  it("lets a product handle its own message types", async () => {
+    const seen: string[] = [];
+    const h = await start({
+      hooks: {
+        onMessage: (_c, m) => {
+          if (m.type === "console:list") {
+            seen.push("list");
+            return true;
+          }
+          return false;
+        },
+      },
+    });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "console:list" });
+    await until(() => seen.length === 1);
+    expect(seen).toEqual(["list"]);
+    c.close();
+  });
+
+  it("tells a product when a tab arrives and leaves", async () => {
+    const events: string[] = [];
+    const h = await start({
+      hooks: {
+        onClient: (c) => events.push(`join:${c.id}`),
+        onClientGone: (id) => events.push(`gone:${id}`),
+      },
+    });
+    const c = await connect(h.port);
+    await until(() => events.length === 1);
+    const id = c.texts.find((t) => t.type === "hello")?.clientId;
+    c.close();
+    await until(() => events.length === 2);
+    expect(events[0]).toBe(`join:${id}`);
+    expect(events[1]).toBe(`gone:${id}`);
+  });
+
+  it("accepts input from every tab in always mode", async () => {
+    const h = await start({ inputMode: "always" });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    expect(c.texts.find((t) => t.type === "hello")?.mode).toBe("always");
+    c.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => h.lanes()[0]?.ops("touchDown").length === 1);
+    c.send({ type: "input", action: "up", x: 10, y: 20 });
+    c.close();
+  });
+
+  it("sends no input and offers no control in off mode", async () => {
+    const h = await start({ inputMode: "off" });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    const hello = c.texts.find((t) => t.type === "hello")!;
+    expect(hello.canInput).toBe(false);
+    expect(hello.mode).toBe("off");
+    c.send({ type: "input", action: "down", x: 10, y: 20 });
+    await sleep(150);
+    expect(h.openInputs()).toBe(0);
+    expect(h.lanes()).toEqual([]);
+    c.close();
+  });
+
+  it("refuses an upgrade without Sec-WebSocket-Key with 400", async () => {
+    const h = await start();
+    const status = await upgradeStatus(
+      h.port,
+      "GET /live HTTP/1.1\r\n" +
+        `Host: 127.0.0.1:${h.port}\r\n` +
+        "Origin: http://127.0.0.1:" + h.port + "\r\n" +
+        "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n",
+    );
+    expect(status).toBe(400);
+  });
+
+  it("refuses an upgrade to the wrong path with 404", async () => {
+    const h = await start();
+    const status = await upgradeStatus(
+      h.port,
+      "GET /nope HTTP/1.1\r\n" +
+        `Host: 127.0.0.1:${h.port}\r\n` +
+        "Origin: http://127.0.0.1:" + h.port + "\r\n" +
+        "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+        "Sec-WebSocket-Key: " + Buffer.alloc(16, 7).toString("base64") + "\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n",
+    );
+    expect(status).toBe(404);
+  });
+
+  it("serves an injected page and escapes the title", async () => {
+    const h = await start({
+      page: renderPlayerPage({
+        title: "<b>x</b>",
+        extraHtml: '<div id="inbox"></div>',
+        extraScript: "window.uitestViewer.on('hello', function () {});",
+      }),
+    });
+    const res = await http(h.port, "/");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(res.body).toContain('id="inbox"');
+    expect(res.body).toContain("window.uitestViewer.on");
+    // The built-in page is still the document around the extension.
+    expect(res.body).toContain("VideoDecoder");
   });
 });

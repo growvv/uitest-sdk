@@ -100,7 +100,7 @@ vi.mock("../../src/operations/session.js", () => {
 });
 
 const { startLive } = await import("../../src/live/cli.js");
-const { LiveServer } = await import("../../src/live/server.js");
+const { ViewerServer } = await import("../../src/viewer/server.js");
 
 function options(over: Partial<Parameters<typeof startLive>[1]> = {}) {
   return {
@@ -164,7 +164,7 @@ describe("startLive", () => {
   it("opens the device, takes the lease, and serves on the port it got", async () => {
     const run = await startLive({}, options());
     opened.push(run);
-    expect(run.server).toBeInstanceOf(LiveServer);
+    expect(run.server).toBeInstanceOf(ViewerServer);
     expect(run.server.port).toBeGreaterThan(0);
     expect(run.url).toBe(`http://127.0.0.1:${run.server.port}/`);
     expect(run.server.state).not.toBe("stopped");

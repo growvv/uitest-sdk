@@ -5,7 +5,7 @@ import {
   nalType,
   splitNalUnits,
   toAvcc,
-} from "../../src/live/avc.js";
+} from "../../src/viewer/avc.js";
 
 /** A NAL unit with a 4-byte start code. */
 const nal = (header: number, body: number[] = []): Buffer =>

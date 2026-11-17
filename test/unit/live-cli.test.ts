@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { liveOptions } from "../../src/live/cli.js";
-import { PLAYER_HTML } from "../../src/live/player.js";
+import { PLAYER_HTML } from "../../src/viewer/player.js";
 
 describe("liveOptions", () => {
   it("defaults to a masked local page on 7000", () => {
