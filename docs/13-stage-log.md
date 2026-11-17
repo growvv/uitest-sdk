@@ -894,3 +894,16 @@ artifact，`deploy-pages` 看到两个同名 artifact 直接报错。正确做�
 
 两件事都是「守卫写了，但守卫本身是坏的」——和 0.8.0 那次 `triggerKey` 锁屏同源：证据会公开
 发布，守卫不能只写不验。修完在真机上重跑，16/16 PASS，截图全部是同一个知乎公开回答页。
+
+### I. 发版验收的第二条腿：handoff 闭环
+
+发布清单要求两个验收脚本都过。`scripts/acceptance.ts` 之外还有
+`npm run acceptance:handoff`（MCP 会话 → `uitest_handoff` → `lease_held` → `resume` → 续跑）。
+第一次跑卡在 `resume`：`multiple targets attached (…): pass --device <id>`。
+
+根因不是代码，是环境——hdc 里残留了一个离线的 `127.0.0.1:5555`（模拟器的旧连接）。
+`hdc list targets` 只列出已连接的条目，看起来只有一台；SDK 内部按 `list targets -v` 数，
+于是数出两个。`tconn 127.0.0.1:5555 -remove` 回 `[Fail]No target available`，唯一可靠的
+清理是 `hdc kill && hdc start`。清完 16 项断言全过。
+
+记在这里是因为它会长得像 SDK 的 bug：报错说「多台设备」，而用户只有一台。
