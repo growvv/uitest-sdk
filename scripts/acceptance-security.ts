@@ -25,7 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startLive, liveOptions } from "../src/live/cli.js";
 import { handshakeStatus } from "../src/cast/ws.js";
-import { tagOf } from "../src/session.js";
+import { tagOf } from "../src/operations/session.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = process.env.UITEST_ACCEPTANCE_DIR

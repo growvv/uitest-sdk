@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 import { Device } from "../src/driver/device.js";
 import { createCast } from "../src/cast/create.js";
 import { AppManager } from "../src/transport/apps.js";
-import { tagOf } from "../src/session.js";
+import { tagOf } from "../src/operations/session.js";
 import type { CastClient } from "../src/cast/types.js";
 import { ROOT, Evidence, ensureDirs, type Result } from "../test/device/acceptance.helpers.js";
 

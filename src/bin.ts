@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CommandRunner } from "./commands.js";
+import { CommandRunner } from "./operations/commands.js";
 import { main, parseArgv } from "./cli-main.js";
 import { agentConnected, connectAgent, mcpEntry } from "./connect.js";
 import type { AgentId } from "./connect.js";
@@ -8,7 +8,7 @@ import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevic
 import { installSkill, refreshSkill } from "./install-skill.js";
 import { liveMain } from "./live/cli.js";
 import { McpServer } from "./mcp.js";
-import { Session } from "./session.js";
+import { Session } from "./operations/session.js";
 import { UitestError } from "./transport/errors.js";
 import { VERSION } from "./version.js";
 import { fileURLToPath } from "node:url";

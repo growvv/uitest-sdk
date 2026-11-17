@@ -46,7 +46,7 @@ export type {
 } from "./driver/agent/gestures.js";
 
 // Session and its supporting pieces.
-export { Session } from "./session.js";
+export { Session } from "./operations/session.js";
 export type {
   SessionAgent,
   SessionDevice,
@@ -64,7 +64,7 @@ export type {
   WindowFilter,
   WindowOptions,
   WindowResult,
-} from "./session.js";
+} from "./operations/session.js";
 export { AppManager } from "./transport/apps.js";
 export type { AppInfo, LaunchOptions, LaunchResult, ListOptions as AppListOptions, ShellRunner } from "./transport/apps.js";
 export { Policy, DEFAULT_CONFIRM, POLICY_WORDS, SYSTEM_CHROME } from "./governance/policy.js";
@@ -75,12 +75,12 @@ export { Lease, readLease } from "./governance/lease.js";
 export type { LeaseInfo, LeaseOptions } from "./governance/lease.js";
 export { TraceRecorder, deviceTag } from "./governance/trace.js";
 export type { TraceEntry, TraceRecord, TraceOptions, TaskReportResult } from "./governance/trace.js";
-export { doctor, renderDoctor, deviceTagOf } from "./doctor.js";
-export type { DoctorReport, Capabilities, TargetLister } from "./doctor.js";
+export { doctor, renderDoctor, deviceTagOf } from "./operations/doctor.js";
+export type { DoctorReport, Capabilities, TargetLister } from "./operations/doctor.js";
 
 // Agent front ends: one command surface shared by the CLI and MCP.
-export { COMMANDS, CommandRunner } from "./commands.js";
-export type { CommandSpec, ArgType, RunnerOptions, RunResult } from "./commands.js";
+export { COMMANDS, CommandRunner } from "./operations/commands.js";
+export type { CommandSpec, ArgType, RunnerOptions, RunResult } from "./operations/commands.js";
 export { parseArgv, formatHelp, formatResult, runCommand, main } from "./cli-main.js";
 export type { ParsedArgv } from "./cli-main.js";
 export { McpServer, toolDefinitions, toolName } from "./mcp.js";

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { envName, renderReport, type EnvInfo } from "../../scripts/acceptance.js";
-import { tagOf } from "../../src/session.js";
+import { tagOf } from "../../src/operations/session.js";
 
 // A made-up serial. The point of the test is that whatever string is passed as
 // --targets must not survive into report.md, which is committed.

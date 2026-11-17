@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
-import { Session, tagOf } from "../../src/session.js";
+import { Session, tagOf } from "../../src/operations/session.js";
 import { On } from "../../src/driver/agent/selector.js";
 import type { UiNode } from "../../src/transport/model.js";
 

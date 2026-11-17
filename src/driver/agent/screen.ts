@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Rect, UiNode } from "../../transport/model.js";
-import type { FileRefStore, RefTable } from "../../refs.js";
+import type { FileRefStore, RefTable } from "../../operations/refs.js";
 import { isSecretContext, redactLabel } from "./redact.js";
 
 /** Upper bound on remembered signatures; the current screen is never evicted. */

@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Device } from "../driver/device.js";
 import type { DeviceOptions } from "../driver/device.js";
-import { Session } from "../session.js";
+import { Session } from "../operations/session.js";
 import { parseArgv } from "../cli-main.js";
 import { Recording } from "../cast/record.js";
 import { createCast } from "../cast/create.js";

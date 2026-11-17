@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { parseArgv, formatHelp, formatResult, exitCodeForError } from "../../src/cli-main.js";
-import { COMMANDS } from "../../src/commands.js";
+import { COMMANDS } from "../../src/operations/commands.js";
 import { DeviceStateError, LeaseHeldError, UitestError } from "../../src/transport/errors.js";
 import { runCommand } from "../../src/cli-main.js";
 import { Lease } from "../../src/governance/lease.js";
-import { tagOf } from "../../src/session.js";
+import { tagOf } from "../../src/operations/session.js";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

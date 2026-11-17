@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { McpServer, toolDefinitions } from "../../src/mcp.js";
-import { COMMANDS } from "../../src/commands.js";
+import { COMMANDS } from "../../src/operations/commands.js";
 
 /** The version in package.json — the one source of truth for a release. */
 function packageVersion(): string {

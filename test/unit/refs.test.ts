@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileRefStore } from "../../src/refs.js";
+import { FileRefStore } from "../../src/operations/refs.js";
 import { ScreenBuilder } from "../../src/driver/agent/screen.js";
 import type { UiNode } from "../../src/transport/model.js";
 

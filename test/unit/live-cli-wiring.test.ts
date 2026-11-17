@@ -75,7 +75,7 @@ vi.mock("../../src/input/open.js", () => ({
   },
 }));
 
-vi.mock("../../src/session.js", () => {
+vi.mock("../../src/operations/session.js", () => {
   class FakeSession {
     static async open(_device: unknown, opts: { task: string }) {
       calls.push(`session.open:${opts.task}`);

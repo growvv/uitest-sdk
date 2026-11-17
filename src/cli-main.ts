@@ -1,8 +1,8 @@
-import { COMMANDS, CommandRunner } from "./commands.js";
-import type { RunResult } from "./commands.js";
+import { COMMANDS, CommandRunner } from "./operations/commands.js";
+import type { RunResult } from "./operations/commands.js";
 import { Device } from "./driver/device.js";
 import { AppManager, resolveAppList } from "./transport/apps.js";
-import { Session } from "./session.js";
+import { Session } from "./operations/session.js";
 import { DeviceStateError, LeaseHeldError, UitestError } from "./transport/errors.js";
 import { EXIT_CODE } from "./driver/agent/result.js";
 import type { DeviceOptions } from "./driver/device.js";

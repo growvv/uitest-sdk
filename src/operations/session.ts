@@ -1,36 +1,37 @@
 import { dirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { tagOf } from "./transport/tag.js";
-import { AppManager } from "./transport/apps.js";
-import { Approvals, Grants } from "./governance/approvals.js";
+import { tagOf } from "../transport/tag.js";
+import { AppManager } from "../transport/apps.js";
+import { Approvals, Grants } from "../governance/approvals.js";
 import type {
   ApprovalDecision,
   ApprovalScope,
   DecisionResult,
   Grant,
   PendingApproval,
-} from "./governance/approvals.js";
-import { Components, ComponentHandle } from "./driver/agent/components.js";
-import { Gestures } from "./driver/agent/gestures.js";
-import { On, selectorText, parseKeyName } from "./driver/agent/selector.js";
-import { ScreenReader, settle } from "./driver/agent/settle.js";
-import { Screenshot } from "./driver/agent/shot.js";
-import { inspectScreen, renderPanel } from "./driver/agent/inspector.js";
-import type { InspectNode } from "./driver/agent/inspector.js";
-import { ScreenBuilder, findElement, findText, renderDiff, renderFull } from "./driver/agent/screen.js";
-import type { Screen, ScreenElement } from "./driver/agent/screen.js";
-import { Policy } from "./governance/policy.js";
-import type { PolicyOptions } from "./governance/policy.js";
+} from "../governance/approvals.js";
+import { Components, ComponentHandle } from "../driver/agent/components.js";
+import { Gestures } from "../driver/agent/gestures.js";
+import { On, selectorText, parseKeyName } from "../driver/agent/selector.js";
+import { ScreenReader, settle } from "../driver/agent/settle.js";
+import { Screenshot } from "../driver/agent/shot.js";
+import { inspectScreen, renderPanel } from "../driver/agent/inspector.js";
+import type { InspectNode } from "../driver/agent/inspector.js";
+import { ScreenBuilder, findElement, findText, renderDiff, renderFull } from "../driver/agent/screen.js";
+import type { Screen, ScreenElement } from "../driver/agent/screen.js";
+import { Policy } from "../governance/policy.js";
+import type { PolicyOptions } from "../governance/policy.js";
 import { FileRefStore } from "./refs.js";
-import { Lease } from "./governance/lease.js";
-import { TraceRecorder } from "./governance/trace.js";
-import { ElementNotFoundError, UitestError } from "./transport/errors.js";
-import { actionText } from "./driver/agent/result.js";
-import type { ActionResult } from "./driver/agent/result.js";
-import type { Point } from "./driver/agent/gestures.js";
-import type { InputTextMode, Rect } from "./transport/model.js";
-import type { UiNode } from "./transport/model.js";
-import type { ShellRunner } from "./transport/apps.js";
+import { Lease, readLease } from "../governance/lease.js";
+import type { LeaseInfo } from "../governance/lease.js";
+import { TraceRecorder } from "../governance/trace.js";
+import { ElementNotFoundError, UitestError } from "../transport/errors.js";
+import { actionText } from "../driver/agent/result.js";
+import type { ActionResult } from "../driver/agent/result.js";
+import type { Point } from "../driver/agent/gestures.js";
+import type { InputTextMode, Rect } from "../transport/model.js";
+import type { UiNode } from "../transport/model.js";
+import type { ShellRunner } from "../transport/apps.js";
 
 /** The device calls a session needs; `Device` satisfies this. */
 export interface SessionAgent {
@@ -220,6 +221,7 @@ export class Session {
     private readonly opts: SessionOptions,
     lease: Lease | null,
     trace: TraceRecorder | null,
+    private readonly leasePath: string | null,
   ) {
     this.task = opts.task?.trim() || "task";
     this.lease = lease;
@@ -257,11 +259,13 @@ export class Session {
     const tag = tagOf(device.deviceId);
 
     let lease: Lease | null = null;
+    let leasePath: string | null = null;
     if (opts.lease !== false) {
       const dir = opts.lease?.dir ?? join(stateDir, "leases");
       await mkdir(dir, { recursive: true });
+      leasePath = join(dir, `${tag}.lock`);
       lease = await Lease.acquire({
-        path: join(dir, `${tag}.lock`),
+        path: leasePath,
         task: opts.task?.trim() || "task",
         staleMs: opts.lease?.staleMs,
       });
@@ -275,7 +279,7 @@ export class Session {
           deviceId: device.deviceId,
         });
 
-    return new Session(device, opts, lease, trace);
+    return new Session(device, opts, lease, trace, leasePath);
   }
 
   // ------------------------------------------------------------- observing
@@ -343,6 +347,60 @@ export class Session {
     })) as InspectResult;
   }
 
+  /** Saves a screenshot of the current screen and returns its path. */
+  async screenshot(opts: { out?: string } = {}): Promise<ActionResult> {
+    const out = opts.out ?? join(this.shotsDir, `shot-${Date.now()}.jpg`);
+    return this.observe({ out });
+  }
+
+  /** Waits for a device-side selector to exist, then reads the settled screen. */
+  async waitForSelector(selector: On, opts: WaitForOptions = {}): Promise<ActionResult> {
+    return this.waitFor(selector, opts);
+  }
+
+  /**
+   * Launches an app by bundle or short name, after the policy allow-list.
+   *
+   * The allow-list has to be checked against the bundle that will actually
+   * start, and before it starts: `launch` answers from hdc instead of going
+   * through the policy gate, so this resolves the name first. It is also what
+   * makes a short name like "settings" usable with `--apps`.
+   */
+  async launch(app: string, opts: { ability?: string } = {}): Promise<ActionResult> {
+    if (!this.apps) throw new UitestError("launch needs an hdc connection", "ENOHDC");
+    const bundle = await this.apps.resolveBundle(app);
+    const scope = this.policy.scope(bundle);
+    if (scope.kind === "block") {
+      return this.finish(
+        "launch",
+        { app },
+        "blocked",
+        `blocked_by_policy · rule: ${scope.rule}
+${scope.reason}`,
+        { rule: scope.rule, reason: scope.reason, bundle },
+      );
+    }
+    const before = await this.screen();
+    const result = await this.apps.launch(bundle, { ability: opts.ability });
+    // The app's own window can take a moment to come up; poll for its bundle
+    // rather than declaring success the instant `aa` returns.
+    const deadline = Date.now() + 5000;
+    let screen = before;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 300));
+      screen = await this.screen();
+      if (screen.bundle === result.bundle) break;
+    }
+    return this.finish(
+      "launch",
+      { app },
+      "settled",
+      `launched ${result.bundle} · ${result.ability}
+${screen.header}`,
+      { screen, bundle: result.bundle, ability: result.ability },
+    );
+  }
+
   /** The screen as of the last read, or a fresh one. */
   async screen(): Promise<Screen> {
     return this.reader.read();
@@ -370,6 +428,11 @@ export class Session {
   /** Where one approval stands, or null when the id is unknown. */
   approvalStatus(id: string): PendingApproval | null {
     return this.approvals.status(id);
+  }
+
+  /** The lease on disk, including a person's hold; null when leases are off. */
+  async leaseInfo(): Promise<LeaseInfo | null> {
+    return this.leasePath ? readLease(this.leasePath) : null;
   }
 
   // ---------------------------------------------------------------- acting

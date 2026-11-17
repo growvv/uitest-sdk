@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { TraceRecorder, deviceTag } from "../../src/governance/trace.js";
+import { TraceRecorder, deviceTag, readRecentTrace } from "../../src/governance/trace.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-trace-"));
@@ -227,6 +227,32 @@ describe("TraceRecorder", () => {
       expect(out.steps).toBe(0);
       const html = await readFile(out.path, "utf8");
       expect(html).toContain("steps 0");
+    });
+  });
+});
+
+describe("readRecentTrace", () => {
+  it("returns the newest records across trace files, newest last", async () => {
+    await withDir(async (dir) => {
+      const a = new TraceRecorder({ dir, task: "t", deviceId: "SYNTH0DEVICE0001" });
+      a.step({ command: "tap", args: {}, status: "settled", text: "one" });
+      await a.flush();
+      const recent = await readRecentTrace(dir, { limit: 5 });
+      expect(recent.at(-1)?.command).toBe("tap");
+    });
+  });
+
+  it("keeps only the requested number of records", async () => {
+    await withDir(async (dir) => {
+      const a = new TraceRecorder({ dir, task: "t" });
+      for (let i = 0; i < 4; i++) {
+        a.step({ command: `step-${i}`, status: "settled", text: "x" });
+      }
+      await a.flush();
+      expect((await readRecentTrace(dir, { limit: 2 })).map((r) => r.command)).toEqual([
+        "step-2",
+        "step-3",
+      ]);
     });
   });
 });

@@ -1,16 +1,16 @@
 import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import type { ApprovalScope } from "./governance/approvals.js";
+import type { ApprovalScope } from "../governance/approvals.js";
 import { doctor, renderDoctor } from "./doctor.js";
-import { EXIT_CODE, actionText, statusOf } from "./driver/agent/result.js";
-import type { ActionResult, ActionStatus } from "./driver/agent/result.js";
-import { renderFull } from "./driver/agent/screen.js";
-import { parseOn } from "./driver/agent/selector.js";
-import { parseKeyName } from "./driver/agent/selector.js";
-import { LeaseHeldError, UitestError } from "./transport/errors.js";
-import { HOLD_TASK, handoffDevice } from "./governance/hold.js";
+import { EXIT_CODE, actionText, statusOf } from "../driver/agent/result.js";
+import type { ActionResult, ActionStatus } from "../driver/agent/result.js";
+import { renderFull } from "../driver/agent/screen.js";
+import { parseOn } from "../driver/agent/selector.js";
+import { parseKeyName } from "../driver/agent/selector.js";
+import { LeaseHeldError, UitestError } from "../transport/errors.js";
+import { HOLD_TASK, handoffDevice } from "../governance/hold.js";
 import type { Session, SessionDevice, Target } from "./session.js";
-import type { TraceRecorder } from "./governance/trace.js";
+import type { TraceRecorder } from "../governance/trace.js";
 
 export type ArgType = "string" | "number" | "boolean";
 
@@ -630,41 +630,28 @@ export class CommandRunner {
   }
 
   private async launch(raw: Record<string, unknown>): Promise<RunResult> {
-    if (!this.session.apps) {
-      throw new UitestError("launch needs an hdc connection", "ENOHDC");
+    const r = await this.session.launch(String(raw.app), { ability: asString(raw.ability) });
+    if (r.status === "settled") {
+      const data = r as unknown as { bundle?: string; ability?: string };
+      return {
+        status: "settled",
+        code: 0,
+        text: `launched ${data.bundle} · ${data.ability}
+${r.screen?.header ?? ""}`,
+        data: { bundle: data.bundle, ability: data.ability },
+      };
     }
-    // The allow-list has to be checked against the bundle that will actually
-    // start, and before it starts: `launch` answers from hdc instead of going
-    // through the session's policy gate, so `--apps calculator` used to launch
-    // Settings. Resolving the name first is also what makes `--apps` usable
-    // with a short name like "settings".
-    const bundle = await this.session.apps.resolveBundle(String(raw.app));
-    const scope = this.session.policy.scope(bundle);
-    if (scope.kind === "block") {
+    if (r.status === "blocked") {
+      const data = r as unknown as { bundle?: string };
       return {
         status: "blocked",
         code: 2,
-        text: `blocked_by_policy · rule: ${scope.rule}\n${scope.reason}`,
-        data: { rule: scope.rule, reason: scope.reason, bundle },
+        text: `blocked_by_policy · rule: ${r.rule}
+${r.reason}`,
+        data: { rule: r.rule, reason: r.reason, bundle: data.bundle },
       };
     }
-    const before = await this.session.screen();
-    const result = await this.session.apps.launch(bundle, { ability: asString(raw.ability) });
-    // The app's own window can take a moment to come up; poll for its bundle
-    // rather than declaring success the instant `aa` returns.
-    const deadline = Date.now() + 5000;
-    let screen = before;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 300));
-      screen = await this.session.screen();
-      if (screen.bundle === result.bundle) break;
-    }
-    return {
-      status: "settled",
-      code: 0,
-      text: `launched ${result.bundle} · ${result.ability}\n${screen.header}`,
-      data: { bundle: result.bundle, ability: result.ability },
-    };
+    return this.result(r);
   }
 
   private async apps(raw: Record<string, unknown>): Promise<RunResult> {

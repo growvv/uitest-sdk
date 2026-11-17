@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { doctor } from "../../src/doctor.js";
-import { Session } from "../../src/session.js";
+import { doctor } from "../../src/operations/doctor.js";
+import { Session } from "../../src/operations/session.js";
 import type { UiNode } from "../../src/transport/model.js";
 
 const page: UiNode = {
@@ -64,7 +64,7 @@ describe("doctor", () => {
   });
 
   it("renders a text report", async () => {
-    const { renderDoctor } = await import("../../src/doctor.js");
+    const { renderDoctor } = await import("../../src/operations/doctor.js");
     const text = renderDoctor(await doctor(device()));
     expect(text).toContain("capabilities:");
     expect(text).toContain("waitForIdle=yes");
@@ -108,8 +108,8 @@ describe("doctor", () => {
     // functions for the same serial make that lookup impossible: with two
     // phones attached, `doctor` said dev-bff94761 and `status` said 7544d645
     // for the same device.
-    const { renderDoctor } = await import("../../src/doctor.js");
-    const { tagOf } = await import("../../src/session.js");
+    const { renderDoctor } = await import("../../src/operations/doctor.js");
+    const { tagOf } = await import("../../src/operations/session.js");
     const { deviceTag } = await import("../../src/governance/trace.js");
     const serial = "SYNTH0DEVICE0001";
     const text = renderDoctor(await doctor(device({ targets: [serial] })));
@@ -119,7 +119,7 @@ describe("doctor", () => {
   });
 
   it("does not leak the serial into the doctor report", async () => {
-    const { renderDoctor } = await import("../../src/doctor.js");
+    const { renderDoctor } = await import("../../src/operations/doctor.js");
     const serial = "SYNTH0DEVICE0001";
     const text = renderDoctor(await doctor(device({ targets: [serial] })));
     expect(text).not.toContain(serial);

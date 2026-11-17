@@ -1,9 +1,53 @@
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { deviceTag } from "../transport/tag.js";
 
 /** A stable, non-reversible device identifier. The raw serial never leaves the host. */
 export { deviceTag };
+
+/**
+ * The most recent trace records, newest last.
+ *
+ * Accepts either the state dir (scanning `traces/`) or the trace dir itself:
+ * the CLI knows the state dir, while a test or a report renderer may already
+ * hold the folder the recorder wrote to.
+ */
+export async function readRecentTrace(
+  dir: string,
+  opts: { limit?: number } = {},
+): Promise<TraceRecord[]> {
+  const traceDir = existsSync(join(dir, "traces")) ? join(dir, "traces") : dir;
+  let names: string[];
+  try {
+    names = await readdir(traceDir);
+  } catch {
+    return [];
+  }
+  const records: TraceRecord[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".jsonl")) continue;
+    try {
+      const raw = await readFile(join(traceDir, name), "utf8");
+      for (const line of raw.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
+          const record = JSON.parse(line) as TraceRecord;
+          if (record && typeof record.at === "string" && typeof record.step === "number") {
+            records.push(record);
+          }
+        } catch {
+          // A half-written last line is normal while a recorder is flushing.
+        }
+      }
+    } catch {
+      // A trace file that cannot be read is not a reason to hide the rest.
+    }
+  }
+  records.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const limit = Math.max(1, opts.limit ?? 20);
+  return records.slice(-limit);
+}
 
 export interface TraceEntry {
   command: string;
