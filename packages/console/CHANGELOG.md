@@ -1,0 +1,15 @@
+# 更新日志
+
+本文件记录 `uitest-console` 的公开版本。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
+版本号遵循语义化版本。
+
+## [0.1.0] — 2026-11-18
+
+第一个版本：`uitest-sdk` 0.9.4 里的 `live` 页面成为独立的人机产品。
+
+- 镜像与节点表复用 core 的 viewer（播放器、inspect、隐私开关、来源校验）。
+- 新增**接管**：Hold 写「人持有」租约，agent 命令停在 `lease_held`；Resume 交还。
+  只观看不占租约，可与 agent 同时运行。
+- 新增**审批收件箱**：列出 core 网关的待审批步骤，Allow（once/task/always）或 Deny。
+- 活动视图只读展示最近 trace。
+- 浏览器窗口优先用 Edge/Chrome 的 `--app`；没有可用浏览器时打印 URL。

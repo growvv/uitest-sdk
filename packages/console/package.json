@@ -1,0 +1,46 @@
+{
+  "name": "uitest-console",
+  "version": "0.1.0",
+  "description": "Local web console for a HarmonyOS device: mirror, inspect, takeover and the approval inbox",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/growvv/uitest-sdk.git",
+    "directory": "packages/console"
+  },
+  "homepage": "https://growvv.github.io/uitest-sdk/",
+  "keywords": [
+    "harmonyos",
+    "openharmony",
+    "uitest",
+    "mirror",
+    "console",
+    "takeover",
+    "approvals"
+  ],
+  "type": "module",
+  "bin": {
+    "uitest-console": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build && npm test",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "uitest-sdk": "~0.10.0"
+  }
+}

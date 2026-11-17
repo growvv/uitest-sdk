@@ -10,6 +10,11 @@ export interface RecordingOptions {
   /** Where the MP4 goes; the file is named by start time under `shots/`. */
   stateDir: string;
   /**
+   * Writes the MP4 to this exact path instead of `shots/live-<time>.mp4`.
+   * Used when a person named the file they will look for afterwards.
+   */
+  outputPath?: string;
+  /**
    * Socket name for the record daemon, unique per process.
    *
    * A fixed name is not usable: a second `live` on the same device would take
@@ -44,7 +49,7 @@ export class Recording {
   async start(): Promise<string> {
     if (this.cast) throw new UitestError("already recording", "EBADARG");
 
-    const out = join(this.opts.stateDir, "shots", `live-${Date.now()}.mp4`);
+    const out = this.opts.outputPath ?? join(this.opts.stateDir, "shots", `live-${Date.now()}.mp4`);
     await mkdir(dirname(out), { recursive: true });
 
     const stream = this.opts.streamCast;

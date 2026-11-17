@@ -23,6 +23,12 @@ export interface ViewerSourceOptions {
   layout?: boolean;
   /** Offer a screenshot button. Default true. */
   capture?: boolean;
+  /**
+   * Write the page's recording to this exact path instead of a timestamped
+   * name under `shots/`. A product with a `--record <file>` flag passes it
+   * through so the file is where the person was told it would be.
+   */
+  recordPath?: string;
 }
 
 /**
@@ -68,6 +74,7 @@ export function createViewerSource(
     socketName: `uitest_live_record_${suffix}`,
     createCast: (castOpts) => createCast(device, castOpts),
     streamCast,
+    ...(opts.recordPath ? { outputPath: opts.recordPath } : {}),
   });
 
   return {

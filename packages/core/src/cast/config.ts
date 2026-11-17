@@ -14,7 +14,7 @@ export interface CastSettings {
   iFrameInterval?: number;
   /** Device-side listening port, ws transport only. */
   port?: number;
-  transport?: "grpc" | "ws";
+  transport?: "grpc" | "ws" | "mjpeg";
   /** Local path to the 7.0 extension, ws transport only. */
   wsExtension?: string;
 }
@@ -43,7 +43,9 @@ function invalid(key: string, value: unknown, why: string): UitestError {
 function check(key: keyof CastSettings, value: unknown): CastSettings[keyof CastSettings] {
   if (value === undefined) return undefined;
   if (key === "transport") {
-    if (value !== "grpc" && value !== "ws") throw invalid(key, value, 'must be "grpc" or "ws"');
+    if (value !== "grpc" && value !== "ws" && value !== "mjpeg") {
+      throw invalid(key, value, 'must be "grpc", "ws" or "mjpeg"');
+    }
     return value;
   }
   if (key === "wsExtension") {

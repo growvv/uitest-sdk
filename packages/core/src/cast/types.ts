@@ -10,12 +10,12 @@ export interface CastOptions {
   /**
    * Which transport to use. Chosen explicitly and never inferred from what
    * happens to work: `"grpc"` needs the 6.8 extension, `"ws"` needs the 7.0
-   * one, and asking for a transport whose extension is not on the device is an
-   * error rather than a silent downgrade.
+   * one, and `"mjpeg"` needs no extension at all. Asking for a transport whose
+   * extension is not on the device is an error rather than a silent downgrade.
    *
    * Defaults to `"grpc"` — that is the build bundled in `assets/`.
    */
-  transport?: "grpc" | "ws";
+  transport?: "grpc" | "ws" | "mjpeg";
   /** Overrides the abstract socket name; the only way to run casts concurrently. */
   socketName?: string;
   /**

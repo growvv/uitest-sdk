@@ -132,3 +132,24 @@ describe("Recording", () => {
     await rec.stop();
   });
 });
+
+describe("Recording: chosen output path", () => {
+  it("writes the recording where the caller asked", async () => {
+    // The console's `--record <file>` names the file a person will look for
+    // afterwards; a timestamped name under shots/ would make the flag a lie.
+    const options: CastOptions[] = [];
+    const rec = new Recording({
+      stateDir: "C:/tmp/state",
+      outputPath: "C:/tmp/demo.mp4",
+      socketName: "uitest_live_record_4242",
+      createCast: async (opts) => {
+        options.push(opts);
+        return new FakeRecordClient();
+      },
+      streamCast: { mode: "stream" } as CastOptions,
+    });
+    expect(await rec.start()).toBe("C:/tmp/demo.mp4");
+    expect(options[0]!.outputPath).toBe("C:/tmp/demo.mp4");
+    await rec.stop();
+  });
+});
