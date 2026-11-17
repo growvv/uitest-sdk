@@ -224,6 +224,28 @@ function initControl() {
     ripple.classList.add("is-on");
   };
 
+  // Every beat of a step goes through `later`, which keeps the timer's id.
+  //
+  // A step is a chain of nested timeouts — move, pulse, type, swap frame — and
+  // an id that is never kept cannot be cancelled. stop() used to clear only the
+  // outer tick, so scrolling the demo out of view mid-step left the chain
+  // running, and scrolling back in started a second one. The two then moved the
+  // cursor and swapped frames under each other, showing beats of a step that
+  // was no longer on screen.
+  const beats = new Set();
+  const later = (fn, ms) => {
+    const id = setTimeout(() => {
+      beats.delete(id);
+      fn();
+    }, ms);
+    beats.add(id);
+    return id;
+  };
+  const clearBeats = () => {
+    for (const id of beats) clearTimeout(id);
+    beats.clear();
+  };
+
   const play = (index) => {
     const step = CONTROL_STEPS[index];
     clearMotion();
@@ -235,27 +257,27 @@ function initControl() {
       showFrame(0);
       cursor.classList.add("is-live");
       moveCursor(78, 86);
-      setTimeout(() => {
+      later(() => {
         moveCursor(step.x, step.y);
-        setTimeout(() => {
+        later(() => {
           pulse();
-          setTimeout(() => {
+          later(() => {
             keys.classList.add("is-on");
             keysText.textContent = "待输入";
             let n = 0;
             const type = () => {
               keysText.textContent = CONTROL_TYPE.slice(0, ++n);
               if (n < CONTROL_TYPE.length) {
-                setTimeout(type, CONTROL_TYPE_MS);
+                later(type, CONTROL_TYPE_MS);
               } else {
-                setTimeout(() => {
+                later(() => {
                   keys.classList.remove("is-on");
                   keysText.textContent = "待输入";
                   showFrame(1);
                 }, 700);
               }
             };
-            setTimeout(type, 220);
+            later(type, 220);
           }, 380);
         }, 800);
       }, 200);
@@ -266,11 +288,11 @@ function initControl() {
       // Results: tap the first card.
       showFrame(1);
       moveCursor(50, 60);
-      setTimeout(() => {
+      later(() => {
         moveCursor(step.x, step.y);
-        setTimeout(() => {
+        later(() => {
           pulse();
-          setTimeout(() => showFrame(2), 380);
+          later(() => showFrame(2), 380);
         }, 700);
       }, 150);
       return;
@@ -280,9 +302,9 @@ function initControl() {
       // Article: hold and drag upward; the picture slides with the finger.
       showFrame(2);
       moveCursor(50, 78);
-      setTimeout(() => {
+      later(() => {
         frames[2].classList.add("is-scrolled");
-        setTimeout(() => frames[2].classList.remove("is-scrolled"), 1200);
+        later(() => frames[2].classList.remove("is-scrolled"), 1200);
       }, step.act);
       return;
     }
@@ -290,13 +312,13 @@ function initControl() {
     // The article's image opens the viewer, and two fingers spread on it.
     showFrame(2);
     moveCursor(50, 55);
-    setTimeout(() => {
+    later(() => {
       pulse();
-      setTimeout(() => {
+      later(() => {
         showFrame(3);
-        setTimeout(() => {
+        later(() => {
           phone.classList.add("is-pinch");
-          setTimeout(() => {
+          later(() => {
             phone.classList.remove("is-pinch");
             showFrame(4);
           }, 1500);
@@ -325,11 +347,14 @@ function initControl() {
     tick();
   };
   const stop = () => {
-    if (!timer) return;
-    clearTimeout(timer);
+    // The chain, not just the tick: a step half-played is still several beats
+    // in flight, and each would paint over the frame the demo resets to.
+    clearBeats();
+    if (timer) clearTimeout(timer);
     timer = null;
     clearMotion();
     keys.classList.remove("is-on");
+    keysText.textContent = "待输入";
   };
 
   if (!("IntersectionObserver" in window)) {

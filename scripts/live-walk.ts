@@ -54,6 +54,18 @@ export function parseOnly(value: string | undefined): string[] | null {
     .filter(Boolean);
 }
 
+/**
+ * Where the run's report goes.
+ *
+ * A filtered run writes a separate file. `--only` is for iterating on the
+ * script, and its report says so in its own header — but it used to be written
+ * to `report.md`, so one partial run replaced the committed full-acceptance
+ * record with a document that disclaims itself.
+ */
+export function reportFileName(only: string[] | null): string {
+  return only ? "report-only.md" : "report.md";
+}
+
 interface Size {
   width: number;
   height: number;
@@ -72,16 +84,27 @@ interface Rect {
  * history. The bar's position depends on the search text (a long query wraps
  * and pushes everything down), so a fixed height either cuts the bar or keeps
  * a history row — both happened. This follows the bar: the lowest assistant
- * node's bottom plus a small margin, converted to screenshot pixels.
+ * node's bottom plus a margin, converted to screenshot pixels.
+ *
+ * The margin also follows the bar. Its padding below the last node is not in
+ * the layout, and it grows with that node's own text: a fixed 24 px was enough
+ * for this device's 220 px bar and would clip a taller one. Ten percent of the
+ * bottom node's height, floored at `marginPx`, covers the padding without
+ * reaching the history row underneath.
  *
  * The scale comes from the width: the capture is the display at half size
  * (608 for a 1216-wide phone) with a strip already cut from the bottom, so
  * `shot.height / display.height` is not the frame's scale.
  */
 export function assistantCropHeight(bar: Rect[], display: Size, shot: Size, marginPx = 24): number {
-  const bottom = bar.reduce((max, r) => Math.max(max, r.y + r.h), 0);
+  const lowest = bar.reduce<Rect | null>(
+    (pick, r) => (pick === null || r.y + r.h > pick.y + pick.h ? r : pick),
+    null,
+  );
+  const bottom = lowest ? lowest.y + lowest.h : 0;
+  const margin = Math.max(marginPx, Math.round((lowest?.h ?? 0) * 0.1));
   const scale = shot.width / display.width;
-  return Math.max(1, Math.min(shot.height, Math.round((bottom + marginPx) * scale)));
+  return Math.max(1, Math.min(shot.height, Math.round((bottom + margin) * scale)));
 }
 
 /**
@@ -195,5 +218,30 @@ export function clientPointFor(device: { x: number; y: number }, display: Size, 
     x: rect.left + (device.x / display.width) * rect.width,
     y: rect.top + (device.y / display.height) * rect.height,
   };
+}
+
+/** One step of ending a headless Chrome that the acceptance run started. */
+export type KillStep =
+  | { kind: "exec"; command: string; args: string[] }
+  | { kind: "signal"; pid: number; signal: NodeJS.Signals };
+
+/**
+ * How to end a headless Chrome, per platform.
+ *
+ * `taskkill /T` is the only way to take Chrome's renderer children down with
+ * it on Windows. On macOS and Linux there is no `taskkill`, so the call threw
+ * and was swallowed by the "already exited" catch — the browser survived and
+ * kept the debugging port, and the next run found a stale page instead of its
+ * own. A negative pid signals the whole group there; the spawn is detached so
+ * that group exists.
+ */
+export function chromeKillSteps(pid: number, platform: NodeJS.Platform = process.platform): KillStep[] {
+  if (platform === "win32") {
+    return [{ kind: "exec", command: "taskkill", args: ["/PID", String(pid), "/T", "/F"] }];
+  }
+  return [
+    { kind: "signal", pid: -pid, signal: "SIGKILL" },
+    { kind: "signal", pid, signal: "SIGKILL" },
+  ];
 }
 

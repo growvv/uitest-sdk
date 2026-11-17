@@ -377,3 +377,152 @@ describe("LiveInput pinch, wheel and text", () => {
     ]);
   });
 });
+
+describe("LiveInput text placement", () => {
+  // Without a layout there is no focus point, no display size and no earlier
+  // press: the old fallback was (0,0), which is the top-left corner of the
+  // status bar — a text injection there goes nowhere near the field the person
+  // is looking at, and on this ROM it can pull the shade down.
+  it("does not send text to 0,0 when nothing is known", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane }); // --no-layout, no press yet
+    input.type("hello");
+    await settle();
+    expect(lane.ops("text")).toEqual([]);
+  });
+
+  it("still sends text once a point is known", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane });
+    input.down(120, 340);
+    input.up(120, 340);
+    await settle();
+    input.type("hello");
+    await settle();
+    expect(lane.ops("text")).toEqual([[120, 340, "hello", "typing"]]);
+  });
+
+  // The half-distance is bounded by the display when there is one. Without a
+  // layout the client is trusted, but a value the device cannot represent
+  // (Infinity, NaN, or half a screen across) still has to be refused rather
+  // than forwarded.
+  it("refuses a pinch half that is not a finite positive number", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane });
+    input.pinch(100, 200, Number.POSITIVE_INFINITY);
+    input.pinch(100, 200, Number.NaN);
+    input.pinch(100, 200, -5);
+    await settle();
+    expect(lane.ops("pinch")).toEqual([]);
+  });
+});
+
+describe("LiveInput latency accounting", () => {
+  // A scroll is ~456 ms of device-side work and a paste 1.3-1.9 s; a tap is
+  // 3-4 ms. Averaging them into one p50 reports a number that describes no
+  // gesture: the readout says "输入 275 ms" after a tap that took 4 ms.
+  it("reports pointer latency separately from slow operations", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.down(10, 20);
+    input.up(10, 20);
+    await settle();
+    input.wheel(10, 20, 300);
+    await settle();
+    input.type("a long pasted string, over twelve characters");
+    await settle();
+    const stats = input.stats()!;
+    expect(stats.n).toBe(2); // the tap's down and up only
+    expect(stats.slow).toBe(2); // the scroll and the paste
+  });
+
+  it("still counts a slow operation in n when nothing else happened", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.wheel(10, 20, 300);
+    await settle();
+    const stats = input.stats()!;
+    expect(stats.n).toBe(0);
+    expect(stats.slow).toBe(1);
+  });
+});
+
+describe("LiveInput release", () => {
+  // Spec §6.4: leaving a takeover flushes the buffered text. The page does
+  // that, and then sends `release` — at which point cancel() used to empty the
+  // queue, dropping the text the page had just flushed and already removed
+  // from its input box. The person saw their characters vanish with nothing
+  // typed on the phone, and had no way to retype them.
+  it("sends text that was queued just before the release", async () => {
+    const lane = new FakeLane();
+    lane.hold = true;
+    const input = new LiveInput({ lane, bounds });
+    input.down(10, 20);
+    await settle();
+    input.type("鸿蒙");
+    const done = input.cancel();
+    lane.release();
+    await done;
+    await settle();
+
+    const names = lane.calls.map((c) => c[0]);
+    // The lift comes first: the text must not land under a finger still down,
+    // where the device would read it as part of the gesture.
+    expect(names).toEqual(["touchDown", "touchUp", "text"]);
+    expect(lane.ops("text").map((c) => c[2])).toEqual(["鸿蒙"]);
+  });
+
+  it("drops pointer moves but keeps pending text on cancel", async () => {
+    const lane = new FakeLane();
+    lane.hold = true;
+    const input = new LiveInput({ lane, bounds });
+    input.down(10, 20);
+    await settle();
+    input.move(11, 21);
+    input.move(12, 22);
+    input.type("hello");
+    const done = input.cancel();
+    // The lane answers again, as a real one would; cancel must not have
+    // thrown the queued text away while it waited.
+    lane.release();
+    await done;
+    await settle();
+
+    expect(lane.ops("touchMove")).toEqual([]);
+    expect(lane.ops("text").map((c) => c[2])).toEqual(["hello"]);
+  });
+});
+
+describe("LiveInput injection counter", () => {
+  // `n` is the size of a 200-entry ring buffer, so it stops growing after 200
+  // ops. The acceptance script waits for `n` to reach a target it computes
+  // from the gestures it just made; once a session has run past 200 injections
+  // that wait can never be satisfied, and a passing run times out instead.
+  it("keeps counting past the timing buffer's 200 entries", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    for (let i = 0; i < 250; i++) {
+      input.down(10, 20);
+      input.up(10, 20);
+    }
+    await settle();
+
+    const stats = input.stats()!;
+    expect(stats.n).toBe(200);
+    expect(stats.total).toBe(500);
+  });
+
+  it("counts a slow operation in total but not in n", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.down(10, 20);
+    input.up(10, 20);
+    await settle();
+    input.wheel(10, 20, 300);
+    await settle();
+
+    const stats = input.stats()!;
+    expect(stats.n).toBe(2);
+    expect(stats.total).toBe(3);
+  });
+});

@@ -256,6 +256,12 @@ function loadPlayer() {
       const data = { type: "hello", codec: "mjpeg", ...msg };
       socketRef.onmessage?.({ data: JSON.stringify(data) });
     },
+    /** Delivers a control broadcast (state, stats, reasons) as the server sends it. */
+    server(msg: Record<string, unknown>) {
+      const socketRef = socket();
+      const data = { type: "control", state: "controlled", ...msg };
+      socketRef.onmessage?.({ data: JSON.stringify(data) });
+    },
     fire(target: FakeElement | "document", type: string, init: Record<string, unknown> = {}) {
       if (target === "document") {
         const ev: FakeEvent = { preventDefault() {}, stopPropagation() {}, ...init };
@@ -374,5 +380,82 @@ describe("live page keyboard composition", () => {
     page.fire("document", "keydown", { key: "Escape" });
     expect(page.inputs()).toEqual([]);
     expect(page.frames()).toContainEqual({ type: "control", action: "release" });
+  });
+});
+
+describe("live page system keys versus buffered text", () => {
+  // Typing flushes on a 300 ms idle. A system key clicked inside that window
+  // used to reach the phone first: Home then Back landed on a screen that did
+  // not have the text yet, and the text arrived afterwards on whatever was
+  // showing. Spec §6.4 makes the order explicit — flush, then the key.
+  it("sends the buffered text before Back when Back is clicked at once", () => {
+    const page = loadPlayer();
+    page.hello(CONTROLLED);
+    page.text.value = "鸿蒙";
+    page.fire(page.text, "input");
+    page.fire(page.el("key-back"), "click");
+
+    expect(page.inputs()).toEqual([
+      { type: "input", action: "text", text: "鸿蒙" },
+      { type: "input", action: "key", key: "back" },
+    ]);
+  });
+
+  it("sends the buffered text before Home and Delete too", () => {
+    for (const [id, key] of [
+      ["key-home", "home"],
+      ["key-delete", "delete"],
+    ]) {
+      const page = loadPlayer();
+      page.hello(CONTROLLED);
+      page.text.value = "abc";
+      page.fire(page.text, "input");
+      page.fire(page.el(id), "click");
+      expect(page.inputs().map((m) => m.action)).toEqual(["text", "key"]);
+      expect(page.inputs()[1]).toEqual({ type: "input", action: "key", key });
+    }
+  });
+
+  it("does not send a stale flush when the key arrives after the idle flush", () => {
+    const page = loadPlayer();
+    page.hello(CONTROLLED);
+    page.text.value = "abc";
+    page.fire(page.text, "input");
+    page.advance(400);
+    page.fire(page.el("key-back"), "click");
+
+    expect(page.inputs()).toEqual([
+      { type: "input", action: "text", text: "abc" },
+      { type: "input", action: "key", key: "back" },
+    ]);
+  });
+});
+
+describe("live page latency readout", () => {
+  // p50/p95 are touch-only now: a scroll is ~456 ms of device work and a paste
+  // 1.3-1.9 s, so folding them in made the readout say "输入 275 ms" after a
+  // tap that took 4 ms. The slow ones are still reported, as a count.
+  function controlling() {
+    const page = loadPlayer();
+    page.hello(CONTROLLED);
+    return page;
+  }
+
+  it("shows the touch latency and says how many slow ops were excluded", () => {
+    const page = controlling();
+    page.server({ clientId: "tab-1", stats: { p50: 3.9, p95: 18.9, n: 2, slow: 0 } });
+    expect(page.el("input-ms").textContent).toBe("输入 4 ms");
+
+    page.server({ clientId: "tab-1", stats: { p50: 4.1, p95: 19, n: 4, slow: 3 } });
+    expect(page.el("input-ms").textContent).toContain("+3 次慢操作");
+  });
+
+  it("does not claim a latency when only slow ops were measured", () => {
+    const page = controlling();
+    page.server({ clientId: "tab-1", stats: { p50: 0, p95: 0, n: 0, slow: 2 } });
+
+    const text = page.el("input-ms").textContent;
+    expect(text).toContain("慢操作");
+    expect(text).not.toContain("0 ms");
   });
 });

@@ -657,7 +657,16 @@ export const PLAYER_HTML = `<!doctype html>
     if (msg.reason === 'busy') toast('另一个页面正在操作');
     else if (msg.reason === 'error') toast('输入通道不可用：' + (msg.message || 'error'));
     if (msg.stats && mine && typeof msg.stats.p50 === 'number') {
-      inputMsEl.textContent = '输入 ' + Math.round(msg.stats.p50) + ' ms';
+      // p50/p95 cover touch ops only. Scrolls and pastes are an order of
+      // magnitude slower, so folding them in would report a number that
+      // describes no gesture — say how many were left out instead.
+      var slow = typeof msg.stats.slow === 'number' ? msg.stats.slow : 0;
+      if (msg.stats.n === 0 && slow > 0) {
+        inputMsEl.textContent = '输入 — (' + slow + ' 次慢操作)';
+      } else {
+        inputMsEl.textContent =
+          '输入 ' + Math.round(msg.stats.p50) + ' ms' + (slow > 0 ? ' (+' + slow + ' 次慢操作)' : '');
+      }
     }
   }
 
@@ -868,7 +877,11 @@ export const PLAYER_HTML = `<!doctype html>
       // would submit "hongmeng" — or submit the candidate and then also send
       // Enter, closing what it just opened.
       if (composing) return;
-      if (name === 'enter') flushText();
+      // Text typed in the last 300 ms is still buffered. The key must not
+      // overtake it: Back or Home would land on a screen that does not have
+      // the text yet, and the text would then arrive on whatever is showing.
+      // Spec §6.4 fixes the order — flush, then the key.
+      flushText();
       sendInput({ action: 'key', key: name });
       el.disabled = true;
       setTimeout(function () { el.disabled = false; }, 150);

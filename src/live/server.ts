@@ -591,6 +591,14 @@ export class LiveServer {
       }
     })();
     this.inputOpening = opening;
+    // `open` is supplied by the caller and may throw synchronously. The IIFE
+    // then settles before the line above runs, so its finally cleared the
+    // field while it was still null and the rejected promise was stored
+    // afterwards — kept forever, and every later takeover got that same
+    // rejection. Clear it here too; the finally handles the async case.
+    opening.catch(() => {
+      if (this.inputOpening === opening) this.inputOpening = null;
+    });
     return opening;
   }
 
