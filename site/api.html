@@ -54,7 +54,7 @@
 
     <article class="doc-body">
       <h1>完整 API</h1>
-      <p class="doc-meta">uitest-sdk <strong>0.9.4</strong> · hypium <strong>6.1.0.210</strong> · <strong>118</strong> 个方法</p>
+      <p class="doc-meta">uitest-sdk <strong>0.10.0</strong> · hypium <strong>6.1.0.210</strong> · <strong>118</strong> 个方法</p>
       <p>DevEco Testing 的 hypium 驱动在设备上公开 118 个方法（<code>OHOSDriver</code> 106 个 + 兼容层 12 个）。<code>dev.hypium</code> 把它们逐个映射成 TypeScript 的同名 camelCase 方法，参数与返回值按设备实际行为定，不是照着文档猜的：每一条都在真机（BRA-AL00 / uitest 7.0.0.1）上跑过，状态标在表里。</p>
 
       <pre><code>import { Device, On, Gesture, UnsupportedError } from "uitest-sdk";
@@ -1251,7 +1251,7 @@ await dev.hypium.click({ x: 10, y: 10 });</code></pre>
         <li><code>pushFile</code> 会把本地路径转成绝对路径再发：实测相对路径会被 hdc 当成目录树，在设备上建出一个同名文件夹。</li>
       </ul>
 
-      <p class="doc-meta">本页由 <code>scripts/gen-api-page.mjs</code> 从 <code>src/hypium/catalog.ts</code> 生成，清单与驱动方法的一致性由单元测试保证。数字来自 2026-11-16 的真机验收。</p>
+      <p class="doc-meta">本页由 <code>scripts/gen-api-page.mjs</code> 从 <code>packages/core/src/driver/hypium/catalog.ts</code> 生成，清单与驱动方法的一致性由单元测试保证。数字来自 2026-11-16 的真机验收。</p>
     </article>
   </main>
 

@@ -10,12 +10,11 @@ import { writeFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Device } from "../src/driver/device.js";
-import { createCast } from "../src/cast/create.js";
-import { AppManager } from "../src/transport/apps.js";
-import { tagOf } from "../src/operations/session.js";
-import type { CastClient } from "../src/cast/types.js";
-import { ROOT, Evidence, ensureDirs, type Result } from "../test/device/acceptance.helpers.js";
+import { tagOf } from "uitest-sdk";
+import { AppManager, Device } from "uitest-sdk/drivers";
+import { createCast } from "uitest-sdk/cast";
+import type { CastClient } from "uitest-sdk/cast";
+import { ROOT, Evidence, ensureDirs, type Result } from "../packages/core/test/device/acceptance.helpers.js";
 
 interface Capability {
   name: string;
@@ -51,7 +50,7 @@ async function writeSnippet(cap: Capability): Promise<void> {
  * Minimal reproduction for "${cap.name}".
  * Run: npx tsx docs/acceptance/scripts/${cap.name}.ts --target <deviceId>
  */
-import { Device } from "../../../src/device.js";
+import { Device } from "uitest-sdk/drivers";
 
 const i = process.argv.indexOf("--target");
 const target = i >= 0 ? process.argv[i + 1] : process.env.UITEST_TARGET;

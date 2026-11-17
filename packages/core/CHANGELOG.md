@@ -8,6 +8,13 @@
 
 ## [未发布]
 
+## [0.10.0] — 2026-11-18
+
+核心库与产品的拆分版本：`uitest-sdk` 现在是纯库（连接、观察、动作、投屏、查看器、治理），
+CLI / MCP / skill 移到 `uitest-phone`，浏览器投屏界面移到 `uitest-console`。
+根入口收缩为 `connect` 与分类命名空间（`observe` / `act` / `wait` / `cast` / `view` / `govern`），
+其余能力走 `uitest-sdk/commands`、`/cast`、`/viewer`、`/govern`、`/drivers` 子路径。
+
 ## [0.9.4] — 2026-11-18
 
 在两台真机上从环境跑到发布产物的完整验收（9 个步骤，见

@@ -21,7 +21,7 @@ const ROOT = resolve(import.meta.dirname, "..");
  * version — the checker agreed with the stale page. It comes from `dist/` so a
  * forgotten `npm run build` fails here too.
  */
-const { VERSION } = await import(pathToFileURL(join(ROOT, "dist", "version.js")).href).catch(
+const { VERSION } = await import(pathToFileURL(join(ROOT, "packages", "core", "dist", "version.js")).href).catch(
   () => fail("dist/version.js is missing; run npm run build first"),
 );
 /** SITE_DIR exists so the checker itself can be run against broken copies. */
@@ -662,7 +662,7 @@ for (const href of ['href="docs.html"', 'href="changelog.html"', 'href="api.html
 // generated from src/hypium/catalog.ts, so this check is really "did you
 // regenerate after changing the facade".
 const { HYPIIUM_CATALOG } = await import(
-  pathToFileURL(join(ROOT, "dist", "hypium", "catalog.js")).href
+  pathToFileURL(join(ROOT, "packages", "core", "dist", "driver", "hypium", "catalog.js")).href
 ).catch(() => fail("dist/hypium/catalog.js is missing; run npm run build first"));
 if (HYPIIUM_CATALOG.length !== 118) {
   fail(`catalog has ${HYPIIUM_CATALOG.length} entries, expected 118`);
@@ -788,7 +788,9 @@ for (const needle of [
   // line is. The version itself comes from dist/, so a release that forgets to
   // update the page fails here.
   "加上这些修复的代码",
-  VERSION,
+  // This page is the historical 0.9.4 acceptance record, not the current
+  // release's page: its version must stay the one it measured.
+  "0.9.4",
 ]) {
   if (!acceptHtml.includes(needle)) fail(`acceptance.html 缺少「${needle}」`);
 }

@@ -11,8 +11,7 @@
  */
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Device } from "../src/driver/device.js";
-import { HdcRunner } from "../src/transport/hdc.js";
+import { Device, HdcRunner } from "uitest-sdk/drivers";
 
 const ROOT = join(import.meta.dirname, "..");
 const OUT = join(ROOT, "docs", "benchmarks.md");
@@ -50,7 +49,7 @@ async function main(): Promise<void> {
   const results: Samples[] = [];
 
   // ------------------------------------------------------------- the SDK
-  const dev = await Device.connect({ deviceId, extensionDir: join(ROOT, "assets") });
+  const dev = await Device.connect({ deviceId });
   try {
     const { width, height } = await dev.agent.getDisplaySize();
     const cx = Math.round(width / 2);

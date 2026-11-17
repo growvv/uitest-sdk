@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { envName, renderReport, type EnvInfo } from "../../scripts/acceptance.js";
+import { envName, renderReport, type EnvInfo } from "../../../../scripts/acceptance.js";
 import { tagOf } from "../../src/operations/session.js";
 
 // A made-up serial. The point of the test is that whatever string is passed as
@@ -66,7 +66,7 @@ describe("acceptance report", () => {
   // the tag means someone hand-edited it, and the next run would put a serial
   // back into the repository.
   it("keeps the committed report free of a raw device id", () => {
-    const md = readFileSync(new URL("../../docs/acceptance/report.md", import.meta.url), "utf8");
+    const md = readFileSync(new URL("../../../../docs/acceptance/report.md", import.meta.url), "utf8");
 
     expect(md).toMatch(/\| 设备 ID \| ([0-9a-f]{8}) \|/);
     expect(md).not.toMatch(/<your-device-id>/);

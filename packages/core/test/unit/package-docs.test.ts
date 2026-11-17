@@ -6,24 +6,33 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 /**
- * The package's outward-facing documents have to agree with the code.
+ * The core package's outward-facing documents have to agree with the code.
  *
  * Every check here exists because one of them had already drifted: the docs
  * listed 7 of the 13 error classes, the site still advertised a feature 0.9.0
  * had shipped, and the tarball carried Huawei-signed binaries under a bare MIT
  * licence with no notice at all. These assertions are what keeps them honest
  * without a person re-reading them each release.
+ *
+ * The package root and the repository root are different now: documents ship
+ * with the package, while the site and the acceptance record stay in the repo.
  */
 
-const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+const CORE = fileURLToPath(new URL("../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
+const readCore = (rel: string) => readFileSync(join(CORE, rel), "utf8");
+const readRoot = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-const errorsSource = read("src/transport/errors.ts");
-const apiDoc = read("docs/api.md");
+const errorsSource = readCore("src/transport/errors.ts");
+const apiDoc = readCore("docs/api.md");
 
 /** Every `export class XError` in the source, in declaration order. */
 function errorClassNames(): string[] {
   return [...errorsSource.matchAll(/^export class (\w+Error)\b/gm)].map((m) => m[1]!);
+}
+
+function corePackage(): { version: string; files: string[]; dependencies?: Record<string, string>; bin?: unknown } {
+  return JSON.parse(readCore("package.json"));
 }
 
 describe("docs/api.md · error table", () => {
@@ -36,27 +45,25 @@ describe("docs/api.md · error table", () => {
 });
 
 describe("CHANGELOG.md", () => {
-  it("exists at the repository root", () => {
-    expect(existsSync(join(ROOT, "CHANGELOG.md"))).toBe(true);
+  it("exists at the package root", () => {
+    expect(existsSync(join(CORE, "CHANGELOG.md"))).toBe(true);
   });
 
   it("has an entry for the version in package.json", () => {
     // A release that bumps the version and forgets the changelog ships a
     // package whose npm page shows no record of what changed.
-    const version = (JSON.parse(read("package.json")) as { version: string }).version;
-    expect(read("CHANGELOG.md")).toContain(version);
+    expect(readCore("CHANGELOG.md")).toContain(corePackage().version);
   });
 
   it("ships inside the published tarball", () => {
-    const files = (JSON.parse(read("package.json")) as { files: string[] }).files;
-    expect(files).toContain("CHANGELOG.md");
+    expect(corePackage().files).toContain("CHANGELOG.md");
   });
 });
 
 describe("NOTICE", () => {
-  it("exists and names the three bundled binaries", () => {
-    expect(existsSync(join(ROOT, "NOTICE"))).toBe(true);
-    const notice = read("NOTICE");
+  it("exists and names the bundled binaries", () => {
+    expect(existsSync(join(CORE, "NOTICE"))).toBe(true);
+    const notice = readCore("NOTICE");
     for (const name of ["agent.so", "libscreen_casting.z.so"]) {
       expect(notice).toContain(name);
     }
@@ -67,16 +74,15 @@ describe("NOTICE", () => {
   });
 
   it("ships inside the published tarball", () => {
-    const files = (JSON.parse(read("package.json")) as { files: string[] }).files;
-    expect(files).toContain("NOTICE");
+    expect(corePackage().files).toContain("NOTICE");
   });
 
   it("lists the same versions as assets/manifest.json", () => {
-    const manifest = JSON.parse(read("assets/manifest.json")) as Record<
+    const manifest = JSON.parse(readCore("assets/manifest.json")) as Record<
       string,
       Record<string, { version: string }>
     >;
-    const notice = read("NOTICE");
+    const notice = readCore("NOTICE");
     for (const abi of Object.keys(manifest)) {
       for (const [file, meta] of Object.entries(manifest[abi]!)) {
         expect(notice, `${abi}/${file} version`).toContain(meta.version);
@@ -87,14 +93,14 @@ describe("NOTICE", () => {
   it("states a checksum that matches the file it ships", () => {
     // The NOTICE's whole value is that a reader can check what they got. A
     // stale md5 would tell them the download is corrupt when it is not.
-    const manifest = JSON.parse(read("assets/manifest.json")) as Record<
+    const manifest = JSON.parse(readCore("assets/manifest.json")) as Record<
       string,
       Record<string, { size: number; md5: string }>
     >;
-    const notice = read("NOTICE");
+    const notice = readCore("NOTICE");
     for (const abi of Object.keys(manifest)) {
       for (const [file, meta] of Object.entries(manifest[abi]!)) {
-        const bytes = readFileSync(join(ROOT, "assets", abi, file));
+        const bytes = readFileSync(join(CORE, "assets", abi, file));
         expect(bytes.length, `${abi}/${file} size`).toBe(meta.size);
         const md5 = createHash("md5").update(bytes).digest("hex");
         expect(md5, `${abi}/${file} md5 in manifest`).toBe(meta.md5);
@@ -109,7 +115,7 @@ describe("site roadmap", () => {
   // A public page promising work that already exists is a false statement,
   // and it survived a release because nothing checked the section's content.
   it("does not list the live takeover as still planned", () => {
-    const changelog = read("site/changelog.html");
+    const changelog = readRoot("site/changelog.html");
     const section = /<section[^>]*id="roadmap"[^>]*>([\s\S]*?)<\/section>/.exec(changelog)?.[1] ?? "";
     expect(section).not.toBe("");
     expect(section).not.toContain("页的点击交互");
@@ -121,10 +127,11 @@ describe("README acceptance figures", () => {
   // The README is the package's front door on npm and GitHub. Its acceptance
   // date and screenshot timing had both gone stale while the report they cite
   // was regenerated twice.
+  const report = () => readRoot("docs/acceptance/report.md");
+
   it("cites the date of the report it points at", () => {
-    const readme = read("README.md");
-    const report = read("docs/acceptance/report.md");
-    const generated = /生成时间：(\d{4}-\d{2}-\d{2})/.exec(report)?.[1];
+    const readme = readCore("README.md");
+    const generated = /生成时间：(\d{4}-\d{2}-\d{2})/.exec(report())?.[1];
     expect(generated).toBeTruthy();
     expect(readme).toContain(generated!);
   });
@@ -132,10 +139,9 @@ describe("README acceptance figures", () => {
   it("does not quote a screenshot timing the report contradicts", () => {
     // The report is the measurement of record. A range whose upper bound is
     // below the measured value tells a reader the SDK is faster than it is.
-    const report = read("docs/acceptance/report.md");
-    const measured = /`captureScreen` \| ✅ (\d+) ms/.exec(report)?.[1];
+    const measured = /`captureScreen` \| ✅ (\d+) ms/.exec(report())?.[1];
     expect(measured).toBeTruthy();
-    const readme = read("README.md");
+    const readme = readCore("README.md");
     const claim = /\| 整屏截图 \| `agent\.captureScreen\(\)` \| \*\*(\d+)~(\d+) ms\*\* \|/.exec(readme);
     expect(claim, "README no longer states a captureScreen range").toBeTruthy();
     const high = Number(claim![2]);
@@ -149,7 +155,7 @@ describe("README acceptance figures", () => {
       [...l.matchAll(/(\d+)[–~-](\d+) ms/g)].map((m) => [Number(m[1]), Number(m[2])] as const),
     );
     expect(ranges.length, `no captureScreen line states a timing: ${lines.join(" | ")}`).toBeGreaterThan(0);
-    const measured = Number(/`captureScreen` \| ✅ (\d+) ms/.exec(read("docs/acceptance/report.md"))?.[1]);
+    const measured = Number(/`captureScreen` \| ✅ (\d+) ms/.exec(report())?.[1]);
     for (const [low, high] of ranges) {
       expect(high).toBeGreaterThanOrEqual(measured);
       expect(low).toBeLessThanOrEqual(measured);
@@ -161,8 +167,8 @@ describe("README acceptance figures", () => {
     // and come from different runs, so they legitimately differ. What they may
     // not do is exclude the latest measurement — that is how "107–193 ms"
     // survived two regenerated reports.
-    const site = read("site/index.html");
-    const measured = Number(/`captureScreen` \| ✅ (\d+) ms/.exec(read("docs/acceptance/report.md"))?.[1]);
+    const site = readRoot("site/index.html");
+    const measured = Number(/`captureScreen` \| ✅ (\d+) ms/.exec(report())?.[1]);
     const ranges = [...site.matchAll(/整屏截图[^\n]*?(\d+)–(\d+) ms/g)].map(
       (m) => [Number(m[1]), Number(m[2])] as const,
     );
@@ -177,10 +183,9 @@ describe("README acceptance figures", () => {
     // Same table, same failure mode: the count moves with whatever screen the
     // acceptance run lands on, and the README's range was written for a lighter
     // page than the one the report now measures.
-    const report = read("docs/acceptance/report.md");
-    const measured = Number(/`captureLayout` \| ✅ (\d+) nodes/.exec(report)?.[1]);
+    const measured = Number(/`captureLayout` \| ✅ (\d+) nodes/.exec(report())?.[1]);
     expect(measured).toBeGreaterThan(0);
-    const claim = /^\| UI 树 \| `agent\.captureLayout\(\)` \| ~(\d+)~(\d+) 节点 \|$/m.exec(read("README.md"));
+    const claim = /^\| UI 树 \| `agent\.captureLayout\(\)` \| ~(\d+)~(\d+) 节点 \|$/m.exec(readCore("README.md"));
     expect(claim, "README no longer states a captureLayout node range").toBeTruthy();
     expect(Number(claim![1])).toBeLessThanOrEqual(measured);
     expect(Number(claim![2])).toBeGreaterThanOrEqual(measured);
@@ -188,34 +193,32 @@ describe("README acceptance figures", () => {
 });
 
 describe("SECURITY.md", () => {
-  it("exists at the repository root and says how to report a vulnerability", () => {
+  it("exists at the package root and says how to report a vulnerability", () => {
     // A security policy nobody can find is the same as no policy: npm links
     // this file from the package page, and a reporter looks for the word
     // "report" before anything else.
-    expect(existsSync(join(ROOT, "SECURITY.md"))).toBe(true);
-    const doc = read("SECURITY.md");
-    expect(doc).toMatch(/security\/advisories/);
+    expect(existsSync(join(CORE, "SECURITY.md"))).toBe(true);
+    expect(readCore("SECURITY.md")).toMatch(/security\/advisories/);
   });
 
   it("states the Origin rule the server actually implements", () => {
     // The doc's value is that it describes this code. If the rule in
     // `origin.ts` changes and the doc does not, the doc starts promising a
     // protection the server no longer gives.
-    const doc = read("SECURITY.md");
+    const doc = readCore("SECURITY.md");
     expect(doc).toContain("Origin");
     expect(doc).toContain("403");
     // Both halves of the allow-list: the port must match, and a loopback-bound
     // server must be dialled by a loopback name (that is the rebinding guard).
     expect(doc.toLowerCase()).toContain("dns rebinding");
-    expect(read("src/viewer/origin.ts")).toContain("isAddressLiteral");
+    expect(readCore("src/viewer/origin.ts")).toContain("isAddressLiteral");
   });
 
   it("does not promise a protection it disclaims", () => {
     // A doc that says "no runtime dependencies" while package.json has four is
     // worse than silence. Pin the claim to the manifest.
-    const doc = read("SECURITY.md");
-    const pkg = JSON.parse(read("package.json")) as { dependencies?: Record<string, string> };
-    const deps = Object.keys(pkg.dependencies ?? {});
+    const doc = readCore("SECURITY.md");
+    const deps = Object.keys(corePackage().dependencies ?? {});
     if (doc.includes("没有运行时依赖")) {
       expect(deps, "SECURITY.md says there are no runtime dependencies").toEqual([]);
     }
@@ -224,19 +227,18 @@ describe("SECURITY.md", () => {
   });
 
   it("ships inside the published tarball", () => {
-    const files = (JSON.parse(read("package.json")) as { files: string[] }).files;
-    expect(files).toContain("SECURITY.md");
+    expect(corePackage().files).toContain("SECURITY.md");
   });
 
   it("is linked from the README", () => {
-    expect(read("README.md")).toContain("SECURITY.md");
+    expect(readCore("README.md")).toContain("SECURITY.md");
   });
 });
 
 describe("npm tarball", () => {
-  it("contains the notice, the changelog and the security policy", () => {
+  it("is the core library: no bin, no MCP, no skill, no product source", () => {
     const out = execFileSync("npm", ["pack", "--dry-run", "--json"], {
-      cwd: ROOT,
+      cwd: CORE,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       shell: process.platform === "win32",
@@ -246,5 +248,19 @@ describe("npm tarball", () => {
     expect(paths).toContain("NOTICE");
     expect(paths).toContain("CHANGELOG.md");
     expect(paths).toContain("SECURITY.md");
+    expect(corePackage().bin).toBeUndefined();
+    for (const forbidden of [
+      "dist/bin.js",
+      "dist/mcp.js",
+      "dist/mcp-register.js",
+      "dist/cli-main.js",
+      "dist/connect.js",
+      "dist/install-skill.js",
+      "dist/live/cli.js",
+    ]) {
+      expect(paths, `${forbidden} must not ship in core`).not.toContain(forbidden);
+    }
+    expect(paths.some((p) => p.startsWith("assets/skill"))).toBe(false);
+    expect(paths.some((p) => p.startsWith("src/"))).toBe(false);
   }, 120_000);
 });

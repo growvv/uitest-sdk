@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
 
-const ROOT = join(import.meta.dirname, "..", "..");
+const ROOT = join(import.meta.dirname, "..", "..", "..", "..");
 const SHOT = join(ROOT, "docs/acceptance/live/screenshots");
 
 function meanAt(data: Uint8Array, width: number, x: number, y: number): number {

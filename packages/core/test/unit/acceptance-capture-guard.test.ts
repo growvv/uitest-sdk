@@ -5,7 +5,7 @@ import {
   pressPowerKey,
   stageNeutralSurface,
   NEUTRAL_APP,
-} from "../../scripts/acceptance.js";
+} from "../../../../scripts/acceptance.js";
 
 /** A stand-in for `dev.hypium`: only the two calls the guard uses. */
 function fakeDisplay(opts: { locked: boolean; unlockWorks: boolean }) {

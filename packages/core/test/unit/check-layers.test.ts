@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkLayers } from "../../scripts/check-layers.mjs";
+import { checkLayers } from "../../../../scripts/check-layers.mjs";
 
 function tree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "uitest-layers-"));

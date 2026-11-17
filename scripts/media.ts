@@ -11,8 +11,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Device } from "../src/driver/device.js";
-import { HdcRunner } from "../src/transport/hdc.js";
+import { Device, HdcRunner } from "uitest-sdk/drivers";
 
 const ROOT = join(import.meta.dirname, "..");
 const OUT = join(ROOT, "site", "assets");
@@ -32,7 +31,7 @@ async function main(): Promise<void> {
   // whatever the acceptance run left in front.
   await new HdcRunner({ deviceId }).shell("uitest uiInput keyEvent Home");
 
-  const dev = await Device.connect({ deviceId, extensionDir: join(ROOT, "assets") });
+  const dev = await Device.connect({ deviceId });
   try {
     const { width, height } = await dev.agent.getDisplaySize();
 

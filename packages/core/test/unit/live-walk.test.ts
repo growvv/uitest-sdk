@@ -11,7 +11,7 @@ import {
   shouldRelaunch,
   shouldRun,
   stabilityStep,
-} from "../../scripts/live-walk.js";
+} from "../../../../scripts/live-walk.js";
 
 /**
  * The pinch scenario's walk can land somewhere that is neither the search

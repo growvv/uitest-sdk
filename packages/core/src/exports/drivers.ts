@@ -15,6 +15,14 @@ export { HdcRunner } from "../transport/hdc.js";
 export type { HdcOptions } from "../transport/hdc.js";
 export { Files } from "../transport/files.js";
 export type { FileEntry } from "../transport/files.js";
+export { AppManager, resolveAppList } from "../transport/apps.js";
+export type {
+  AppInfo,
+  LaunchOptions,
+  LaunchResult,
+  ListOptions as AppListOptions,
+  ShellRunner,
+} from "../transport/apps.js";
 export { Gesture, HYPIIUM_CATALOG, HypiumDriver, shellQuote, splitCommand } from "../driver/hypium/index.js";
 export type {
   ActionOptions,

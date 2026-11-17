@@ -1,84 +1,27 @@
 {
-  "name": "uitest-sdk",
-  "version": "0.9.4",
-  "description": "HarmonyOS uitest SDK and agent CLI: UI automation, screenshots, H.264 casting, MP4 recording, plus an MCP server and skill for coding agents",
+  "name": "uitest-monorepo",
+  "private": true,
+  "description": "uitest-sdk and the products built on it",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/growvv/uitest-sdk.git"
   },
-  "homepage": "https://growvv.github.io/uitest-sdk/",
-  "keywords": [
-    "harmonyos",
-    "openharmony",
-    "uitest",
-    "automation",
-    "scrcpy",
-    "h264",
-    "mcp",
-    "ai-agent",
-    "cli",
-    "agent-skill"
-  ],
   "type": "module",
-  "bin": {
-    "uitest-phone": "dist/bin.js"
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./commands": {
-      "types": "./dist/exports/commands.d.ts",
-      "import": "./dist/exports/commands.js"
-    },
-    "./cast": {
-      "types": "./dist/exports/cast.d.ts",
-      "import": "./dist/exports/cast.js"
-    },
-    "./viewer": {
-      "types": "./dist/exports/viewer.d.ts",
-      "import": "./dist/exports/viewer.js"
-    },
-    "./govern": {
-      "types": "./dist/exports/govern.d.ts",
-      "import": "./dist/exports/govern.js"
-    },
-    "./drivers": {
-      "types": "./dist/exports/drivers.d.ts",
-      "import": "./dist/exports/drivers.js"
-    }
-  },
-  "files": [
-    "dist",
-    "assets",
-    "docs/api.md",
-    "examples/quickstart.mjs",
-    "NOTICE",
-    "CHANGELOG.md",
-    "SECURITY.md"
+  "workspaces": [
+    "packages/*"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc && node -e \"require('fs').copyFileSync('src/cast/scrcpy.proto','dist/cast/scrcpy.proto')\"",
-    "prepublishOnly": "npm run build && npm test",
-    "test": "vitest run test/unit",
+    "build": "npm run build -w uitest-sdk",
+    "test": "npm run build -w uitest-sdk && vitest run test/unit",
     "test:device": "vitest run test/device",
-    "acceptance:handoff": "node scripts/acceptance-handoff.mjs",
-    "check:layers": "node scripts/check-layers.mjs",
-    "typecheck": "tsc --noEmit",
-    "typecheck:tests": "tsc -p tsconfig.test.json"
-  },
-  "dependencies": {
-    "@grpc/grpc-js": "^1.14.7",
-    "@grpc/proto-loader": "^0.7.0",
-    "jpeg-js": "^0.4.4",
-    "jsonc-parser": "^3.3.1"
+    "typecheck": "npm run build -w uitest-sdk && tsc -p tsconfig.json && npm run typecheck -ws --if-present",
+    "typecheck:tests": "npm run build -w uitest-sdk && npm run typecheck:tests -ws --if-present",
+    "check:site": "node scripts/check-site.mjs",
+    "check:layers": "node scripts/check-layers.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

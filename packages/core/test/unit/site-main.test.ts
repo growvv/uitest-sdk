@@ -164,7 +164,7 @@ function makeClock() {
 }
 
 const SCRIPT = readFileSync(
-  fileURLToPath(new URL("../../site/main.js", import.meta.url)),
+  fileURLToPath(new URL("../../../../site/main.js", import.meta.url)),
   "utf8",
 );
 

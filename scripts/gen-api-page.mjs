@@ -16,10 +16,10 @@ const ROOT = resolve(import.meta.dirname, "..");
 const OUT = join(ROOT, "site", "api.html");
 
 const { HYPIIUM_CATALOG } = await import(
-  pathToFileURL(join(ROOT, "dist", "hypium", "catalog.js")).href
+  pathToFileURL(join(ROOT, "packages", "core", "dist", "driver", "hypium", "catalog.js")).href
 );
 const { VERSION } = await import(
-  pathToFileURL(join(ROOT, "dist", "version.js")).href
+  pathToFileURL(join(ROOT, "packages", "core", "dist", "version.js")).href
 );
 
 const CATEGORY_LABELS = {
@@ -568,7 +568,7 @@ ${sections}
         <li><code>pushFile</code> 会把本地路径转成绝对路径再发：实测相对路径会被 hdc 当成目录树，在设备上建出一个同名文件夹。</li>
       </ul>
 
-      <p class="doc-meta">本页由 <code>scripts/gen-api-page.mjs</code> 从 <code>src/hypium/catalog.ts</code> 生成，清单与驱动方法的一致性由单元测试保证。数字来自 2026-11-16 的真机验收。</p>
+      <p class="doc-meta">本页由 <code>scripts/gen-api-page.mjs</code> 从 <code>packages/core/src/driver/hypium/catalog.ts</code> 生成，清单与驱动方法的一致性由单元测试保证。数字来自 2026-11-16 的真机验收。</p>
     </article>
   </main>
 
