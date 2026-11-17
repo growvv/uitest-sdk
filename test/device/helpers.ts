@@ -22,7 +22,7 @@ export function skipIfNoCast(): boolean {
  * the blind kill the SDK must never do on its own.
  */
 export async function killAllUitest(): Promise<void> {
-  const { HdcRunner } = await import("../../src/hdc.js");
+  const { HdcRunner } = await import("../../src/transport/hdc.js");
   const hdc = new HdcRunner({ deviceId: getTarget() });
   const out = await hdc.shell("pidof uitest").catch(() => "");
   const pids = out.split(/\s+/).filter((t) => /^\d+$/.test(t));

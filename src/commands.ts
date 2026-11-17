@@ -7,7 +7,7 @@ import type { ActionResult, ActionStatus } from "./agent/result.js";
 import { renderFull } from "./agent/screen.js";
 import { parseOn } from "./agent/selector.js";
 import { parseKeyName } from "./agent/selector.js";
-import { LeaseHeldError, UitestError } from "./errors.js";
+import { LeaseHeldError, UitestError } from "./transport/errors.js";
 import { HOLD_TASK, handoffDevice } from "./hold.js";
 import type { Session, SessionDevice, Target } from "./session.js";
 import type { TraceRecorder } from "./trace.js";

@@ -1,6 +1,6 @@
 import { On, selectorText } from "./selector.js";
-import { ElementNotFoundError, UitestError } from "../errors.js";
-import type { InputTextMode, Rect, WindowFilter } from "../model.js";
+import { ElementNotFoundError, UitestError } from "../transport/errors.js";
+import type { InputTextMode, Rect, WindowFilter } from "../transport/model.js";
 
 /** The device-side calls a component handle makes; AgentClient satisfies this. */
 export interface HypiumSource {

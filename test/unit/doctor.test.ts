@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { doctor } from "../../src/doctor.js";
 import { Session } from "../../src/session.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const page: UiNode = {
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },

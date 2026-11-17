@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { AppManager, resolveAppList } from "../../src/apps.js";
-import { AppNotFoundError, LaunchError } from "../../src/errors.js";
+import { AppManager, resolveAppList } from "../../src/transport/apps.js";
+import { AppNotFoundError, LaunchError } from "../../src/transport/errors.js";
 
 const APPS = [
   "com.huawei.hmos.settings",

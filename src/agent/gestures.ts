@@ -1,4 +1,4 @@
-import { UitestError } from "../errors.js";
+import { UitestError } from "../transport/errors.js";
 
 export interface Point {
   x: number;

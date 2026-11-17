@@ -1,6 +1,6 @@
 import { ScreenBuilder } from "./screen.js";
 import type { Screen, ScreenContext } from "./screen.js";
-import type { UiNode } from "../model.js";
+import type { UiNode } from "../transport/model.js";
 
 /** The device-side calls the reader needs; a real AgentClient satisfies this. */
 export interface ScreenSource {

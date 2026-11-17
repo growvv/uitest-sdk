@@ -18,7 +18,7 @@ import { join } from "node:path";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-const errorsSource = read("src/errors.ts");
+const errorsSource = read("src/transport/errors.ts");
 const apiDoc = read("docs/api.md");
 
 /** Every `export class XError` in the source, in declaration order. */

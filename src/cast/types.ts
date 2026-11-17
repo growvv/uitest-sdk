@@ -1,4 +1,4 @@
-import type { H264Chunk } from "../model.js";
+import type { H264Chunk } from "../transport/model.js";
 
 export interface JpegFrame {
   data: Buffer;

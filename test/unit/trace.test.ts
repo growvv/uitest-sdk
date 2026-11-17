@@ -239,6 +239,6 @@ describe("deviceTag", () => {
   });
 
   it("is a placeholder when no device is known", () => {
-    expect(deviceTag(null)).toBe("-");
+    expect(deviceTag(null)).toBe("nodevice");
   });
 });

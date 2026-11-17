@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseBounds, cropRect } from "../../src/util/bounds.js";
+import { parseBounds, cropRect } from "../../src/transport/util/bounds.js";
 
 describe("parseBounds", () => {
   it("parses the device format", () => {

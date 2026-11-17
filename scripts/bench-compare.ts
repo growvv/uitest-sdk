@@ -12,7 +12,7 @@
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Device } from "../src/device.js";
-import { HdcRunner } from "../src/hdc.js";
+import { HdcRunner } from "../src/transport/hdc.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const OUT = join(ROOT, "docs", "benchmarks.md");

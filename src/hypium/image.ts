@@ -1,5 +1,5 @@
 import jpeg from "jpeg-js";
-import type { Rect } from "../model.js";
+import type { Rect } from "../transport/model.js";
 
 export interface Raster {
   width: number;

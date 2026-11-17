@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolve } from "node:path";
-import { HdcRunner } from "../../src/hdc.js";
+import { HdcRunner } from "../../src/transport/hdc.js";
 
 const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
 vi.mock("node:child_process", () => ({ execFile: execFileMock }));

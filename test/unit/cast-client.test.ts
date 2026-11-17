@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { H264CastClient } from "../../src/cast/client.js";
-import { DaemonStartError, UitestError } from "../../src/errors.js";
-import type { HdcRunner } from "../../src/hdc.js";
+import { DaemonStartError, UitestError } from "../../src/transport/errors.js";
+import type { HdcRunner } from "../../src/transport/hdc.js";
 
 interface FakeState {
   /** `pidof uitest`: only used now to check our daemon is still alive. */

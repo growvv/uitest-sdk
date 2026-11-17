@@ -4,7 +4,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UitestError } from "./errors.js";
+import { UitestError } from "./transport/errors.js";
 import { VERSION } from "./version.js";
 
 export interface SkillFile {

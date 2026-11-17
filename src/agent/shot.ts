@@ -1,7 +1,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import jpeg from "jpeg-js";
-import type { Rect } from "../model.js";
+import type { Rect } from "../transport/model.js";
 
 export interface ShotContext {
   display: { width: number; height: number };

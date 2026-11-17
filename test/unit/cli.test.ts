@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CliRunner } from "../../src/cli.js";
-import type { HdcRunner } from "../../src/hdc.js";
+import type { HdcRunner } from "../../src/transport/hdc.js";
 
 function fakeHdc(readFile: string) {
   const calls: string[] = [];

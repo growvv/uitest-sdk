@@ -1,12 +1,9 @@
-import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { deviceTag } from "./transport/tag.js";
 
 /** A stable, non-reversible device identifier. The raw serial never leaves the host. */
-export function deviceTag(deviceId: string | null | undefined): string {
-  if (!deviceId) return "-";
-  return createHash("sha1").update(String(deviceId)).digest("hex").slice(0, 8);
-}
+export { deviceTag };
 
 export interface TraceEntry {
   command: string;

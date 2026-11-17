@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Session } from "../../src/session.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const node = (type: string, attrs: Record<string, unknown>, children: UiNode[] = []): UiNode => ({
   attributes: { type, ...attrs } as UiNode["attributes"],

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { findNodeAtLocation, parse, parseTree, printParseErrorCode } from "jsonc-parser";
 import type { Node, ParseError } from "jsonc-parser";
-import { UitestError } from "./errors.js";
+import { UitestError } from "./transport/errors.js";
 
 /** One MCP server entry: what the agent launches and with which arguments. */
 export interface McpEntry {

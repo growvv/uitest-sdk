@@ -2,7 +2,7 @@ import { createInterface } from "node:readline";
 import { EXIT_CODE } from "./agent/result.js";
 import { COMMANDS } from "./commands.js";
 import type { RunResult } from "./commands.js";
-import { DeviceStateError } from "./errors.js";
+import { DeviceStateError } from "./transport/errors.js";
 import { VERSION } from "./version.js";
 
 /** The subset of CommandRunner the server uses; keeps the tests device-free. */

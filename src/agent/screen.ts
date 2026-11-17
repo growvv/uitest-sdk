@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Rect, UiNode } from "../model.js";
+import type { Rect, UiNode } from "../transport/model.js";
 import type { FileRefStore, RefTable } from "../refs.js";
 import { isSecretContext, redactLabel } from "./redact.js";
 

@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Lease, readLease } from "../../src/lease.js";
-import { LeaseHeldError } from "../../src/errors.js";
+import { LeaseHeldError } from "../../src/transport/errors.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-lease-"));

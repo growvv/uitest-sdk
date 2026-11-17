@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { Grants } from "./approvals.js";
 import { Lease, readLease } from "./lease.js";
-import { tagOf } from "./session.js";
-import { HdcRunner } from "./hdc.js";
+import { tagOf } from "./transport/tag.js";
+import { HdcRunner } from "./transport/hdc.js";
 
 /**
  * The task name a hold records.

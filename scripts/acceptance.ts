@@ -11,7 +11,7 @@ import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Device } from "../src/device.js";
-import { AppManager } from "../src/apps.js";
+import { AppManager } from "../src/transport/apps.js";
 import { tagOf } from "../src/session.js";
 import type { CastClient } from "../src/cast/types.js";
 import { ROOT, Evidence, ensureDirs, type Result } from "../test/device/acceptance.helpers.js";

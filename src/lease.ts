@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { open, readFile, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
-import { LeaseHeldError } from "./errors.js";
+import { LeaseHeldError } from "./transport/errors.js";
 
 export interface LeaseInfo {
   task: string;

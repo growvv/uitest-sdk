@@ -62,8 +62,8 @@ export type {
   WindowOptions,
   WindowResult,
 } from "./session.js";
-export { AppManager } from "./apps.js";
-export type { AppInfo, LaunchOptions, LaunchResult, ListOptions as AppListOptions, ShellRunner } from "./apps.js";
+export { AppManager } from "./transport/apps.js";
+export type { AppInfo, LaunchOptions, LaunchResult, ListOptions as AppListOptions, ShellRunner } from "./transport/apps.js";
 export { Policy, DEFAULT_CONFIRM, POLICY_WORDS, SYSTEM_CHROME } from "./policy.js";
 export type { PolicyOptions, PolicyCheck, Decision, Rule, ConfirmRule } from "./policy.js";
 export { Approvals } from "./approvals.js";
@@ -91,7 +91,7 @@ export { registerJsonMcp, registerTomlMcp, isMcpRegistered } from "./mcp-registe
 export type { McpEntry, RegisterMcpOptions, RegisterMcpResult } from "./mcp-register.js";
 export { handoffDevice, holdDevice, resumeDevice, readHold, resolveTag, HOLD_TASK } from "./hold.js";
 export type { HandoffOptions, HoldOptions, HoldResult } from "./hold.js";
-export { DevicePool } from "./pool.js";
+export { DevicePool } from "./transport/pool.js";
 
 // The complete hypium 6.1.0.210 surface: one flat driver, 118 members.
 export { HypiumDriver, Gesture, HYPIIUM_CATALOG, shellQuote, splitCommand } from "./hypium/index.js";
@@ -132,10 +132,10 @@ export type { PinchOptions as HypiumPinchOptions } from "./hypium/types.js";
 export type { GestureOptions as HypiumGestureOptions } from "./hypium/types.js";
 export type { Target as HypiumTarget } from "./hypium/types.js";
 
-export { HdcRunner } from "./hdc.js";
-export type { HdcOptions } from "./hdc.js";
-export { Files } from "./files.js";
-export type { FileEntry } from "./files.js";
+export { HdcRunner } from "./transport/hdc.js";
+export type { HdcOptions } from "./transport/hdc.js";
+export { Files } from "./transport/files.js";
+export type { FileEntry } from "./transport/files.js";
 export { CastConfig, castConfigPath } from "./config.js";
 export type { CastSettings } from "./config.js";
 export { FpsMeter } from "./fps.js";
@@ -160,8 +160,8 @@ export { PLAYER_HTML } from "./live/player.js";
 export { startLive, liveOptions } from "./live/cli.js";
 export type { LiveCommandOptions, LiveRun } from "./live/cli.js";
 
-export { parseBounds, cropRect } from "./util/bounds.js";
-export type { H264Chunk, Rect, UiEvent, UiNode } from "./model.js";
+export { parseBounds, cropRect } from "./transport/util/bounds.js";
+export type { H264Chunk, Rect, UiEvent, UiNode } from "./transport/model.js";
 
 export {
   UitestError,
@@ -177,5 +177,5 @@ export {
   ElementNotFoundError,
   LeaseHeldError,
   UnsupportedError,
-} from "./errors.js";
-export type { DeviceState } from "./errors.js";
+} from "./transport/errors.js";
+export type { DeviceState } from "./transport/errors.js";

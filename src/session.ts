@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { AppManager } from "./apps.js";
+import { tagOf } from "./transport/tag.js";
+import { AppManager } from "./transport/apps.js";
 import { Approvals, Grants } from "./approvals.js";
 import type { ApprovalScope, Grant } from "./approvals.js";
 import { Components, ComponentHandle } from "./agent/components.js";
@@ -18,13 +18,13 @@ import type { PolicyOptions } from "./policy.js";
 import { FileRefStore } from "./refs.js";
 import { Lease } from "./lease.js";
 import { TraceRecorder } from "./trace.js";
-import { ElementNotFoundError, UitestError } from "./errors.js";
+import { ElementNotFoundError, UitestError } from "./transport/errors.js";
 import { actionText } from "./agent/result.js";
 import type { ActionResult } from "./agent/result.js";
 import type { Point } from "./agent/gestures.js";
-import type { InputTextMode, Rect } from "./model.js";
-import type { UiNode } from "./model.js";
-import type { ShellRunner } from "./apps.js";
+import type { InputTextMode, Rect } from "./transport/model.js";
+import type { UiNode } from "./transport/model.js";
+import type { ShellRunner } from "./transport/apps.js";
 
 /** The device calls a session needs; `Device` satisfies this. */
 export interface SessionAgent {
@@ -174,11 +174,7 @@ export type WindowResult = ActionResult & {
 
 const DEFAULT_STATE = ".uitest-phone";
 
-/** A device serial never reaches a file or a line of output; only this does. */
-export function tagOf(deviceId: string | undefined): string {
-  if (!deviceId) return "nodevice";
-  return createHash("sha1").update(String(deviceId)).digest("hex").slice(0, 8);
-}
+export { tagOf };
 
 /**
  * One task's view of one device.

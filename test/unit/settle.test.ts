@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ScreenBuilder } from "../../src/agent/screen.js";
 import { ScreenReader, settle } from "../../src/agent/settle.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const tree = (text: string, bundle = "com.demo"): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: bundle },

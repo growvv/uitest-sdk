@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { Files } from "../../src/files.js";
-import { UitestError } from "../../src/errors.js";
-import type { HdcRunner } from "../../src/hdc.js";
+import { Files } from "../../src/transport/files.js";
+import { UitestError } from "../../src/transport/errors.js";
+import type { HdcRunner } from "../../src/transport/hdc.js";
 
 function fakeHdc(output: string | ((cmd: string) => string) = "") {
   const calls: string[] = [];

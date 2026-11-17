@@ -9,7 +9,7 @@ import { installSkill, refreshSkill } from "./install-skill.js";
 import { liveMain } from "./live/cli.js";
 import { McpServer } from "./mcp.js";
 import { Session } from "./session.js";
-import { UitestError } from "./errors.js";
+import { UitestError } from "./transport/errors.js";
 import { VERSION } from "./version.js";
 import { fileURLToPath } from "node:url";
 

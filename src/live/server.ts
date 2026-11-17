@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import type { H264Chunk } from "../model.js";
+import type { H264Chunk } from "../transport/model.js";
 import type { CastClient, JpegFrame } from "../cast/types.js";
 import type { Screen } from "../agent/screen.js";
 import { WS_OPCODE_CLOSE, WS_OPCODE_PING, WS_OPCODE_TEXT } from "../cast/ws.js";

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { createConnection, type Socket } from "node:net";
 import { LiveServer } from "../../src/live/server.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../../src/cast/ws.js";
-import type { H264Chunk } from "../../src/model.js";
+import type { H264Chunk } from "../../src/transport/model.js";
 import type { JpegFrame } from "../../src/cast/types.js";
 import type { Screen } from "../../src/agent/screen.js";
 import type { CastClient } from "../../src/cast/types.js";

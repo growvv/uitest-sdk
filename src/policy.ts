@@ -1,4 +1,4 @@
-import type { UiNode } from "./model.js";
+import type { UiNode } from "./transport/model.js";
 
 export type Rule = "credentials" | "payments" | "finance" | "deletes" | "sends" | "commits";
 export type ConfirmRule = Exclude<Rule, "credentials">;

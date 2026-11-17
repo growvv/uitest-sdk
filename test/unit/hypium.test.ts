@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { HypiumDriver, Gesture } from "../../src/hypium/index.js";
 import { On } from "../../src/agent/selector.js";
 import { ComponentHandle } from "../../src/agent/components.js";
-import { UnsupportedError } from "../../src/errors.js";
+import { UnsupportedError } from "../../src/transport/errors.js";
 
 interface Call {
   api: string;

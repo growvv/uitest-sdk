@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { HdcRunner } from "./hdc.js";
-import { AgentProtocolError } from "./errors.js";
-import type { UiNode } from "./model.js";
+import type { HdcRunner } from "./transport/hdc.js";
+import { AgentProtocolError } from "./transport/errors.js";
+import type { UiNode } from "./transport/model.js";
 
 export interface DumpLayoutOptions {
   windowId?: number;

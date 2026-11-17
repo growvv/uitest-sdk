@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ScreenBuilder, renderDiff, renderFull, findText, nodesUnder } from "../../src/agent/screen.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const node = (attributes: Record<string, string>, children: UiNode[] = []): UiNode => ({
   attributes,

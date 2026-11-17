@@ -23,7 +23,7 @@ import { decodeJpeg as decodeJpegBuffer, type Raster } from "../src/hypium/image
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Device } from "../src/device.js";
-import { HdcRunner } from "../src/hdc.js";
+import { HdcRunner } from "../src/transport/hdc.js";
 import { startLive, liveOptions } from "../src/live/cli.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../src/cast/ws.js";
 import { deviceTag } from "../src/trace.js";

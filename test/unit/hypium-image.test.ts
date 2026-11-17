@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
 import { HypiumDriver } from "../../src/hypium/index.js";
-import { UnsupportedError } from "../../src/errors.js";
+import { UnsupportedError } from "../../src/transport/errors.js";
 
 function screenJpeg(width: number, height: number): Buffer {
   const data = Buffer.alloc(width * height * 4);

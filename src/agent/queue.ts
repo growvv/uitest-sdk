@@ -1,4 +1,4 @@
-import { UitestError } from "../errors.js";
+import { UitestError } from "../transport/errors.js";
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {

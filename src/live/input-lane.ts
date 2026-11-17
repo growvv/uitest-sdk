@@ -1,5 +1,5 @@
 import { Gestures } from "../agent/gestures.js";
-import type { InputTextMode } from "../model.js";
+import type { InputTextMode } from "../transport/model.js";
 
 /**
  * The input side of a device, as `LiveInput` needs it.

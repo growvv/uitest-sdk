@@ -1,4 +1,4 @@
-import { tagOf } from "./session.js";
+import { tagOf } from "./transport/tag.js";
 import type { Session, SessionDevice } from "./session.js";
 
 export interface Capabilities {

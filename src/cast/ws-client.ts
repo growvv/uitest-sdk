@@ -1,9 +1,9 @@
 import { createServer, createConnection, type Socket } from "node:net";
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
-import type { HdcRunner } from "../hdc.js";
-import { DaemonStartError, ExtensionMissingError, UitestError } from "../errors.js";
-import type { H264Chunk } from "../model.js";
+import type { HdcRunner } from "../transport/hdc.js";
+import { DaemonStartError, ExtensionMissingError, UitestError } from "../transport/errors.js";
+import type { H264Chunk } from "../transport/model.js";
 import type { CastClient, CastOptions } from "./types.js";
 import { ownDaemon, pids } from "./daemon.js";
 import {

@@ -3,7 +3,7 @@ import jpeg from "jpeg-js";
 import { ScreenBuilder } from "../../src/agent/screen.js";
 import { Screenshot } from "../../src/agent/shot.js";
 import { ROLE_COLORS, inspectScreen, renderPanel } from "../../src/agent/inspector.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const node = (attributes: Record<string, string>, children: UiNode[] = []): UiNode => ({
   attributes,

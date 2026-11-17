@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
-import type { HdcRunner } from "../hdc.js";
-import { DaemonStartError, UitestError } from "../errors.js";
-import type { H264Chunk } from "../model.js";
+import type { HdcRunner } from "../transport/hdc.js";
+import { DaemonStartError, UitestError } from "../transport/errors.js";
+import type { H264Chunk } from "../transport/model.js";
 import type { CastClient, CastOptions, JpegFrame } from "./types.js";
 import { ownDaemon, pids } from "./daemon.js";
 

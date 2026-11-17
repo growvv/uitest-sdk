@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import * as sdk from "../../src/index.js";
-import { DeviceStateError } from "../../src/errors.js";
+import { DeviceStateError } from "../../src/transport/errors.js";
 
 /**
  * The package entry, `src/index.ts`, is the only thing an `import "uitest-sdk"`
  * reaches — `package.json` maps the root export to `dist/index.js` and nothing
- * else. So a name that exists in `src/errors.ts` but is missing here is not
+ * else. So a name that exists in `src/transport/errors.ts` but is missing here is not
  * exported at all: no amount of reading the docs would tell you why
  * `instanceof sdk.DeviceStateError` throws.
  *
@@ -20,9 +20,9 @@ import { DeviceStateError } from "../../src/errors.js";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-/** Every `export class …Error` declared in `src/errors.ts`, in file order. */
+/** Every `export class …Error` declared in `src/transport/errors.ts`, in file order. */
 function errorClassNames(): string[] {
-  return [...read("src/errors.ts").matchAll(/^export class (\w+Error)\b/gm)].map((m) => m[1]!);
+  return [...read("src/transport/errors.ts").matchAll(/^export class (\w+Error)\b/gm)].map((m) => m[1]!);
 }
 
 /** Every name the barrel's `export { … }` statements publish at runtime. */

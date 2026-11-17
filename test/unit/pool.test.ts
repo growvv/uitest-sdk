@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { DevicePool } from "../../src/pool.js";
-import { LeaseHeldError } from "../../src/errors.js";
+import { DevicePool } from "../../src/transport/pool.js";
+import { LeaseHeldError } from "../../src/transport/errors.js";
 
 function fakeDevice(id: string) {
   const disposals: string[] = [];

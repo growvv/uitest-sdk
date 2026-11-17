@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Session } from "../../src/session.js";
 import { On } from "../../src/agent/selector.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const listPage = (labels: string[]): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },

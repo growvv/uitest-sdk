@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentClient, isBusyException } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
-import { Files } from "./files.js";
-import { HdcRunner } from "./hdc.js";
+import { Files } from "./transport/files.js";
+import { HdcRunner } from "./transport/hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
 import { deviceTag } from "./trace.js";
 import { H264CastClient } from "./cast/client.js";
@@ -22,7 +22,7 @@ import {
   DeviceNotConnectedError,
   DeviceStateError,
   ExtensionMissingError,
-} from "./errors.js";
+} from "./transport/errors.js";
 
 export interface DeviceOptions {
   hdcPath?: string;

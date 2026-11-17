@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WsCastClient } from "../../src/cast/ws-client.js";
-import { DaemonStartError, UitestError } from "../../src/errors.js";
-import type { HdcRunner } from "../../src/hdc.js";
+import { DaemonStartError, UitestError } from "../../src/transport/errors.js";
+import type { HdcRunner } from "../../src/transport/hdc.js";
 
 /** A tiny stand-in for the 7.0 extension: handshake, then scripted replies. */
 interface FakeServer {

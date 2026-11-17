@@ -1,4 +1,4 @@
-import type { HdcRunner } from "../hdc.js";
+import type { HdcRunner } from "../transport/hdc.js";
 
 /** Parses `pidof` output. Multiple pids come back space-separated on one line. */
 export function pids(output: string): Set<string> {

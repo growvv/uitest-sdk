@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentClient } from "../../src/agent/client.js";
-import { AgentConnectionError, DeviceNotConnectedError, ExtensionMissingError } from "../../src/errors.js";
+import { AgentConnectionError, DeviceNotConnectedError, ExtensionMissingError } from "../../src/transport/errors.js";
 
 // ------------------------------------------------------------------ fixtures
 
@@ -159,7 +159,7 @@ function makeExtDir(abi: "arm64" | "x86_64", withCasting: boolean): string {
   return dir;
 }
 
-vi.mock("../../src/hdc.js", () => {
+vi.mock("../../src/transport/hdc.js", () => {
   class FakeHdc {
     constructor(_opts?: unknown) {}
     resolveHdcPath() { return "/fake/hdc"; }

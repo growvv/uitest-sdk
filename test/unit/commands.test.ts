@@ -7,7 +7,7 @@ import { CommandRunner, COMMANDS } from "../../src/commands.js";
 import { Session, tagOf } from "../../src/session.js";
 import { holdDevice, resumeDevice } from "../../src/hold.js";
 import { readLease } from "../../src/lease.js";
-import type { UiNode } from "../../src/model.js";
+import type { UiNode } from "../../src/transport/model.js";
 
 const page = (text: string): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },

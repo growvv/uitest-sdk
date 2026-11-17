@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseArgv, formatHelp, formatResult, exitCodeForError } from "../../src/cli-main.js";
 import { COMMANDS } from "../../src/commands.js";
-import { DeviceStateError, LeaseHeldError, UitestError } from "../../src/errors.js";
+import { DeviceStateError, LeaseHeldError, UitestError } from "../../src/transport/errors.js";
 import { runCommand } from "../../src/cli-main.js";
 import { Lease } from "../../src/lease.js";
 import { tagOf } from "../../src/session.js";

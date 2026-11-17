@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { UitestError } from "./errors.js";
+import { UitestError } from "./transport/errors.js";
 import { installSkill } from "./install-skill.js";
 import type { InstallSkillResult } from "./install-skill.js";
 import { isMcpRegistered, registerJsonMcp, registerTomlMcp } from "./mcp-register.js";

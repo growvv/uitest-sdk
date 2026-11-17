@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { UitestError, AgentProtocolError, AgentBusyError } from "../../src/errors.js";
+import { UitestError, AgentProtocolError, AgentBusyError } from "../../src/transport/errors.js";
 
 describe("errors", () => {
   it("carries code and cause", () => {
