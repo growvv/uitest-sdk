@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { FrameDemux } from "../../src/agent/demux.js";
+import { FrameDemux } from "../../src/driver/agent/demux.js";
 
 function collect() {
   const json: string[] = [];

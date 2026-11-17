@@ -7,9 +7,9 @@ import {
   AgentConnectionError,
   AgentProtocolError,
   UitestError,
-} from "../transport/errors.js";
-import type { InputTextMode, Rect, UiEvent, UiNode } from "../transport/model.js";
-import { cropRect, parseBounds } from "../transport/util/bounds.js";
+} from "../../transport/errors.js";
+import type { InputTextMode, Rect, UiEvent, UiNode } from "../../transport/model.js";
+import { cropRect, parseBounds } from "../../transport/util/bounds.js";
 
 export type AgentMethod = "Captures" | "CtrlCmd" | "Gestures" | "callHypiumApi";
 

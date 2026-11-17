@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import net from "node:net";
-import { AgentClient } from "../../src/agent/client.js";
+import { AgentClient } from "../../src/driver/agent/client.js";
 import { AgentBusyError, AgentConnectionError } from "../../src/transport/errors.js";
 
 const JPEG = (b: number) => Buffer.concat([Buffer.from([0xff, 0xd8, b]), Buffer.from([0xff, 0xd9])]);

@@ -11,7 +11,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Device } from "../src/device.js";
+import { Device } from "../src/driver/device.js";
 import { HdcRunner } from "../src/transport/hdc.js";
 
 const ROOT = join(import.meta.dirname, "..");

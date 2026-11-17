@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Device } from "../device.js";
-import type { DeviceOptions } from "../device.js";
+import { Device } from "../driver/device.js";
+import type { DeviceOptions } from "../driver/device.js";
 import { Session } from "../session.js";
 import { parseArgv } from "../cli-main.js";
 import { Recording } from "./record.js";
 import { LiveServer } from "./server.js";
 import type { LiveServerOptions } from "./server.js";
 import type { CastOptions } from "../cast/types.js";
-import type { Screen } from "../agent/screen.js";
+import type { Screen } from "../driver/agent/screen.js";
 
 /**
  * `uitest-phone live`

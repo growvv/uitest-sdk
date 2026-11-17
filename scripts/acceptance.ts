@@ -10,7 +10,7 @@ import { writeFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Device } from "../src/device.js";
+import { Device } from "../src/driver/device.js";
 import { AppManager } from "../src/transport/apps.js";
 import { tagOf } from "../src/session.js";
 import type { CastClient } from "../src/cast/types.js";

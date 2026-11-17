@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
 import { Session, tagOf } from "../../src/session.js";
-import { On } from "../../src/agent/selector.js";
+import { On } from "../../src/driver/agent/selector.js";
 import type { UiNode } from "../../src/transport/model.js";
 
 const node = (type: string, attrs: Record<string, unknown>, children: UiNode[] = []): UiNode => ({

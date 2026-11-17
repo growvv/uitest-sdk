@@ -1,4 +1,4 @@
-import { UitestError } from "../transport/errors.js";
+import { UitestError } from "../../transport/errors.js";
 
 /**
  * The device's string matching modes. The numbers are the enum the extension

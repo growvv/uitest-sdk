@@ -1,4 +1,4 @@
-import { Device } from "../../src/device.js";
+import { Device } from "../../src/driver/device.js";
 
 export function getTarget(): string | undefined {
   const i = process.argv.indexOf("--target");

@@ -1,4 +1,4 @@
-import { Gestures } from "../agent/gestures.js";
+import { Gestures } from "../driver/agent/gestures.js";
 import type { InputTextMode } from "../transport/model.js";
 
 /**

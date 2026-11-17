@@ -4,17 +4,17 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentClient, isBusyException } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
-import { Files } from "./transport/files.js";
-import { HdcRunner } from "./transport/hdc.js";
+import { Files } from "../transport/files.js";
+import { HdcRunner } from "../transport/hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
-import { deviceTag } from "./trace.js";
-import { H264CastClient } from "./cast/client.js";
-import { WsCastClient } from "./cast/ws-client.js";
-import { MjpegCastClient } from "./cast/mjpeg.js";
-import { CASTING_EXTENSION, resolveCastingExtension } from "./cast/resolve.js";
-import type { CastClient, CastOptions } from "./cast/types.js";
-import { AgentInputLane } from "./live/input-lane.js";
-import type { InputSession } from "./live/input-lane.js";
+import { deviceTag } from "../trace.js";
+import { H264CastClient } from "../cast/client.js";
+import { WsCastClient } from "../cast/ws-client.js";
+import { MjpegCastClient } from "../cast/mjpeg.js";
+import { CASTING_EXTENSION, resolveCastingExtension } from "../cast/resolve.js";
+import type { CastClient, CastOptions } from "../cast/types.js";
+import { AgentInputLane } from "../live/input-lane.js";
+import type { InputSession } from "../live/input-lane.js";
 import {
   AgentBusyError,
   AgentConnectionError,
@@ -22,7 +22,7 @@ import {
   DeviceNotConnectedError,
   DeviceStateError,
   ExtensionMissingError,
-} from "./transport/errors.js";
+} from "../transport/errors.js";
 
 export interface DeviceOptions {
   hdcPath?: string;
@@ -42,7 +42,7 @@ export interface DeviceOptions {
  * (tsx) and `dist/` (published) sit one level below the package root.
  */
 export function defaultExtensionDir(): string {
-  return fileURLToPath(new URL("../assets", import.meta.url));
+  return fileURLToPath(new URL("../../assets", import.meta.url));
 }
 
 const AGENT_REMOTE = "/data/local/tmp/agent.so";

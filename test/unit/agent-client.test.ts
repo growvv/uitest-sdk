@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import net from "node:net";
-import { AgentClient } from "../../src/agent/client.js";
+import { AgentClient } from "../../src/driver/agent/client.js";
 import { AgentProtocolError, AgentBusyError } from "../../src/transport/errors.js";
 
 let server: net.Server;

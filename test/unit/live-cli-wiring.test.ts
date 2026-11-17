@@ -17,7 +17,7 @@ const calls: string[] = [];
 let sessionOpenError: Error | null = null;
 let serverStartError: Error | null = null;
 
-vi.mock("../../src/device.js", () => {
+vi.mock("../../src/driver/device.js", () => {
   class FakeDevice {
     static async connect(_opts: unknown) {
       calls.push("connect");

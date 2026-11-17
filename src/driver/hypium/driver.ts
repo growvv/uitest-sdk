@@ -1,13 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { AppManager } from "../transport/apps.js";
+import { AppManager } from "../../transport/apps.js";
 import { ComponentHandle, Components, UiWindowHandle } from "../agent/components.js";
 import { Gestures } from "../agent/gestures.js";
 import { On, parseKeyName } from "../agent/selector.js";
-import { ElementNotFoundError, UitestError, UnsupportedError } from "../transport/errors.js";
-import type { InputTextMode, Rect, WindowFilter } from "../transport/model.js";
+import { ElementNotFoundError, UitestError, UnsupportedError } from "../../transport/errors.js";
+import type { InputTextMode, Rect, WindowFilter } from "../../transport/model.js";
 import { cropJpeg, decodeJpeg, findTemplate, type Raster } from "./image.js";
-import { shellQuote } from "../transport/util/shell.js";
+import { shellQuote } from "../../transport/util/shell.js";
 import type {
   ActionOptions,
   CaptureOptions,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CliRunner } from "../../src/cli.js";
+import { CliRunner } from "../../src/driver/cli.js";
 import type { HdcRunner } from "../../src/transport/hdc.js";
 
 function fakeHdc(readFile: string) {

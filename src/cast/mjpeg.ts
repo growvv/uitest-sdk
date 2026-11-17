@@ -1,4 +1,4 @@
-import type { AgentClient } from "../agent/client.js";
+import type { AgentClient } from "../driver/agent/client.js";
 import type { CastClient, JpegFrame } from "./types.js";
 
 /**

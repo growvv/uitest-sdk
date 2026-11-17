@@ -1,4 +1,4 @@
-import type { Rect } from "../transport/model.js";
+import type { Rect } from "../../transport/model.js";
 import type { ElementRole, Screen } from "./screen.js";
 import { Screenshot } from "./shot.js";
 import type { Rgb } from "./shot.js";

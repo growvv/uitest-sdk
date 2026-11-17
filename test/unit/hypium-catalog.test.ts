@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { HYPIIUM_CATALOG } from "../../src/hypium/catalog.js";
-import { HypiumDriver } from "../../src/hypium/index.js";
-import * as hypium from "../../src/hypium/index.js";
+import { HYPIIUM_CATALOG } from "../../src/driver/hypium/catalog.js";
+import { HypiumDriver } from "../../src/driver/hypium/index.js";
+import * as hypium from "../../src/driver/hypium/index.js";
 
 describe("hypium catalog", () => {
   it("contains all 118 public hypium methods", () => {

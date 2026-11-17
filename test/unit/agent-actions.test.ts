@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import net from "node:net";
 import jpeg from "jpeg-js";
-import { AgentClient } from "../../src/agent/client.js";
+import { AgentClient } from "../../src/driver/agent/client.js";
 
 let server: net.Server, client: AgentClient, received: any[] = [];
 let replyFn: (req: any) => string | Buffer = () => '{"result":true}\n';

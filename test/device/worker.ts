@@ -1,4 +1,4 @@
-import { Device } from "../../src/device.js";
+import { Device } from "../../src/driver/device.js";
 
 type Cmd =
   | { op: "connect"; target: string }

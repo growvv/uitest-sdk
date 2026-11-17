@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import jpeg from "jpeg-js";
-import { Screenshot } from "../../src/agent/shot.js";
+import { Screenshot } from "../../src/driver/agent/shot.js";
 
 const solidJpeg = (w: number, h: number) =>
   jpeg.encode({ data: Buffer.alloc(w * h * 4, 0x30), width: w, height: h }, 80).data;

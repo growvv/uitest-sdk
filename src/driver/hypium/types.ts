@@ -1,6 +1,6 @@
 import type { ComponentHandle } from "../agent/components.js";
 import type { On } from "../agent/selector.js";
-import type { InputTextMode, Rect, WindowFilter } from "../transport/model.js";
+import type { InputTextMode, Rect, WindowFilter } from "../../transport/model.js";
 
 export type PointLike = { x: number; y: number } | readonly [number, number];
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import jpeg from "jpeg-js";
 import { getDevice, hasCastSupport, countNodes, startMotion } from "./helpers.js";
-import type { Device } from "../../src/device.js";
+import type { Device } from "../../src/driver/device.js";
 
 let dev: Device;
 

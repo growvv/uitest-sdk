@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { On, selectorText, parseKeyName, parseOn } from "../../src/agent/selector.js";
+import { On, selectorText, parseKeyName, parseOn } from "../../src/driver/agent/selector.js";
 
 describe("On", () => {
   it("builds the device-side On predicate arguments", () => {

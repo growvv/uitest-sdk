@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileRefStore } from "../../src/refs.js";
-import { ScreenBuilder } from "../../src/agent/screen.js";
+import { ScreenBuilder } from "../../src/driver/agent/screen.js";
 import type { UiNode } from "../../src/transport/model.js";
 
 const node = (attrs: Record<string, string>, children: UiNode[] = []): UiNode => ({

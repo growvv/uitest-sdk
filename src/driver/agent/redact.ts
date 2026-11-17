@@ -1,4 +1,4 @@
-import { POLICY_WORDS, matchesWord } from "../policy.js";
+import { POLICY_WORDS, matchesWord } from "../../policy.js";
 
 /** What a password field or a fully hidden value renders as. */
 export const REDACTED = "••••••";

@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { EXIT_CODE } from "./agent/result.js";
+import { EXIT_CODE } from "./driver/agent/result.js";
 import { COMMANDS } from "./commands.js";
 import type { RunResult } from "./commands.js";
 import { DeviceStateError } from "./transport/errors.js";

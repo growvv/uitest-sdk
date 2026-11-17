@@ -1,11 +1,11 @@
 import { COMMANDS, CommandRunner } from "./commands.js";
 import type { RunResult } from "./commands.js";
-import { Device } from "./device.js";
+import { Device } from "./driver/device.js";
 import { AppManager, resolveAppList } from "./transport/apps.js";
 import { Session } from "./session.js";
 import { DeviceStateError, LeaseHeldError, UitestError } from "./transport/errors.js";
-import { EXIT_CODE } from "./agent/result.js";
-import type { DeviceOptions } from "./device.js";
+import { EXIT_CODE } from "./driver/agent/result.js";
+import type { DeviceOptions } from "./driver/device.js";
 
 export interface ParsedArgv {
   command: string | null;

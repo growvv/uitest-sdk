@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { On } from "../../src/agent/selector.js";
-import { Components, ComponentHandle, UiWindowHandle } from "../../src/agent/components.js";
+import { On } from "../../src/driver/agent/selector.js";
+import { Components, ComponentHandle, UiWindowHandle } from "../../src/driver/agent/components.js";
 import { ElementNotFoundError } from "../../src/transport/errors.js";
 
 interface Call {

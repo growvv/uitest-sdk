@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo, Socket } from "node:net";
 import type { H264Chunk } from "../transport/model.js";
 import type { CastClient, JpegFrame } from "../cast/types.js";
-import type { Screen } from "../agent/screen.js";
+import type { Screen } from "../driver/agent/screen.js";
 import { WS_OPCODE_CLOSE, WS_OPCODE_PING, WS_OPCODE_TEXT } from "../cast/ws.js";
 import { NAL_IDR, avcC, codecString, nalType, parameterSets, splitNalUnits, toAvcc } from "./avc.js";
 import { LiveState, type LiveStatus } from "./state.js";

@@ -1,11 +1,14 @@
-export { Device } from "./device.js";
-export type { DeviceOptions } from "./device.js";
+export { Device } from "./driver/device.js";
+export type { DeviceOptions } from "./driver/device.js";
+export { AgentDriver } from "./driver/agent-driver.js";
+export type { AgentDriverHost } from "./driver/agent-driver.js";
+export type { ControlDriver } from "./driver/control.js";
 
-export { AgentClient, MODULE_ID, isBusyException, exceptionText } from "./agent/client.js";
-export type { AgentClientOptions, AgentMethod } from "./agent/client.js";
-export { FrameDemux } from "./agent/demux.js";
-export type { DemuxHandlers } from "./agent/demux.js";
-export { SerialQueue } from "./agent/queue.js";
+export { AgentClient, MODULE_ID, isBusyException, exceptionText } from "./driver/agent/client.js";
+export type { AgentClientOptions, AgentMethod } from "./driver/agent/client.js";
+export { FrameDemux } from "./driver/agent/demux.js";
+export type { DemuxHandlers } from "./driver/agent/demux.js";
+export { SerialQueue } from "./driver/agent/queue.js";
 
 // Agent-facing layer: screen model, actions, results.
 export {
@@ -18,21 +21,21 @@ export {
   findTexts,
   textOf,
   lineFor,
-} from "./agent/screen.js";
-export type { Screen, ScreenElement, ScreenContext, Diff, ElementRole } from "./agent/screen.js";
-export { EXIT_CODE, statusOf, isOk, actionText } from "./agent/result.js";
-export type { ActionResult, ActionStatus } from "./agent/result.js";
-export { ScreenReader, settle } from "./agent/settle.js";
-export type { ScreenSource, SettleOptions, SettleResult } from "./agent/settle.js";
-export { Screenshot } from "./agent/shot.js";
-export type { ShotContext, MarkBox, Rgb } from "./agent/shot.js";
-export { inspectScreen, renderPanel, colorFor, ROLE_COLORS } from "./agent/inspector.js";
-export type { InspectNode, Inspection, PanelOptions } from "./agent/inspector.js";
-export { On, selectorText, parseOn, parseKeyName, KEY_NAMES } from "./agent/selector.js";
-export type { KeyName } from "./agent/selector.js";
-export { Components, ComponentHandle, UiWindowHandle, resolveSelector } from "./agent/components.js";
-export type { HypiumSource, WaitOptions } from "./agent/components.js";
-export { Gestures } from "./agent/gestures.js";
+} from "./driver/agent/screen.js";
+export type { Screen, ScreenElement, ScreenContext, Diff, ElementRole } from "./driver/agent/screen.js";
+export { EXIT_CODE, statusOf, isOk, actionText } from "./driver/agent/result.js";
+export type { ActionResult, ActionStatus } from "./driver/agent/result.js";
+export { ScreenReader, settle } from "./driver/agent/settle.js";
+export type { ScreenSource, SettleOptions, SettleResult } from "./driver/agent/settle.js";
+export { Screenshot } from "./driver/agent/shot.js";
+export type { ShotContext, MarkBox, Rgb } from "./driver/agent/shot.js";
+export { inspectScreen, renderPanel, colorFor, ROLE_COLORS } from "./driver/agent/inspector.js";
+export type { InspectNode, Inspection, PanelOptions } from "./driver/agent/inspector.js";
+export { On, selectorText, parseOn, parseKeyName, KEY_NAMES } from "./driver/agent/selector.js";
+export type { KeyName } from "./driver/agent/selector.js";
+export { Components, ComponentHandle, UiWindowHandle, resolveSelector } from "./driver/agent/components.js";
+export type { HypiumSource, WaitOptions } from "./driver/agent/components.js";
+export { Gestures } from "./driver/agent/gestures.js";
 export type {
   GestureDevice,
   GestureOptions,
@@ -40,7 +43,7 @@ export type {
   PinchOptions,
   FingerPath,
   Point,
-} from "./agent/gestures.js";
+} from "./driver/agent/gestures.js";
 
 // Session and its supporting pieces.
 export { Session } from "./session.js";
@@ -94,7 +97,7 @@ export type { HandoffOptions, HoldOptions, HoldResult } from "./hold.js";
 export { DevicePool } from "./transport/pool.js";
 
 // The complete hypium 6.1.0.210 surface: one flat driver, 118 members.
-export { HypiumDriver, Gesture, HYPIIUM_CATALOG, shellQuote, splitCommand } from "./hypium/index.js";
+export { HypiumDriver, Gesture, HYPIIUM_CATALOG, shellQuote, splitCommand } from "./driver/hypium/index.js";
 export type {
   ActionOptions,
   CaptureOptions,
@@ -127,10 +130,10 @@ export type {
   WaitComponentOptions,
   WaitIdleOptions,
   WindowCheck,
-} from "./hypium/index.js";
-export type { PinchOptions as HypiumPinchOptions } from "./hypium/types.js";
-export type { GestureOptions as HypiumGestureOptions } from "./hypium/types.js";
-export type { Target as HypiumTarget } from "./hypium/types.js";
+} from "./driver/hypium/index.js";
+export type { PinchOptions as HypiumPinchOptions } from "./driver/hypium/types.js";
+export type { GestureOptions as HypiumGestureOptions } from "./driver/hypium/types.js";
+export type { Target as HypiumTarget } from "./driver/hypium/types.js";
 
 export { HdcRunner } from "./transport/hdc.js";
 export type { HdcOptions } from "./transport/hdc.js";
@@ -141,8 +144,8 @@ export type { CastSettings } from "./config.js";
 export { FpsMeter } from "./fps.js";
 export type { FpsStats, FpsMeterOptions } from "./fps.js";
 
-export { CliRunner } from "./cli.js";
-export type { DumpLayoutOptions } from "./cli.js";
+export { CliRunner } from "./driver/cli.js";
+export type { DumpLayoutOptions } from "./driver/cli.js";
 
 export { H264CastClient, loadScrcpyService } from "./cast/client.js";
 export { WsCastClient } from "./cast/ws-client.js";

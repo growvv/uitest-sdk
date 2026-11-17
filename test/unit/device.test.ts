@@ -3,7 +3,7 @@ import net from "node:net";
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentClient } from "../../src/agent/client.js";
+import { AgentClient } from "../../src/driver/agent/client.js";
 import { AgentConnectionError, DeviceNotConnectedError, ExtensionMissingError } from "../../src/transport/errors.js";
 
 // ------------------------------------------------------------------ fixtures
@@ -220,7 +220,7 @@ vi.mock("../../src/transport/hdc.js", () => {
   return { HdcRunner: FakeHdc };
 });
 
-const { Device, defaultExtensionDir } = await import("../../src/device.js");
+const { Device, defaultExtensionDir } = await import("../../src/driver/device.js");
 const ROOT = join(import.meta.dirname, "../..");
 
 beforeEach(() => {

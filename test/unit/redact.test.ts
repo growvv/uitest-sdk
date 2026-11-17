@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { REDACTED, isCredentialText, isSecretContext, redactLabel } from "../../src/agent/redact.js";
+import { REDACTED, isCredentialText, isSecretContext, redactLabel } from "../../src/driver/agent/redact.js";
 
 describe("redactLabel", () => {
   it("masks the digits of a one-time code and keeps the sentence", () => {

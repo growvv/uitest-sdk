@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SerialQueue } from "../../src/agent/queue.js";
+import { SerialQueue } from "../../src/driver/agent/queue.js";
 
 describe("SerialQueue", () => {
   it("runs tasks one at a time in FIFO order", async () => {

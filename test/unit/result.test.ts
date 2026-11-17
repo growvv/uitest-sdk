@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { statusOf, isOk, actionText, type ActionResult } from "../../src/agent/result.js";
+import { statusOf, isOk, actionText, type ActionResult } from "../../src/driver/agent/result.js";
 
 const settled: ActionResult = {
   status: "settled",

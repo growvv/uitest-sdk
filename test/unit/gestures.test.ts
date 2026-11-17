@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Gestures } from "../../src/agent/gestures.js";
+import { Gestures } from "../../src/driver/agent/gestures.js";
 
 interface Call {
   api: string;
