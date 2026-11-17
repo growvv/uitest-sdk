@@ -434,29 +434,21 @@ npm `uitest-sdk@0.8.0`、tag `v0.8.0`、GitHub Release 与官网同一时间上�
 所属进程的租约）、`triggerKey` 按电源键锁屏导致后续截图全是通知栏、以及第一次把它归因成
 「没清通知栏」的错误诊断。细节见 [13](13-stage-log.md)。
 
+### 0.9.0（代码已合入 master，**未发版**，2026-11-17）
+
+`package.json` 已是 `0.9.0`，功能、验收报告与官网内容都进了 `master`；但 **npm publish、
+`v0.9.0` tag、GitHub Release 都还没做**（npm 上 `latest` 仍是 0.8.0）。剩下的是发版动作，
+不是开发动作：
+
+1. 按下面第 2 步跑全量验收（`docs/acceptance/report.md` 目前还是 0.8.0 那次 2026-11-16 的）。
+2. `git tag v0.9.0 && git push origin master v0.9.0`（推送会把官网一起发出去）。
+3. `npm publish`，再 `gh release create v0.9.0`。
+
 ### 下一次发版的步骤
 
 1. `npm version <x.y.z>`，并把 `docs/13-stage-log.md` 里所有 `（未发版）` 改成 `（x.y.z）`；
    顺带检查本文件里有没有同样过期的「未发版」。
 2. 在真机上跑一遍验收，两个脚本都要过：
-   - `npm run acceptance:handoff` —— 接管闭环（handoff → `lease_held` → `resume` → 续跑）。
-   - `npx tsx scripts/acceptance.ts --targets <id>` —— 全部能力表，重写 `docs/acceptance/`。
-     它会覆盖 51 个已入库的证据文件（截图、日志、`report.md`），这是有意的：报告是生成物，
-     不是手写的，版本之间必须能复现。
-
-   **跑之前先把设备收拾干净**，截图是会公开发布的：
-   - 解锁、屏幕常亮（否则 `streamScreen` 收不到帧，卡在 `cropToWindow` 之后）。
-   - 打开一个中性的公开页面（设置首页、知乎热榜这类），别停在聊天界面或通知栏。
-   - 0.8.0 起脚本自己会挡一道：每个能力截图前检查屏幕是否锁着，能解锁就解锁，解不开
-     （有 PIN）就中止。根因是 `triggerKey` 那一步按电源键会锁屏，之后所有截图都拍在锁屏上
-     ——2026-11-16 两次验收都栽在这里，第二次截到的是账户变动与个人消息，整个目录回滚。
-   - 但页面内容脚本管不了：跑完把截图逐张看过再提交，这一步不能省。
-
-   跑完 `git diff --stat docs/acceptance/`：`scripts/` 下的 `.ts` 只应有行尾差异
-   （`--ignore-cr-at-eol` 后为空），`report.md` 的差异应只有耗时与节点数。
-3. `npm publish`（用 bypass 2FA 的 granular token，npmrc 放仓库外，用完删）。
-   注意 PUT 会返回 **202 Accepted** 而不是 201：那是 staged publishing，元数据先出现、
-   tarball 晚几十秒才可下载，`npm view` 一开始查不到属正常。
    - `npm run acceptance:handoff` —— 接管闭环（handoff → `lease_held` → `resume` → 续跑）。
    - `npx tsx scripts/acceptance.ts --targets <id>` —— 全部能力表，重写 `docs/acceptance/`。
      它会覆盖 51 个已入库的证据文件（截图、日志、`report.md`），这是有意的：报告是生成物，
