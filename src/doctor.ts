@@ -1,3 +1,4 @@
+import { tagOf } from "./session.js";
 import type { Session, SessionDevice } from "./session.js";
 
 export interface Capabilities {
@@ -55,9 +56,18 @@ const PROBES: Record<keyof Capabilities, Probe> = {
  * works, and the caller decides what to do without it. `waitForComponent` is
  * probed with a 1 ms timeout so a device that does have it returns at once.
  */
-export async function doctor(device: SessionDevice, session?: Session): Promise<DoctorReport> {
+export async function doctor(
+  device: SessionDevice,
+  session?: Session,
+  /** The target the caller chose; when set, the warning below is moot. */
+  chosen?: string,
+): Promise<DoctorReport> {
   const problems: string[] = [];
-  const targets = await listTargets(device);
+  const attached = await listTargets(device);
+  // Once a target is chosen, that is the device being checked, and the fact
+  // that others are attached is not something to warn about: the advice
+  // ("pass a device id") has already been taken.
+  const targets = chosen ? [chosen] : attached;
 
   let display: { width: number; height: number } | null = null;
   try {
@@ -76,7 +86,6 @@ export async function doctor(device: SessionDevice, session?: Session): Promise<
       `multiple targets attached (${targets.map(tag).join(", ")}): pass a device id so the SDK does not pick one for you`,
     );
   }
-
   const info = session
     ? { task: session.task, deviceTag: session.tag, ...session.policy.describe() }
     : null;
@@ -109,11 +118,18 @@ async function listTargets(device: SessionDevice): Promise<string[]> {
   return lister.listTargets().catch(() => []);
 }
 
-/** A stable short id for a device, so serials never appear in output. */
+/**
+ * A stable short id for a device, so serials never appear in output.
+ *
+ * This is `tagOf` from the session, not a second hash. The person who reads
+ * `targets:` here has to find the same device again in `status`, in a lease
+ * name and in a trace file, and all three use that one. A separate hash made
+ * the same phone print as `dev-bff94761` in one place and `7544d645` in
+ * another — the `dev-` prefix was the only thing that differed, which made the
+ * mismatch look intentional.
+ */
 export function deviceTagOf(target: string): string {
-  let h = 0;
-  for (let i = 0; i < target.length; i++) h = (h * 31 + target.charCodeAt(i)) >>> 0;
-  return `dev-${h.toString(16).padStart(8, "0").slice(0, 8)}`;
+  return tagOf(target);
 }
 
 const tag = deviceTagOf;

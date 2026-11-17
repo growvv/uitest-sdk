@@ -1,6 +1,7 @@
 import { COMMANDS, CommandRunner } from "./commands.js";
 import type { RunResult } from "./commands.js";
 import { Device } from "./device.js";
+import { AppManager, resolveAppList } from "./apps.js";
 import { Session } from "./session.js";
 import { DeviceStateError, LeaseHeldError, UitestError } from "./errors.js";
 import { EXIT_CODE } from "./agent/result.js";
@@ -200,6 +201,15 @@ export async function runCommand(
     deviceId: parsed.options.device ?? deviceOptions.deviceId,
   });
   const stateDir = parsed.options.stateDir ?? ".uitest-phone";
+  // The allow-list is written by a person and can name apps the way `launch`
+  // does — "settings", not only "com.huawei.hmos.settings". Resolve it before
+  // the session opens: a list that matches nothing would otherwise block every
+  // app while looking correct.
+  let appList: string[] | undefined;
+  if (parsed.options.apps) {
+    const names = parsed.options.apps.split(",").map((s) => s.trim()).filter(Boolean);
+    appList = device.hdc ? await resolveAppList(new AppManager(device.hdc), names) : names;
+  }
   let session: Session;
   try {
     session = await Session.open(device, {
@@ -208,7 +218,7 @@ export async function runCommand(
       policy: {
         readOnly: parsed.options.readOnly,
         confirm: parsed.options.confirm,
-        apps: parsed.options.apps?.split(",").map((s) => s.trim()).filter(Boolean),
+        apps: appList,
       },
       settleMs: parsed.options.settleMs,
       traceShots: parsed.options.traceShots,

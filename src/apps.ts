@@ -233,14 +233,24 @@ export class AppManager {
    */
   async current(): Promise<AppInfo | null> {
     const out = await this.hdc.shell("aa dump -l");
+    // More than one mission can say FOREGROUND: the device leaves the state
+    // on a mission it pushed to the background and reports the same word for
+    // both. The one on top is the one started last, so take the greatest
+    // `start time` rather than the first block in the dump — taking the first
+    // reported WPS while Zhihu was on screen.
+    let best: { at: number; info: AppInfo } | null = null;
     for (const block of missionBlocks(out)) {
       const state = /state #(\w+)/.exec(block)?.[1];
       const bundle = /bundle name \[([^\]]+)\]/.exec(block)?.[1];
       if (!bundle || state !== "FOREGROUND") continue;
       const ability = /main name \[([^\]]+)\]/.exec(block)?.[1];
-      return ability ? { bundle, ability } : { bundle };
+      // A dump without a start time still beats "none found": fall back to the
+      // first foreground mission, which is what older builds did.
+      const at = Number(/start time \[(\d+)\]/.exec(block)?.[1] ?? 0);
+      const info = ability ? { bundle, ability } : { bundle };
+      if (!best || at > best.at) best = { at, info };
     }
-    return null;
+    return best?.info ?? null;
   }
 
   async stop(bundle: string): Promise<void> {
@@ -267,3 +277,22 @@ export class AppManager {
 }
 
 export type { HdcRunner };
+
+/**
+ * Turns an allow-list of names into the bundle ids it means.
+ *
+ * `--apps` used to take bundle ids only, while `launch` takes a short name or a
+ * bundle id. On a real device `--apps calculator` therefore matched nothing and
+ * blocked the calculator along with everything else: the list was correct and
+ * the app was still refused. Resolving through the same path `launch` uses
+ * makes the two agree, and an entry that resolves to nothing is an error rather
+ * than a silently narrower (or wider) list.
+ */
+export async function resolveAppList(apps: AppManager, names: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const name of names) {
+    const bundle = await apps.resolveBundle(name);
+    if (!out.includes(bundle)) out.push(bundle);
+  }
+  return out;
+}

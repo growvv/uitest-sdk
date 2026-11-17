@@ -21,6 +21,7 @@
       <a href="#video">视频</a>
       <a href="api.html">API</a>
       <a href="docs.html">文档</a>
+      <a href="acceptance.html">验收</a>
       <a href="changelog.html">更新</a>
       <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
     </div>
@@ -737,6 +738,7 @@ npx uitest-sdk install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills �
         <li><strong><code>stopCaptureUiAction</code> 会关闭会话。</strong>同一连接上的后续调用会失败；合成触摸不会被回传。</li>
         <li><strong>x86_64 没有 casting 构建。</strong>模拟器上只有 MJPEG，H.264 与录制需要 arm64 设备。</li>
       </ul>
+      <p class="section-lede">每一条都在两台真机上复现过，连同 16 项能力、10 个接管场景和 7 种握手来源校验，逐条留了命令、输出和截图：<a href="acceptance.html">验收报告</a>。</p>
     </section>
   </main>
 

@@ -11,6 +11,7 @@ import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Device } from "../src/device.js";
+import { AppManager } from "../src/apps.js";
 import { tagOf } from "../src/session.js";
 import type { CastClient } from "../src/cast/types.js";
 import { ROOT, Evidence, ensureDirs, type Result } from "../test/device/acceptance.helpers.js";
@@ -29,8 +30,18 @@ function parseTargets(): string[] {
   return [];
 }
 
-function envName(target: string): string {
-  return target.startsWith("127.0.0.1") ? "emulator" : "device";
+/**
+ * The column key for one target.
+ *
+ * Every physical device used to be `"device"`, so two phones attached at once
+ * collided: `renderReport` keys its cells by `capability|env`, and the second
+ * target's results silently replaced the first's. The tag is unique per serial
+ * and is already what the report shows, so it doubles as the key. Loopback
+ * keeps the `emulator` name — there is only ever one of those per port, and the
+ * older single-target reports stay readable.
+ */
+export function envName(target: string): string {
+  return target.startsWith("127.0.0.1") ? "emulator" : tagOf(target);
 }
 
 /** Writes an independent, runnable snippet for one capability. */
@@ -116,8 +127,26 @@ const CAPABILITIES: Capability[] = [
       // Pressing the power key on an awake phone locks it. Without putting the
       // screen back, this screenshot — and every one after it — is the lock
       // screen, with the person's notifications on it.
+      //
+      // Restoring the screen is not enough on a tablet: there, waking it up
+      // lands on the launcher, not on the app that was in front. That app is
+      // recorded before the key is pressed and brought back afterwards, so the
+      // capabilities after this one still measure the app rather than a
+      // desktop that does not scroll.
+      const apps = new AppManager(dev.hdc);
+      const before = await apps.current().catch(() => null);
       await pressPowerKey(dev.hypium);
-      await ev.log("triggerKey 26 (power) sent, screen restored");
+      if (before) {
+        await apps.launch(before.bundle, before.ability ? { ability: before.ability } : {})
+          .catch(() => undefined);
+        // `aa start` returns before the window is mapped; a capture taken
+        // immediately is the launcher, which the stream probe would then
+        // measure as a still image.
+        await new Promise((r) => setTimeout(r, 1500));
+        await ev.log(`triggerKey 26 (power) sent, screen restored, relaunched ${before.bundle}`);
+      } else {
+        await ev.log("triggerKey 26 (power) sent, screen restored");
+      }
       await ev.screenshot(await dev.agent.captureScreen());
       return "ok";
     },
@@ -160,18 +189,22 @@ const CAPABILITIES: Capability[] = [
     name: "streamScreen",
     async run(dev, ev) {
       const s = await dev.agent.getDisplaySize();
-      let alive = true;
-      const motion = (async () => {
-        while (alive) {
-          await dev.agent
-            .swipe(s.width / 2, s.height * 0.7, s.width / 2, s.height * 0.3, { durationMs: 200 })
-            .catch(() => undefined);
-        }
-      })();
       const it = dev.agent.streamScreen({ scale: 2 })[Symbol.asyncIterator]();
       const t0 = performance.now();
       let frames = 0;
       let last: Buffer | undefined;
+      let alive = true;
+      // Taps on the keypad, not swipes: the staged surface is the calculator,
+      // where a swipe moves nothing and the display only changes when a key is
+      // pressed. Each tap redraws the result line, which is the change the
+      // stream reports.
+      const motion = (async () => {
+        let i = 0;
+        while (alive) {
+          const x = Math.round(s.width * (0.15 + 0.22 * (i++ % 4)));
+          await dev.agent.click(x, Math.round(s.height * 0.6)).catch(() => undefined);
+        }
+      })();
       try {
         for (let i = 0; i < 10; i++) {
           const f = await it.next();
@@ -185,8 +218,19 @@ const CAPABILITIES: Capability[] = [
       }
       const ms = performance.now() - t0;
       const fps = (frames / ms) * 1000;
-      await ev.log(`streamScreen ${frames} frames in ${Math.round(ms)} ms = ${fps.toFixed(1)} fps`);
       if (last) await ev.screenshot(last);
+      await ev.log(`streamScreen ${frames} frames in ${Math.round(ms)} ms = ${fps.toFixed(1)} fps`);
+      // The screen has to be somewhere that moves. A launcher that does not
+      // change yields a handful of frames over ten seconds, and reporting that
+      // as a pass ("0.2 fps") describes a device that streams perfectly as one
+      // that cannot. Below this, the run stops with a message about the app,
+      // not the transport.
+      if (fps < 3) {
+        throw new Error(
+          `streamScreen produced ${fps.toFixed(1)} fps: the screen was not changing, ` +
+            "so this measured the app rather than the stream — open a scrolling page and run again",
+        );
+      }
       return `${fps.toFixed(1)} fps`;
     },
   },
@@ -215,11 +259,14 @@ const CAPABILITIES: Capability[] = [
       const cast = await dev.createCast({ mode: "record", frameRate: 15, outputPath: out });
       const s = await dev.agent.getDisplaySize();
       let alive = true;
+      // Keypad taps again: the staged surface is the calculator, and the
+      // recording needs the screen to change so the encoder has something to
+      // put in the file.
       const motion = (async () => {
+        let i = 0;
         while (alive) {
-          await dev.agent
-            .swipe(s.width / 2, s.height * 0.7, s.width / 2, s.height * 0.3, { durationMs: 200 })
-            .catch(() => undefined);
+          const x = Math.round(s.width * (0.15 + 0.22 * (i++ % 4)));
+          await dev.agent.click(x, Math.round(s.height * 0.6)).catch(() => undefined);
         }
       })();
       await new Promise((r) => setTimeout(r, 3000));
@@ -334,14 +381,28 @@ export interface ShadeLike {
  * notices, which is exactly what the lock-screen guard exists to keep out of a
  * published repository. The shade is read from the window manager, not from a
  * picture, and a shade that will not close stops the run.
+ *
+ * The re-read is not immediate: the window manager keeps reporting the shade
+ * for a beat after BACK is pressed. Measured on a phone, `closeShade()`
+ * returned in 208 ms and the very next read still said open, which failed a
+ * run whose shade had in fact closed. So the guard waits for the window to
+ * settle, and still stops the run if it never does.
  */
-export async function assertShadeClosed(display: ShadeLike): Promise<void> {
+export async function assertShadeClosed(
+  display: ShadeLike,
+  wait: { timeoutMs?: number; pollMs?: number } = {},
+): Promise<void> {
   if (!(await display.isShadeOpen())) return;
   await display.closeShade();
-  if (await display.isShadeOpen()) {
-    throw new Error(
-      "the notification shade is still open: close it and run again, or the next capture publishes its contents",
-    );
+  const deadline = Date.now() + (wait.timeoutMs ?? 1500);
+  const pollMs = wait.pollMs ?? 100;
+  while (await display.isShadeOpen()) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        "the notification shade is still open: close it and run again, or the next capture publishes its contents",
+      );
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
   }
 }
 
@@ -419,11 +480,57 @@ async function probeEnv(dev: Device, target: string): Promise<EnvInfo> {
   };
 }
 
+/**
+ * The app the run stages for its screenshots.
+ *
+ * Every capture here is committed and published, and the phone is whatever the
+ * person left open: a feed, a chat, a profile page. A real run photographed a
+ * Zhihu feed with a named author and an article about their workplace on it.
+ * The system Settings root was tried next and carries the signed-in account
+ * and the device's own name; "About phone" carries the baseband and the build.
+ * The calculator is a keypad and a result line — nothing about the person —
+ * and a key press redraws the result, which the stream probe needs.
+ */
+export const NEUTRAL_APP = "calculator";
+
+/** The parts of `AppManager` this guard needs, so a test can stand in for it. */
+export interface StageLike {
+  current(): Promise<{ bundle: string; ability?: string } | null>;
+  launch(app: string, opts?: { ability?: string }): Promise<unknown>;
+}
+
+/**
+ * Puts a neutral app in front and remembers what to put back.
+ *
+ * The capabilities are about the SDK, not about what was on screen, so the
+ * screen is staged before the first capture and the person's app is restored
+ * in the run's `finally` — a failed run must not leave their phone on the
+ * calculator either.
+ */
+export async function stageNeutralSurface(
+  apps: StageLike,
+): Promise<{ restore(): Promise<void> }> {
+  const before = await apps.current().catch(() => null);
+  await apps.launch(NEUTRAL_APP).catch(() => undefined);
+  // `aa start` returns before the window is mapped; a capture taken
+  // immediately is whatever was there before.
+  await new Promise((r) => setTimeout(r, 1500));
+  return {
+    async restore() {
+      if (!before) return;
+      await apps
+        .launch(before.bundle, before.ability ? { ability: before.ability } : {})
+        .catch(() => undefined);
+    },
+  };
+}
+
 async function runTarget(target: string): Promise<{ results: Result[]; info: EnvInfo }> {
   const results: Result[] = [];
   const dev = await Device.connect({ deviceId: target, ownDaemon: true });
   const info = await probeEnv(dev, target);
   const env = info.env;
+  const staged = await stageNeutralSurface(new AppManager(dev.hdc));
   try {
     for (const cap of CAPABILITIES) {
       const ev = new Evidence(cap.name, env);
@@ -468,6 +575,9 @@ async function runTarget(target: string): Promise<{ results: Result[]; info: Env
       }
     }
   } finally {
+    // Put back what the person had open. A failed run must not leave their
+    // phone on the calculator.
+    await staged.restore();
     await dev.dispose();
   }
   return { results, info };

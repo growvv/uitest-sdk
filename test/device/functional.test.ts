@@ -66,15 +66,20 @@ describe("screenshot", () => {
 
   it("ignores the scale option and always returns the fixed capture size", async () => {
     // Measured on 7.0.0.1 / agent 1.1.10: `scale` in startCaptureScreen's args
-    // has no effect — 1, 2 and 5 all yield 608x1344. Documented as a limitation
-    // rather than papered over, so this test pins the real behaviour.
+    // has no effect. The fixed size is half the display, so it differs per
+    // device (1216x2688 → 608x1344 on a phone, 1600x2560 → 800x1280 on a
+    // tablet); pinning one device's numbers made this test fail on the other.
+    // What must hold everywhere: every scale yields the same frame, and that
+    // frame is the display halved — not the display, and not display × scale.
+    const display = await dev.agent.getDisplaySize();
+    const expected = `${Math.floor(display.width / 2)}x${Math.floor(display.height / 2)}`;
     const dims = new Set<string>();
     for (const scale of [1, 2, 5] as const) {
       const frame = await dev.agent.captureScreen({ scale });
       const d = jpeg.decode(frame);
       dims.add(`${d.width}x${d.height}`);
     }
-    expect([...dims]).toEqual(["608x1344"]);
+    expect([...dims]).toEqual([expected]);
   });
 });
 

@@ -1,7 +1,16 @@
 import { mkdir, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const ROOT = "docs/acceptance";
+/**
+ * Where evidence goes.
+ *
+ * `UITEST_ACCEPTANCE_DIR` overrides it so a run can keep its pictures out of
+ * the repository — the acceptance screenshots are committed and published, and
+ * a phone left on a profile page or with the shade open puts a real person's
+ * details into the repository. The default stays `docs/acceptance` because the
+ * report links to files by that path.
+ */
+export const ROOT = process.env.UITEST_ACCEPTANCE_DIR ?? "docs/acceptance";
 
 export async function ensureDirs(): Promise<void> {
   for (const d of ["", "screenshots", "logs", "scripts"]) {

@@ -132,9 +132,17 @@ export function readHold(opts: HoldOptions) {
  * `hold` runs without a session (a session would take the very lease it is
  * trying to take), so it resolves the device id from hdc and hashes it the same
  * way `Session` does. Passing `--device` skips the lookup.
+ *
+ * `HDC_TARGET` is honoured too, because `Device` and `HdcRunner` already read
+ * it: a caller that selected a device that way expects `hold`, `resume` and
+ * `status` to mean the same device. Without it, `resume` with two phones
+ * attached refused with "multiple targets attached" and could not release the
+ * hold it had just been told about.
  */
 export async function resolveTag(deviceId?: string, hdc?: HdcRunner): Promise<string> {
   if (deviceId) return tagOf(deviceId);
+  const fromEnv = process.env.HDC_TARGET;
+  if (fromEnv) return tagOf(fromEnv);
   const runner = hdc ?? new HdcRunner({});
   const targets = await runner.listTargets();
   const real = targets.filter((t) => t && !t.startsWith("["));
@@ -143,7 +151,7 @@ export async function resolveTag(deviceId?: string, hdc?: HdcRunner): Promise<st
   }
   if (real.length > 1) {
     throw new Error(
-      `multiple targets attached (${real.map(tagOf).join(", ")}): pass --device <id>`,
+      `multiple targets attached (${real.map(tagOf).join(", ")}): pass --device <id> or set HDC_TARGET`,
     );
   }
   return tagOf(real[0]);

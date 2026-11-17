@@ -352,6 +352,7 @@ const page = `<!doctype html>
       <a href="index.html#bench">实测</a>
       <a href="api.html">API</a>
       <a href="docs.html">文档</a>
+      <a href="acceptance.html">验收</a>
       <a href="changelog.html">更新</a>
       <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
     </div>
@@ -577,6 +578,7 @@ ${sections}
       <div class="footer-links">
         <a href="index.html">首页</a>
         <a href="docs.html">文档</a>
+        <a href="acceptance.html">验收报告</a>
         <a href="changelog.html">更新日志</a>
         <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
       </div>

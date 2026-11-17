@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Lease, readLease } from "../../src/lease.js";
-import { holdDevice, resumeDevice, HOLD_TASK } from "../../src/hold.js";
+import { holdDevice, resumeDevice, HOLD_TASK, resolveTag } from "../../src/hold.js";
+import { tagOf } from "../../src/session.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-hold-"));
@@ -110,5 +111,57 @@ describe("resumeDevice", () => {
 describe("HOLD_TASK", () => {
   it("names the person in the message an agent sees", () => {
     expect(HOLD_TASK).toBe("held by a person");
+  });
+});
+
+/**
+ * Which device `hold` / `resume` / `status` mean when nothing was passed.
+ *
+ * Every other entry point reads `HDC_TARGET` (Device, HdcRunner), so a caller
+ * that selected a device that way expects these to agree. They did not: with
+ * two phones attached, `resume` refused with "multiple targets attached" and
+ * could not release the hold it had just been told about — found while running
+ * the handoff acceptance with both devices plugged in.
+ */
+describe("resolveTag", () => {
+  function fakeHdc(ids: string[]) {
+    return { listTargets: async () => ids } as unknown as Parameters<typeof resolveTag>[1];
+  }
+
+  it("uses the device id it was given", async () => {
+    expect(await resolveTag("SERIAL-A", fakeHdc(["SERIAL-A", "SERIAL-B"]))).toBe(tagOf("SERIAL-A"));
+  });
+
+  it("falls back to HDC_TARGET before counting targets", async () => {
+    const saved = process.env.HDC_TARGET;
+    process.env.HDC_TARGET = "SERIAL-B";
+    try {
+      expect(await resolveTag(undefined, fakeHdc(["SERIAL-A", "SERIAL-B"]))).toBe(tagOf("SERIAL-B"));
+    } finally {
+      if (saved === undefined) delete process.env.HDC_TARGET;
+      else process.env.HDC_TARGET = saved;
+    }
+  });
+
+  it("takes the only attached target", async () => {
+    expect(await resolveTag(undefined, fakeHdc(["SERIAL-A"]))).toBe(tagOf("SERIAL-A"));
+  });
+
+  it("refuses to guess between two targets, and names them by tag", async () => {
+    const saved = process.env.HDC_TARGET;
+    delete process.env.HDC_TARGET;
+    try {
+      // `catch` on a Promise<string> widens to string | Error; the promise
+      // only rejects here, so the value is always the error.
+      const err = (await resolveTag(undefined, fakeHdc(["SERIAL-A", "SERIAL-B"])).catch(
+        (e: unknown) => e,
+      )) as Error;
+      expect(err.message).toMatch(/multiple targets/i);
+      // The message must not print serials: it reaches a terminal and a log.
+      expect(err.message).not.toContain("SERIAL-A");
+      expect(err.message).toContain(tagOf("SERIAL-A"));
+    } finally {
+      if (saved !== undefined) process.env.HDC_TARGET = saved;
+    }
   });
 });

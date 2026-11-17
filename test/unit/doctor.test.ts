@@ -89,6 +89,42 @@ describe("doctor", () => {
     expect(report.problems.join("\n")).toMatch(/multiple targets/);
   });
 
+  it("does not warn about several targets once one was chosen", async () => {
+    // The warning exists so a person knows the SDK picked for them. Telling
+    // someone who just passed `--device` to "pass a device id" is advice they
+    // already took, and it hides the warnings that do need acting on.
+    const report = await doctor(device({ targets: ["A", "B"] }), undefined, "A");
+    expect(report.problems.join("\n")).not.toMatch(/multiple targets/);
+  });
+
+  it("names the chosen target when one was given", async () => {
+    const report = await doctor(device({ targets: ["A", "B"] }), undefined, "B");
+    expect(report.targets).toEqual(["B"]);
+  });
+
+  it("names a target with the same tag the session and the lease use", async () => {
+    // `doctor` prints the attached targets, and the person then has to find
+    // one of them again in `status`, a trace file or a lease name. Two hash
+    // functions for the same serial make that lookup impossible: with two
+    // phones attached, `doctor` said dev-bff94761 and `status` said 7544d645
+    // for the same device.
+    const { renderDoctor } = await import("../../src/doctor.js");
+    const { tagOf } = await import("../../src/session.js");
+    const { deviceTag } = await import("../../src/trace.js");
+    const serial = "SYNTH0DEVICE0001";
+    const text = renderDoctor(await doctor(device({ targets: [serial] })));
+    const shown = /^targets: (\S+)$/m.exec(text)?.[1];
+    expect(shown).toBe(tagOf(serial));
+    expect(shown).toBe(deviceTag(serial));
+  });
+
+  it("does not leak the serial into the doctor report", async () => {
+    const { renderDoctor } = await import("../../src/doctor.js");
+    const serial = "SYNTH0DEVICE0001";
+    const text = renderDoctor(await doctor(device({ targets: [serial] })));
+    expect(text).not.toContain(serial);
+  });
+
   it("describes a session, including policy and lease", async () => {
     const fs = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");

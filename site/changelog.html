@@ -18,6 +18,7 @@
       <a href="index.html#compare">对比</a>
       <a href="api.html">API</a>
       <a href="docs.html">文档</a>
+      <a href="acceptance.html">验收</a>
       <a href="changelog.html">更新</a>
       <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
     </div>
@@ -25,6 +26,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-9-4">0.9.4 · 两台真机验收修出来的东西</a>
       <a href="#v0-9-3">0.9.3 · 投屏页只接受自己的来源</a>
       <a href="#v0-9-2">0.9.2 · 对外文档与二进制声明</a>
       <a href="#v0-9-1">0.9.1 · 接管输入的八处修补</a>
@@ -45,6 +47,41 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-9-4">
+        <div class="release-head">
+          <h2>0.9.4</h2>
+          <span class="release-date">2026-11-18</span>
+          <span class="release-tag">两台真机验收修出来的东西</span>
+        </div>
+        <p>没有新功能。这一版是<a href="acceptance.html">完整验收</a>的产物：在两台真机上从环境跑到发布产物的过程中，有 7 个问题只有真的接上设备、按顺序走完才会暴露。</p>
+
+        <h3>白名单终于管住了「换应用」</h3>
+        <ul>
+          <li><code>--apps</code> 此前只在 <code>tap</code> / <code>type</code> 这类动作上生效。<code>launch --app settings</code> 直接问 hdc 就启动了——白名单最该管住的就是换到别的应用，恰恰漏了。现在越界返回 <code>blocked_by_policy · rule: scope</code>。</li>
+          <li>名单此前只认完整 bundle id，<code>--apps calculator</code> 于是把计算器自己也拦了。现在与会话开始前的 <code>launch</code> 用同一套解析，写错了直接报错，而不是悄悄变成空名单。</li>
+        </ul>
+
+        <h3>两台设备同时插着时才暴露的两个</h3>
+        <ul>
+          <li><code>resume</code> 不认 <code>HDC_TARGET</code>：刚被 <code>hold</code> 占住的设备交还不回去，报「多台设备」。<code>Device</code> 和 <code>HdcRunner</code> 本来就认这个变量。</li>
+          <li><code>doctor</code> 自己算了一套哈希，同一台设备在报告里叫 <code>dev-bff94761</code>、在会话里叫 <code>7544d645</code>。现在共用 <code>tagOf</code>。</li>
+        </ul>
+
+        <h3>三个读数问题</h3>
+        <ul>
+          <li><code>apps --current</code> 取启动时间最新的前台应用。设备会把两个 mission 都标成 <code>FOREGROUND</code>，取第一个会报出被压到后台的那个。</li>
+          <li>验收报告的两列不再互相覆盖：两台一起跑时，第二台的 16 行结果把第一台的盖掉了。</li>
+          <li>通知栏守卫不再误报：<code>closeShade()</code> 返回后窗口还在，一次已经成功的运行被判失败。改成有上限的轮询等待。</li>
+        </ul>
+
+        <h3>验收本身也变成可以复跑的</h3>
+        <ul>
+          <li>新增 <code>scripts/acceptance-security.ts</code>：不测函数，测线上那台服务器——真的建 TCP 连接、真的发 WebSocket 握手，核对 7 种来源的响应码。</li>
+          <li>验收脚本先把设备停在计算器上再截图，结束后恢复原应用；证据目录可以用 <code>UITEST_ACCEPTANCE_DIR</code> 指到仓库外，人看过再决定要不要提交。</li>
+          <li><a href="acceptance.html">验收报告</a>本身就是教程：每步的命令、原始输出、耗时和 34 张截图。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-9-3">
         <div class="release-head">
@@ -80,6 +117,13 @@
         <ul>
           <li>新增根目录 <code>SECURITY.md</code>：漏洞怎么报、<code>live</code> 暴露了什么、Origin 校验挡住什么、哪些不在防护范围内（<code>--privacy off</code>、屏幕上本来就有的东西、<code>policy</code> 只认词汇）。随包发布。</li>
           <li><code>startLive</code> 此前没有测试：补上 10 条，覆盖取租约的顺序、会话开不了/端口被占时释放设备、<code>0.0.0.0</code> 与 <code>::</code> 打印回环地址、<code>--no-layout</code> 仍取显示尺寸。</li>
+        </ul>
+
+        <h3>两台真机的完整验收</h3>
+        <ul>
+          <li>这一版在两台真机上（一台平板、一台手机）从环境到发布产物走完了 9 个步骤，命令、原始输出和 34 张截图都留档：<a href="acceptance.html">验收报告</a>。</li>
+          <li>验收过程本身发现了 7 个问题，其中 3 个是产品缺陷：<code>--apps</code> 白名单没有覆盖 <code>launch</code>、白名单只认完整包名、<code>resume</code> 不认 <code>HDC_TARGET</code>。每一个都先补了会失败的测试，修在工作区——<strong>不在 0.9.3 这个包里</strong>，随下一个补丁版发布。</li>
+          <li>那一页同时是教程：照着做就能复现全部结论，含每步耗时和三个踩过的坑。</li>
         </ul>
       </section>
 

@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>验收报告 · uitest-sdk</title>
+  <meta name="description" content="uitest-sdk 0.9.4 的完整验收记录：两台真机、9 个步骤、每一步的命令与原始输出、32 张能力截图、7 种握手的来源校验、10 项接管场景。既是我们能力的证明，也是一份照着做就能复现的教程。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
+      <a href="index.html#control">接管</a>
+      <a href="index.html#showcase">实拍</a>
+      <a href="index.html#bench">实测</a>
+      <a href="index.html#compare">对比</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">文档</a>
+      <a href="acceptance.html" aria-current="page">验收</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="目录">
+      <a href="#summary">一页结论</a>
+      <a href="#devices">两台设备</a>
+      <a href="#step0">0 · 环境</a>
+      <a href="#step1">1 · 无设备自动化</a>
+      <a href="#step2">2 · 装包验证</a>
+      <a href="#step3">3 · 连接与诊断</a>
+      <a href="#step4">4 · 能力矩阵</a>
+      <a href="#step5">5 · 接管页</a>
+      <a href="#step6">6 · 安全</a>
+      <a href="#step7">7 · MCP 与 Skill</a>
+      <a href="#step8">8 · 治理与策略</a>
+      <a href="#step9">9 · 发布产物</a>
+      <a href="#found">验收中发现并修掉的问题</a>
+      <a href="#rerun">自己复现</a>
+    </aside>
+
+    <article class="doc-body">
+      <h1>验收报告</h1>
+      <p class="doc-meta">uitest-sdk <strong>0.9.4</strong> · 2026-11-18 · 两台真机 · 9 个步骤 · 全部实拍</p>
+
+      <p>这一页是<strong>一次完整验收的记录</strong>，也是一份可以照着走的教程。每一节都给出命令、原始输出和截图，两台机器各跑一遍：一台 10 英寸平板，一台手机。所有数字都是现场跑出来的，没有估算。</p>
+
+      <p class="note"><strong>先说清楚版本。</strong>验收从 <code>0.9.3</code>（提交 <code>6ea19a2</code>）开始。跑的过程中发现并修掉了 7 个问题，所以能力矩阵和治理那几节测的是<strong>加上这些修复的代码</strong>——它们就是 <code>0.9.4</code>。<a href="#step2">步骤 2</a> 和 <a href="#step9">步骤 9</a> 当时核对的仍是 npm 上的 <code>0.9.3</code>，两者相差的就是<a href="#found">那 7 条</a>；<code>0.9.4</code> 发布后，包里的代码与这一页的数字一致。</p>
+
+      <p>读法有两种。想知道<strong>这个包能不能用</strong>，看<a href="#summary">一页结论</a>和<a href="#step4">能力矩阵</a>。想<strong>自己验一遍</strong>，从<a href="#step0">步骤 0</a>往下照做，每条命令都可以直接复制。</p>
+
+      <h2 id="summary">一页结论</h2>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>步骤</th><th>验的是什么</th><th>7544d645（平板）</th><th>6c585f5b（手机）</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>环境：Node、hdc、两台设备可见</td><td>✓</td><td>✓</td></tr>
+            <tr><td>1</td><td>无设备自动化：类型检查、单元测试、官网检查、打包清单</td><td colspan="2">✓ 860 个测试 / 68 个文件 · 141 个文件 · 1.09 MB</td></tr>
+            <tr><td>2</td><td>干净目录安装当时已发布的包，核对导出与文件</td><td colspan="2">✓ 126 个运行时导出 · VERSION 0.9.3 · ESM-only</td></tr>
+            <tr><td>3</td><td>连接、诊断、截图、UI 树</td><td>✓</td><td>✓</td></tr>
+            <tr><td>4</td><td>16 项能力矩阵 + 设备侧测试</td><td>✓ 16/16</td><td>✓ 16/16</td></tr>
+            <tr><td>5</td><td>接管页 10 个场景（含 10 分钟稳定性）</td><td>✓ 10/10</td><td>✓ 10/10</td></tr>
+            <tr><td>6</td><td>来源校验 7 种握手</td><td>✓ 7/7</td><td>✓ 7/7</td></tr>
+            <tr><td>7</td><td>MCP 21 个工具、Skill 安装、交接闭环</td><td>✓</td><td>✓</td></tr>
+            <tr><td>8</td><td>只读、应用白名单、状态、接管与交还、审批</td><td>✓</td><td>✓</td></tr>
+            <tr><td>9</td><td>npm 版本、shasum、GitHub Release、官网</td><td colspan="2">✓ 当时 latest 为 0.9.3 · shasum <code>6554253b</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">验收过程中发现并修掉了 7 个真实问题，其中 3 个是产品缺陷——包括「应用白名单没有覆盖 <code>launch</code>」和「<code>resume</code> 不认 <code>HDC_TARGET</code>」。清单在<a href="#found">最后一节</a>，每条都有对应测试。</p>
+
+      <h2 id="devices">两台设备</h2>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>项</th><th>7544d645</th><th>6c585f5b</th></tr></thead>
+          <tbody>
+            <tr><td>型号</td><td>MLR-AL10（平板）</td><td>BRA-AL00（手机）</td></tr>
+            <tr><td>系统</td><td>OpenHarmony 7.0 · API 26</td><td>OpenHarmony 7.0 · API 26</td></tr>
+            <tr><td>ABI</td><td>arm64-v8a</td><td>arm64-v8a</td></tr>
+            <tr><td>分辨率</td><td>1600×2560</td><td>1216×2688</td></tr>
+            <tr><td>截图尺寸</td><td>800×1280（一半）</td><td>608×1344（一半）</td></tr>
+            <tr><td>agent.so md5</td><td colspan="2"><code>ebd787f9…</code>（两台一致，与包里那份相同）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>两台设备都通过 <code>hdc</code> 走 USB 连接。报告里只出现 8 位标签（设备序列号的 SHA-1 前 8 位），不出现序列号本身——这个仓库是公开的。</p>
+
+      <h2 id="step0">0 · 环境</h2>
+
+      <p>先确认三件事：Node 版本、<code>hdc</code> 在哪、有几台设备。如果机器上装过 DevEco 并设了 <code>HDC_SERVER_PORT</code>，要先清掉——它会把 <code>hdc</code> 指向另一个服务端，<code>hdc list targets</code> 就会看不到设备。</p>
+
+      <pre><code>unset HDC_SERVER_PORT
+export HDC_PATH="D:/Application/DevEco Studio/sdk/default/openharmony/toolchains/hdc.exe"
+
+node -v          # v26.13.0
+"$HDC_PATH" list targets</code></pre>
+
+      <pre><code>&lt;一台平板的序列号&gt;
+&lt;一台手机的序列号&gt;</code></pre>
+
+      <p>两台都在。这一步的输出里序列号是明文，所以下面的报告统一换成标签（序列号 SHA-1 的前 8 位）：平板是 <code>7544d645</code>，手机是 <code>6c585f5b</code>。</p>
+
+      <h2 id="step1">1 · 无设备自动化</h2>
+
+      <p>不接设备就能跑的部分。四条命令，任何一条失败都不必往下走。</p>
+
+      <pre><code>npm run typecheck        # 主代码类型
+npm run typecheck:tests  # 测试与脚本的类型
+npm test                 # 单元测试
+node scripts/check-site.mjs   # 官网：链接、锚点、外部请求、无 JS 可读
+npm pack --dry-run --json     # 打包清单</code></pre>
+
+      <p>实测输出：</p>
+
+      <pre><code>npm run typecheck        → exit 0
+npm run typecheck:tests  → exit 0
+npm test                 → 68 passed (68) · 860 passed (860) · 65.6 s
+node scripts/check-site.mjs → video 30.0s · runtime ok · site ok
+npm pack --dry-run --json → version 0.9.3 · files 141 · size 1090753 · unpacked 3241923</code></pre>
+
+      <p><code>check-site.mjs</code> 不只是检查文件在不在：它逐页核对版本号、锚点、禁止外部请求（一个静态页不该向任何第三方发请求），并用无头 Chrome 打开页面确认脚本真的跑起来了。</p>
+
+      <h2 id="step2">2 · 装包验证</h2>
+
+      <p>跑测试验证的是源码。这一步验证<strong>发到 npm 上的那个包</strong>：在一个空目录里装它，然后从外面看它。下面是当时那次运行（<code>0.9.3</code> 是当时的 <code>latest</code>）；以后重跑把版本号换成当时的 <code>latest</code> 即可。</p>
+
+      <pre><code>mkdir clean &amp;&amp; cd clean
+npm init -y
+npm install uitest-sdk@0.9.3</code></pre>
+
+      <pre><code>node --input-type=module -e "
+import * as sdk from 'uitest-sdk';
+console.log('exports', Object.keys(sdk).length);
+console.log('VERSION', sdk.VERSION);
+const e = new sdk.DeviceStateError('device_offline', 'x', 'ENODEVICE');
+console.log('state', e.state, 'instanceof UitestError', e instanceof sdk.UitestError);
+"</code></pre>
+
+      <pre><code>exports 126
+VERSION 0.9.3
+state device_offline instanceof UitestError true</code></pre>
+
+      <p>再确认两件容易漏的事：包里的扩展文件在不在，以及它是不是真的 ESM-only。</p>
+
+      <pre><code>$ ls node_modules/uitest-sdk/
+CHANGELOG.md LICENSE NOTICE README.md SECURITY.md assets dist docs examples package.json
+
+$ ls node_modules/uitest-sdk/assets/*/
+arm64:  agent.so  libscreen_casting.z.so
+x86_64: agent.so
+
+$ node -e "require('uitest-sdk')"
+Error: ERR_PACKAGE_PATH_NOT_EXPORTED</code></pre>
+
+      <p><code>require</code> 失败是<strong>预期行为</strong>：这个包只导出 ESM。在 CommonJS 项目里用会立刻报错，而不是在运行到一半时才出问题。</p>
+
+      <h2 id="step3">3 · 连接与诊断</h2>
+
+      <p>从这一步开始接设备。先把「这台机器上的这个包，能不能驱动这台手机」问清楚，再谈功能。</p>
+
+      <pre><code>node dist/bin.js doctor</code></pre>
+
+      <pre><code>settled · doctor
+targets: 7544d645
+display: 1600x2560
+capabilities: waitForIdle=yes findComponent=yes waitForComponent=yes findWindow=yes multiTouch=yes
+session: task "doctor" · device 7544d645 · read-only false · confirm payments,finance,deletes,sends · apps all</code></pre>
+
+      <p>手机上是同样的结果，<code>display: 1216x2688</code>。<code>doctor</code> 做的是：读 ABI → 比对设备上的 <code>agent.so</code> 与包里那份（md5）→ 确认 8012 端口上有 daemon 在听 → 逐项探测 hypium 能力。</p>
+
+      <p>接着看屏幕、截图、UI 树。三个命令都落在同一个应用上，这样三张图能互相对照：</p>
+
+      <pre><code>node dist/bin.js launch --app calculator
+node dist/bin.js screenshot --out shot.jpg
+node dist/bin.js inspect --out inspect.jpg --html inspect.html</code></pre>
+
+      <div class="accept-grid">
+        <figure class="api-figure">
+          <img src="assets/acceptance/inspect-7544d645.jpg" alt="平板上的 inspect：计算器每个元素被框出并编号" loading="lazy">
+          <figcaption>7544d645 · <code>inspect</code> 把每个元素框出来并编号，编号就是 <code>ref</code></figcaption>
+        </figure>
+        <figure class="api-figure">
+          <img src="assets/acceptance/inspect-6c585f5b.jpg" alt="手机上的 inspect：计算器每个元素被框出并编号" loading="lazy">
+          <figcaption>6c585f5b · 同一段代码，手机上自动换行成四列</figcaption>
+        </figure>
+      </div>
+
+      <p class="note">验收用的截图统一在<strong>计算器</strong>上拍，不是随手拍当前屏幕。原因很实际：真机上开着的是用户自己的应用——信息流、聊天、个人主页，截图会连别人的名字和头像一起进公开仓库。计算器只有键盘和一行结果，翻页也不会有个人内容。</p>
+
+      <h2 id="step4">4 · 能力矩阵</h2>
+
+      <p>一条命令跑完 16 项能力，每项都截图、写日志、算耗时，最后生成一份对照表。两台设备一起跑：</p>
+
+      <pre><code>npx tsx scripts/acceptance.ts --targets &lt;平板序列号&gt;,&lt;手机序列号&gt;</code></pre>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>能力</th><th>验的是什么</th><th>7544d645</th><th>6c585f5b</th></tr></thead>
+          <tbody>
+            <tr><td><code>connect</code></td><td>连上并读到显示尺寸</td><td>✓ 1600×2560</td><td>✓ 1216×2688</td></tr>
+            <tr><td><code>click</code></td><td>坐标点击落到设备</td><td>✓ 38 ms</td><td>✓ 42 ms</td></tr>
+            <tr><td><code>swipe</code></td><td>300 ms 滑动手势</td><td>✓ 489 ms</td><td>✓ 469 ms</td></tr>
+            <tr><td><code>touch</code></td><td>原始 down / move / up 协议</td><td>✓ ok</td><td>✓ ok</td></tr>
+            <tr><td><code>triggerKey</code></td><td>系统按键（电源键）</td><td>✓ ok</td><td>✓ ok</td></tr>
+            <tr><td><code>captureLayout</code></td><td>读 UI 树</td><td>✓ 232 节点</td><td>✓ 194 节点</td></tr>
+            <tr><td><code>captureScreen</code></td><td>JPEG 截图</td><td>✓ 368 ms · 46 KB</td><td>✓ 268 ms · 42 KB</td></tr>
+            <tr><td><code>cropToWindow</code></td><td>按应用裁剪截图</td><td>✓ 计算器 · 64 KB</td><td>✓ 计算器 · 59 KB</td></tr>
+            <tr><td><code>streamScreen</code></td><td>增量帧流</td><td>✓ 10.9 fps</td><td>✓ 11.0 fps</td></tr>
+            <tr><td><code>createCast</code></td><td>H.264 投流</td><td>✓ h264</td><td>✓ h264</td></tr>
+            <tr><td><code>createCastRecord</code></td><td>录 MP4</td><td>✓ 220 KB</td><td>✓ 374 KB</td></tr>
+            <tr><td><code>dualCast</code></td><td>同一设备两路投流</td><td>✓ 两路都出帧</td><td>✓ 两路都出帧</td></tr>
+            <tr><td><code>dumpLayout</code></td><td>窗口级 UI 树</td><td>✓ 232 节点</td><td>✓ 194 节点</td></tr>
+            <tr><td><code>queue</code></td><td>10 个调用排队执行</td><td>✓ 47 ms</td><td>✓ 75 ms</td></tr>
+            <tr><td><code>rpcDuringStream</code></td><td>投流时仍能发命令</td><td>✓ 8 ms</td><td>✓ 10 ms</td></tr>
+            <tr><td><code>streamUiActions</code></td><td>事件流会话</td><td>✓ 可开</td><td>✓ 可开</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>32/32 通过，0 失败，0 跳过。</strong>设备侧测试（<code>npm run test:device</code>）两台各 18 通过 / 1 跳过——跳过的是 x86_64 模拟器专用的那一条，真机上不适用。</p>
+
+      <div class="accept-grid">
+        <figure class="api-figure">
+          <img src="assets/acceptance/streamScreen-7544d645.jpg" alt="平板上的流式截图" loading="lazy">
+          <figcaption>7544d645 · <code>streamScreen</code> 抓到的最后一帧（10.9 fps）</figcaption>
+        </figure>
+        <figure class="api-figure">
+          <img src="assets/acceptance/createCastRecord-6c585f5b.jpg" alt="手机录制结束后的画面" loading="lazy">
+          <figcaption>6c585f5b · 录完 MP4 后的画面（374 KB）</figcaption>
+        </figure>
+      </div>
+
+      <p class="note"><strong>一个陷阱：</strong><code>streamScreen</code> 只在画面变化时出帧。所以它测出来的 fps 一半是传输、一半是「屏幕上有没有东西在动」。第一版脚本在静止的桌面上跑出 <code>0.2 fps</code> 却报了 PASS——那是在说「这台手机不会投屏」，而实际上它投得很好。现在低于 3 fps 直接判失败，并提示换一个会动的页面。</p>
+
+      <h2 id="step5">5 · 接管页</h2>
+
+      <p><code>live</code> 是给人用的：浏览器里看到手机画面，点「接管」之后，鼠标和键盘直接落在手机上。这一节验的是这条链路，10 个场景，最后一个是 10 分钟不间断输入。</p>
+
+      <pre><code>npx tsx scripts/acceptance-live.ts --target &lt;设备&gt;</code></pre>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>场景</th><th>验的是什么</th><th>7544d645</th><th>6c585f5b</th></tr></thead>
+          <tbody>
+            <tr><td>readonly guard</td><td>没接管时，注入的点击不生效</td><td>✓</td><td>✓</td></tr>
+            <tr><td>takeover</td><td>接管成功；第二个页面被拒</td><td>✓ 26 ms</td><td>✓ 33 ms</td></tr>
+            <tr><td>tap</td><td>点击后画面确实变了</td><td>✓ p50 13.6 ms</td><td>✓ p50 3.5 ms</td></tr>
+            <tr><td>long press</td><td>长按弹出系统输入助手</td><td>✓</td><td>✓</td></tr>
+            <tr><td>scroll</td><td>竖划后内容变化</td><td>✓</td><td>✓</td></tr>
+            <tr><td>keyboard</td><td>输入中文并回车，结果页出现该词</td><td>✓</td><td>✓</td></tr>
+            <tr><td>browser keyboard</td><td>真实页面：拼音组合期间不上屏</td><td>✓</td><td>✓</td></tr>
+            <tr><td>system keys</td><td>返回、Home、再切回来</td><td>✓</td><td>✓</td></tr>
+            <tr><td>pinch</td><td>双指放大，画面差异超阈值</td><td>✓ 51.8</td><td>✓ 63.4</td></tr>
+            <tr><td>stability</td><td>10 分钟连续输入 + 换手</td><td>✓ 18.33 fps</td><td>✓ 11.76 fps</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>两台都是 10/10。</strong>稳定性那一项值得单独说：平板上 600 秒跑了 1170 次输入，帧率从头到尾稳定在 18 fps（基线 17.95）；手机上 1169 次，11.76 fps（基线 12.43）。换手（另一个页面接管）的确认延迟两台都是 31–32 ms。</p>
+
+      <p>接管页的实拍已经在<a href="index.html#control">首页的接管演示</a>里，这里不再重复。</p>
+
+      <h2 id="step6">6 · 安全</h2>
+
+      <p>0.9.3 修的是一个真实漏洞：<strong>任何你打开的网页都能连上投屏页并接管手机</strong>。原因是浏览器对 WebSocket 不做同源限制，而端口是固定常量。修法是在服务端校验 <code>Origin</code>。</p>
+
+      <p>这一节不测函数，测<strong>线上那台服务器</strong>：真的建 TCP 连接、真的发握手，看它回什么。</p>
+
+      <pre><code>npx tsx scripts/acceptance-security.ts --targets &lt;设备1&gt;,&lt;设备2&gt;</code></pre>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>握手</th><th>期望</th><th>7544d645</th><th>6c585f5b</th></tr></thead>
+          <tbody>
+            <tr><td>页面自己的来源</td><td>101</td><td>✓ 101（8 ms）</td><td>✓ 101（5 ms）</td></tr>
+            <tr><td>别的网站</td><td>403</td><td>✓ 403（1 ms）</td><td>✓ 403（0 ms）</td></tr>
+            <tr><td><code>Origin: null</code>（<code>file://</code>、沙箱 iframe）</td><td>403</td><td>✓ 403</td><td>✓ 403</td></tr>
+            <tr><td>DNS rebinding（Host 是域名）</td><td>403</td><td>✓ 403</td><td>✓ 403</td></tr>
+            <tr><td>同机另一个端口</td><td>403</td><td>✓ 403</td><td>✓ 403</td></tr>
+            <tr><td>没有 <code>Origin</code> 头（程序化客户端）</td><td>101</td><td>✓ 101</td><td>✓ 101</td></tr>
+            <tr><td>错误的路径</td><td>404</td><td>✓ 404</td><td>✓ 404</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>14/14。</strong>被拒的连接回的是 <code>403</code> 而不是先升级再断开——握手不成立，帧、布局、客户端 id 一个字节都不发出去。</p>
+
+      <p>怎么读这几行：第 1 行是你自己打开页面时会发的头，必须放行。第 2 到 5 行是四种攻击面——你随便打开的网站、沙箱里的页面、把域名解析到 127.0.0.1 的 rebinding、以及同一台机器上另一个本地服务。四个都必须被拒，否则「打开一个网页就能接管手机」这件事仍然成立。第 6 行放行的是不是浏览器的客户端：它不受页面约束，本来就能自己跑 <code>hdc</code>。</p>
+
+      <h2 id="step7">7 · MCP 与 Skill</h2>
+
+      <p>给 Agent 用的部分。三个问题：能不能注册进 Agent 的配置、Agent 能看到哪些工具、交接给人的闭环走不走得通。</p>
+
+      <pre><code>node dist/bin.js connect --agent claude
+node dist/bin.js install-skill --dir &lt;某个目录&gt;</code></pre>
+
+      <p><code>connect</code> 只改 Agent 自己那一行配置（注释和顺序都保留），然后把 Skill 写进该 Agent 会读的目录。<code>install-skill</code> 可以只写一个目录，方便先看内容：</p>
+
+      <pre><code>installed skill in 1 directory
+  .work-bench/accept/step7/skill/SKILL.md
+  .work-bench/accept/step7/skill/REFERENCE.md</code></pre>
+
+      <p>MCP 侧实测：握手返回 <code>serverInfo: uitest-phone 0.9.3</code>，<code>tools/list</code> 给出 <strong>21 个工具</strong>：</p>
+
+      <pre><code>uitest_observe  uitest_tap  uitest_type  uitest_swipe  uitest_double-click
+uitest_drag  uitest_fling  uitest_pinch  uitest_key  uitest_wait-for
+uitest_read-list  uitest_scroll-until  uitest_launch  uitest_apps  uitest_window
+uitest_doctor  uitest_screenshot  uitest_inspect  uitest_report  uitest_status
+uitest_handoff</code></pre>
+
+      <p>真调一个 <code>uitest_observe</code>，返回的就是 Agent 看到的那段文本：</p>
+
+      <pre><code>screen 1600x2560 · app: com.ohos.sceneboard · rotation 0°
+[2] button "11月18日, 星期三, 十月初十" @799,462
+[3] button "QuickToolsHotZone" @202,2325
+[5] button "单指双击即可执行" @1397,2325</code></pre>
+
+      <p>最后是交接闭环——Agent 遇到只有人才能做的一步（登录、验证码、解锁）时，把手机交出去，然后<strong>停下</strong>等 <code>resume</code>：</p>
+
+      <pre><code>npm run acceptance:handoff</code></pre>
+
+      <pre><code>ok · MCP handshake
+ok · tools/list exposes uitest_handoff
+ok · uitest_handoff requires reason
+ok · the session owns the device first (got settled)
+ok · handoff status is handoff (got handoff)
+ok · handoff is an MCP error result (stop, do not retry)
+ok · the reason is in the agent-facing text
+ok · exactly one lease holds the device
+ok · lease task is "held by a person"
+ok · lease is marked as a person's hold
+ok · lease records the reason
+lease tag: 7544d645
+ok · same session stops with lease_held (got lease_held)
+ok · agent is told a person has the phone
+ok · lease_held repeats the reason
+ok · resume hands the phone back
+ok · same session continues after resume (got settled)
+handoff acceptance ok</code></pre>
+
+      <p>16 项全过，两台都跑了。中间那句 <code>lease_held</code> 是关键：交出手机之后，同一个会话再想操作设备会被明确拒绝，并重复一遍「人正在用」的理由——不是静默失败，也不是无限重试。</p>
+
+      <h2 id="step8">8 · 治理与策略</h2>
+
+      <p>让 Agent 能动手，但只在划定的范围里。四个开关：只读、应用白名单、接管、审批。</p>
+
+      <h3>只读</h3>
+
+      <pre><code>$ node dist/bin.js type --text "WLAN" --read-only
+blocked_by_policy · rule: read-only
+typing is disabled in read-only mode
+
+$ node dist/bin.js tap --ref 267 --read-only
+blocked_by_policy · rule: read-only
+deletes: 重置</code></pre>
+
+      <p>第二行值得注意：被拦下来的理由不是「你说了只读」，而是「这一步会触发 <em>deletes</em> 规则，命中的词是『重置』」。策略先把动作归类，再决定拦还是问。</p>
+
+      <h3>应用白名单</h3>
+
+      <pre><code>$ node dist/bin.js launch --app calculator --apps calculator
+settled
+launched com.huawei.hmos.calculator · CalculatorAbility
+
+$ node dist/bin.js launch --app settings --apps calculator
+blocked_by_policy · rule: scope
+com.huawei.hmos.settings is outside the task's app list (com.huawei.hmos.calculator)</code></pre>
+
+      <p>白名单里写的是短名 <code>calculator</code>，拦下来时说的是完整 bundle id——因为名单在会话开始前就被解析成了真实包名。<strong>这条正是验收时发现的问题</strong>，见下一节。</p>
+
+      <h3>接管与交还</h3>
+
+      <pre><code>$ node dist/bin.js hold --reason "acceptance: person takes the tablet"
+held · the device is yours
+device: 7544d645
+
+$ node dist/bin.js status
+error: lease_held · this device already runs task "held by a person"
+A person is using the phone. Stop and wait; they will run `uitest-phone resume`.
+
+$ node dist/bin.js resume
+released · 7544d645 is free for the next command</code></pre>
+
+      <h3>审批</h3>
+
+      <p>默认策略下，「删除、支付、金融、发送」这四类动作不会直接执行，而是先停下来要一个 id：</p>
+
+      <pre><code>$ node dist/bin.js tap --ref 267 --json
+{"status":"approval_pending","code":3,
+ "text":"approval_pending · approval_id: 5020f7405ca4 · rule: deletes\nmatched \"重置\"\n
+  Answer by repeating the same command with --approval-id 5020f7405ca4 (once),
+  plus --approval-scope task or --approval-scope always, both scoped to this app."}</code></pre>
+
+      <p>人看过之后，用同一个命令加上 <code>--approval-id</code> 放行。id 只能用在<strong>那一个具体步骤</strong>上：拿别的步骤的 id 来用会明确报错，而不是悄悄放行。</p>
+
+      <h2 id="step9">9 · 发布产物</h2>
+
+      <pre><code>$ npm view uitest-sdk version dist-tags
+version: 0.9.3
+dist-tags: { latest: "0.9.3", legacy: "0.3.0" }
+
+$ npm view uitest-sdk dist.shasum
+6554253b3ab5a89eec83c2f93dcba729172482b9</code></pre>
+
+      <p>这个 shasum 与<strong>发版当时</strong>（提交 <code>6ea19a2</code>）本地 <code>npm pack</code> 算出来的一致，说明发上去的字节就是那次打包出来的字节。验收修完那 7 条之后代码变了，所以 <code>0.9.4</code> 是另一次打包、另一个 shasum——发布后可以同样用 <code>npm view uitest-sdk dist.shasum</code> 核对。另外三项：</p>
+
+      <ul>
+        <li><strong>Git tag</strong>：<code>v0.9.3</code> 指向提交 <code>6ea19a2</code>。</li>
+        <li><strong>GitHub Release</strong>：<code>0.9.3 — 投屏页只接受自己的来源</code>，已发布。</li>
+        <li><strong>官网</strong>：<code>node scripts/check-site.mjs</code> 通过，版本号从 <code>dist/version.js</code> 读，不写死。</li>
+      </ul>
+
+      <h2 id="found">验收中发现并修掉的问题</h2>
+
+      <p>验收的价值不只是「跑通了」。这一轮跑下来，有 7 个问题只有真的接上两台设备、按顺序走完才会暴露。每一个都先写了会失败的测试，再改代码。</p>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>问题</th><th>怎么发现的</th><th>影响</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong><code>--apps</code> 不覆盖 <code>launch</code></strong></td>
+              <td>白名单写 <code>--apps calculator</code>，然后试着启动设置——它启动了</td>
+              <td>白名单最该管住的就是「换到别的应用」，恰恰漏了</td>
+            </tr>
+            <tr>
+              <td><strong><code>--apps</code> 只认完整包名</strong></td>
+              <td>修完上一条后，<code>--apps calculator</code> 把计算器也拦了</td>
+              <td>名单写对了却谁也用不了；现在与 <code>launch</code> 同一套解析</td>
+            </tr>
+            <tr>
+              <td><strong><code>resume</code> 不认 <code>HDC_TARGET</code></strong></td>
+              <td>两台设备同时插着跑交接验收，<code>resume</code> 报「多台设备」</td>
+              <td>刚交出的手机收不回来；<code>Device</code> 和 <code>HdcRunner</code> 都认这个变量</td>
+            </tr>
+            <tr>
+              <td><strong>两次 doctor 给出两个设备标签</strong></td>
+              <td>同一台设备，<code>doctor</code> 说 <code>dev-bff94761</code>，会话说 <code>7544d645</code></td>
+              <td>报告里的标签对不上设备；两处哈希现在共用一份实现</td>
+            </tr>
+            <tr>
+              <td><strong>两台设备的报告列互相覆盖</strong></td>
+              <td>两台一起跑，第二台的 16 行结果把第一台的盖掉了</td>
+              <td>双设备报告只剩一台的数字；列键改成设备标签</td>
+            </tr>
+            <tr>
+              <td><strong>前台应用认错</strong></td>
+              <td>屏幕上是知乎，<code>apps --current</code> 说 WPS</td>
+              <td>设备会把两个 mission 都标成 FOREGROUND；改取启动时间最新的那个</td>
+            </tr>
+            <tr>
+              <td><strong>通知栏关掉后仍被判为打开</strong></td>
+              <td>手机上 <code>closeShade()</code> 208 ms 就返回了，紧接着一次读取还是「打开」</td>
+              <td>守卫本身误报，导致一次已经成功的运行被判失败；改成有上限的等待</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>另外还有两个<strong>验收工具本身</strong>的缺陷，同样重要：</p>
+
+      <ul>
+        <li><strong>失败时把证据写进了仓库。</strong>一次失败的运行在 <code>docs/acceptance/screenshots/</code> 留下了一张第三方个人主页的截图。现在证据目录可以用 <code>UITEST_ACCEPTANCE_DIR</code> 改到仓库外，只有人看过之后才复制进来。</li>
+        <li><strong>静止的屏幕被当成「投屏正常」。</strong>桌面上跑出 <code>0.2 fps</code> 却报了 PASS。现在低于 3 fps 判失败，并说明这是画面没动，不是传输不行。</li>
+      </ul>
+
+      <h2 id="rerun">自己复现</h2>
+
+      <p>按上面的顺序走一遍，大约需要：</p>
+
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>步骤</th><th>耗时</th><th>需要设备</th></tr></thead>
+          <tbody>
+            <tr><td>0 · 环境</td><td>&lt; 1 分钟</td><td>是</td></tr>
+            <tr><td>1 · 无设备自动化</td><td>约 2 分钟</td><td>否</td></tr>
+            <tr><td>2 · 装包验证</td><td>约 1 分钟</td><td>否</td></tr>
+            <tr><td>3 · 连接与诊断</td><td>约 1 分钟</td><td>是</td></tr>
+            <tr><td>4 · 能力矩阵</td><td>约 3 分钟 / 台</td><td>是</td></tr>
+            <tr><td>5 · 接管页</td><td>约 13 分钟 / 台（含 10 分钟稳定性）</td><td>是</td></tr>
+            <tr><td>6 · 安全</td><td>约 1 分钟 / 台</td><td>是</td></tr>
+            <tr><td>7 · MCP 与 Skill</td><td>约 2 分钟</td><td>是</td></tr>
+            <tr><td>8 · 治理与策略</td><td>约 5 分钟</td><td>是</td></tr>
+            <tr><td>9 · 发布产物</td><td>约 1 分钟</td><td>否</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>四条建议，都是这轮踩出来的：</p>
+
+      <ul>
+        <li><strong>先把设备放在一个没有个人内容的界面上。</strong>截图是要给人看的，验收脚本默认在计算器上拍。</li>
+        <li><strong>一次只跑一台设备。</strong>同一个设备不能同时被两个验收占用——设备侧的锁会拒绝第二个，这不是 bug，是设计。</li>
+        <li><strong>看失败的第一行，不要看最后一行。</strong><code>FAILED:</code> 后面那句通常已经写清了原因（比如「通知栏还开着」「屏幕没在动」），比堆栈有用。</li>
+        <li><strong>验收前先决定「测的是哪个版本」。</strong>这一轮的矩阵从 <code>0.9.3</code> 开始，测的却是修完那 7 条之后的代码——也就是 <code>0.9.4</code>。想让报告和包完全一致，要么先发版再验收，要么在报告里写清楚差在哪里（这一页选了后者）。</li>
+      </ul>
+
+      <p class="note">这一页的所有数字来自 2026-11-17 夜间的两轮完整运行，机器是同一台 Windows 主机、同一个 <code>hdc</code>、同样的 USB 连接。换一台机器或换一根线，耗时会有差异；判定标准（通过/失败）不会。</p>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-row">
+      <span class="footer-copy">© 2026 uitest-sdk · MIT</span>
+      <div class="footer-links">
+        <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+        <a href="docs.html">使用文档</a>
+        <a href="changelog.html">更新日志</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>

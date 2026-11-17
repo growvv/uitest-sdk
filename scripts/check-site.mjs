@@ -33,7 +33,15 @@ function fail(msg) {
 }
 
 // ---------------------------------------------------------------- the files
-const files = ["index.html", "docs.html", "changelog.html", "api.html", "styles.css", "main.js"];
+const files = [
+  "index.html",
+  "docs.html",
+  "changelog.html",
+  "api.html",
+  "acceptance.html",
+  "styles.css",
+  "main.js",
+];
 for (const f of files) {
   const p = join(SITE, f);
   if (!existsSync(p) || !statSync(p).isFile()) fail(`missing site/${f}`);
@@ -42,6 +50,7 @@ const html = readFileSync(join(SITE, "index.html"), "utf8");
 const docsHtml = readFileSync(join(SITE, "docs.html"), "utf8");
 const logHtml = readFileSync(join(SITE, "changelog.html"), "utf8");
 const apiHtml = readFileSync(join(SITE, "api.html"), "utf8");
+const acceptHtml = readFileSync(join(SITE, "acceptance.html"), "utf8");
 const css = readFileSync(join(SITE, "styles.css"), "utf8");
 const js = readFileSync(join(SITE, "main.js"), "utf8");
 const pages = [
@@ -49,6 +58,7 @@ const pages = [
   ["docs.html", docsHtml],
   ["changelog.html", logHtml],
   ["api.html", apiHtml],
+  ["acceptance.html", acceptHtml],
 ];
 
 // ------------------------------------------------------------------- anchors
@@ -535,6 +545,13 @@ for (const needle of [
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
 if (docsHtml.length < 8000) fail(`docs.html is only ${docsHtml.length} bytes; expected the full usage guide`);
+// The version needle above is satisfied by any mention, and the page mentions
+// several releases. The header is the one that claims "this documents X", and
+// it sat at 0.9.2 through a 0.9.3 release because the looser check passed on a
+// feature tag further down the page.
+if (!docsHtml.includes(`uitest-sdk <strong>${VERSION}</strong>`)) {
+  fail(`docs.html does not claim to document ${VERSION} in its header`);
+}
 
 for (const needle of [
   "0.3.0",
@@ -682,6 +699,157 @@ if (apiHtml.length < 12000) fail(`api.html is only ${apiHtml.length} bytes; expe
 // previous version — the same drift src/version.ts exists to prevent.
 if (!apiHtml.includes(`<strong>${VERSION}</strong>`)) {
   fail(`api.html does not show the package version ${VERSION}; regenerate with scripts/gen-api-page.mjs`);
+}
+
+// ------------------------------------------------ the acceptance report page
+// This page is the evidence the project is actually tested on hardware, so it
+// is checked harder than the rest: every number a reader could act on must be
+// present, the screenshot set must be complete, and the device serials must
+// not be — the repository is public.
+const acceptSections = [
+  "summary", "devices", "step0", "step1", "step2", "step3",
+  "step4", "step5", "step6", "step7", "step8", "step9", "found", "rerun",
+];
+for (const id of acceptSections) {
+  if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(acceptHtml)) {
+    fail(`acceptance.html is missing id="${id}"`);
+  }
+}
+// The page is one article rather than <section>s, so a section runs from its
+// <h2> to the next one. Checking inside the block is what keeps a needle from
+// being satisfied by text that belongs to a different step.
+function acceptBlock(id) {
+  const start = acceptHtml.indexOf(`<h2 id="${id}">`);
+  if (start < 0) fail(`acceptance.html has no #${id} block`);
+  const rest = acceptHtml.slice(start + 1);
+  const next = rest.indexOf("<h2 id=");
+  return next < 0 ? rest : rest.slice(0, next);
+}
+for (const [id, rows] of [
+  ["summary", 10], // steps 0-9
+  ["devices", 6],
+  ["step4", 16], // the capability matrix
+  ["step5", 10], // the live scenarios
+  ["step6", 7], // the handshakes
+  ["found", 7], // problems found and fixed
+  ["rerun", 10], // the timings
+]) {
+  const block = acceptBlock(id);
+  const n = (block.match(/<tr>/g) ?? []).length - (block.match(/<thead>/g) ?? []).length;
+  if (n !== rows) fail(`acceptance.html #${id} has ${n} rows, expected ${rows}`);
+}
+
+for (const needle of [
+  "验收报告",
+  // The two devices, named only by tag.
+  "7544d645",
+  "6c585f5b",
+  // The totals, one per step that has a pass/fail count.
+  "32/32",
+  "10/10",
+  "14/14",
+  "16 项全过",
+  // Step 0-2: the environment, the device-free checks, and the installed
+  // package being ESM-only.
+  "unset HDC_SERVER_PORT",
+  "npm run typecheck:tests",
+  "node scripts/check-site.mjs",
+  "npm pack --dry-run",
+  "ERR_PACKAGE_PATH_NOT_EXPORTED",
+  "126",
+  // Step 3-4: the commands a reader retypes.
+  "node dist/bin.js doctor",
+  "node dist/bin.js inspect",
+  "npx tsx scripts/acceptance.ts",
+  "npm run test:device",
+  // Step 5-6: the live page and the wire-level Origin test.
+  "npx tsx scripts/acceptance-live.ts",
+  "npx tsx scripts/acceptance-security.ts",
+  "Origin: null",
+  "DNS rebinding",
+  // Step 7-8: the agent surface and the governance transcripts.
+  "node dist/bin.js connect",
+  "install-skill",
+  "uitest_observe",
+  "npm run acceptance:handoff",
+  "blocked_by_policy · rule: read-only",
+  "blocked_by_policy · rule: scope",
+  "approval_pending · approval_id",
+  "lease_held",
+  // Step 9 and the lessons.
+  "6554253b",
+  "UITEST_ACCEPTANCE_DIR",
+  "0.2 fps",
+  // The report measures the working tree, not the tarball that was on npm at
+  // the time: the acceptance found and fixed real defects, and those fixes are
+  // 0.9.4. A reader who takes the matrix as "what 0.9.3 does" would be reading
+  // a claim the published 0.9.3 cannot back, so the page has to say where the
+  // line is. The version itself comes from dist/, so a release that forgets to
+  // update the page fails here.
+  "加上这些修复的代码",
+  VERSION,
+]) {
+  if (!acceptHtml.includes(needle)) fail(`acceptance.html 缺少「${needle}」`);
+}
+// The 16 capability names the matrix claims, and the 10 live scenarios: a
+// matrix that quietly lost a row would still read as "everything passed".
+for (const name of [
+  "connect", "click", "swipe", "touch", "triggerKey", "captureLayout",
+  "captureScreen", "cropToWindow", "streamScreen", "createCast", "createCastRecord",
+  "dualCast", "dumpLayout", "queue", "rpcDuringStream", "streamUiActions",
+]) {
+  if (!acceptBlock("step4").includes(`<code>${name}</code>`)) {
+    fail(`acceptance.html 的能力矩阵缺少 ${name}`);
+  }
+}
+for (const scenario of [
+  "readonly guard", "takeover", "long press", "scroll", "keyboard",
+  "browser keyboard", "system keys", "pinch", "stability",
+]) {
+  if (!acceptBlock("step5").includes(scenario)) {
+    fail(`acceptance.html 的接管场景缺少 ${scenario}`);
+  }
+}
+// Every screenshot the page shows must be a real JPEG of a real capture. A
+// placeholder or a truncated copy would still render, so check the magic
+// bytes and the size rather than only the path.
+for (const [, src] of acceptHtml.matchAll(/<img src="(assets\/acceptance\/[^"]+)"/g)) {
+  const p = join(SITE, src);
+  if (!existsSync(p)) fail(`acceptance.html references a missing image: ${src}`);
+  const b = readFileSync(p);
+  if (b[0] !== 0xff || b[1] !== 0xd8 || b[b.length - 2] !== 0xff || b[b.length - 1] !== 0xd9) {
+    fail(`${src} is not a complete JPEG`);
+  }
+  if (b.length < 20 * 1024) fail(`${src} is only ${Math.round(b.length / 1024)} KB`);
+}
+// The matrix shots are named <capability>-<tag>.jpg so a reader can tell which
+// device produced which column; a missing half would silently show one device.
+const matrixNames = [
+  "connect", "click", "swipe", "touch", "triggerKey", "captureLayout",
+  "captureScreen", "cropToWindow", "streamScreen", "createCast", "createCastRecord",
+  "dualCast", "dumpLayout", "queue", "rpcDuringStream", "streamUiActions",
+];
+for (const tag of ["7544d645", "6c585f5b"]) {
+  for (const name of matrixNames) {
+    const p = join(SITE, "assets", "acceptance", `${name}-${tag}.jpg`);
+    if (!existsSync(p)) fail(`missing site/assets/acceptance/${name}-${tag}.jpg`);
+  }
+  for (const name of ["inspect"]) {
+    if (!existsSync(join(SITE, "assets", "acceptance", `${name}-${tag}.jpg`))) {
+      fail(`missing site/assets/acceptance/${name}-${tag}.jpg`);
+    }
+  }
+}
+// The one rule the page must never break: no device serials. They are
+// uppercase-and-digits runs of ten or more characters; the tags the page uses
+// instead are eight lowercase hex digits. Words like ERR_PACKAGE_PATH_NOT_EXPORTED
+// contain underscores and code identifiers are lowercase, so neither matches.
+const serialish = acceptHtml.match(/\b(?=[A-Z0-9]{10,}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{10,}\b/g);
+if (serialish) fail(`acceptance.html looks like it contains a device serial: ${serialish[0]}`);
+// Every other page must link to it, or the report exists and nobody finds it.
+for (const [name, text] of pages) {
+  if (name === "acceptance.html") continue;
+  if (!text.includes('href="acceptance.html"')) fail(`${name} does not link to acceptance.html`);
 }
 
 // ----------------------------------------------- task 10: the script runs

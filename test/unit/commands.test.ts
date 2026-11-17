@@ -20,9 +20,12 @@ const page = (text: string): UiNode => ({
 function fakeDevice() {
   let index = 0;
   const calls: { api: string; args: unknown[] }[] = [];
+  /** Every hdc shell command, in order: `launch` reaches the device this way. */
+  const shells: string[] = [];
   const pages = [page("WLAN"), page("WLAN detail")];
   return {
     calls,
+    shells,
     device: {
       deviceId: "SERIAL",
       agent: {
@@ -74,7 +77,22 @@ function fakeDevice() {
       },
       hdc: {
         async shell(command: string) {
-          if (command === "bm dump -a") return "com.demo";
+          shells.push(command);
+          if (command === "bm dump -a") return "com.demo\ncom.hidden.app";
+          if (command.startsWith("bm dump -n ")) {
+            const bundle = command.slice("bm dump -n ".length);
+            return JSON.stringify({
+              entryModuleName: "entry",
+              hapModuleInfos: [
+                {
+                  name: "entry",
+                  mainAbility: "EntryAbility",
+                  abilityInfos: [{ name: "EntryAbility", type: 1 }],
+                },
+              ],
+            }).replace(/^/, `${bundle}:\n`);
+          }
+          if (command.startsWith("aa start")) return "start ability successfully.";
           if (command === "aa dump -l") {
             return [
               "  current mission lists:{",
@@ -104,6 +122,7 @@ function textModes(fake: ReturnType<typeof fakeDevice>): unknown[] {
 
 async function withRunner<T>(
   fn: (runner: CommandRunner, dir: string, fake: ReturnType<typeof fakeDevice>) => Promise<T>,
+  opts: Record<string, unknown> = {},
 ): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-cmd-"));
   const fake = fakeDevice();
@@ -111,6 +130,7 @@ async function withRunner<T>(
     // The same `<state-dir>/leases` the hold commands write, so the test can
     // take the device away from a live session the way a person does.
     task: "t", stateDir: dir, lease: { dir: join(dir, "leases") }, settleMs: 300,
+    ...opts,
   });
   const runner = new CommandRunner(session, { stateDir: dir, device: fake.device });
   try {
@@ -426,6 +446,36 @@ describe("CommandRunner", () => {
       expect(r.text).toContain("bounds:");
       expect(r.data?.bundle).toBeDefined();
     });
+  });
+
+  // `--apps` exists so a task can be confined to one app. Every command that
+  // touches a screen goes through the session's policy gate, but `launch`
+  // answered straight from hdc — so the one command whose whole job is to
+  // change which app is in front was the one the allow-list did not cover.
+  // Found while running the acceptance: `--apps calculator` launched Settings.
+  it("refuses to launch an app outside the allow-list", async () => {
+    await withRunner(
+      async (runner, _dir, fake) => {
+        const r = await runner.run("launch", { app: "com.hidden.app" });
+        expect(r.status).toBe("blocked");
+        expect(r.text).toContain("scope");
+        // Nothing reached the device: `aa start` must not have run.
+        expect(fake.shells.some((c) => c.includes("aa start"))).toBe(false);
+      },
+      { policy: { apps: ["com.demo"] } },
+    );
+  });
+
+  it("still launches an app inside the allow-list", async () => {
+    await withRunner(
+      async (runner, _dir, fake) => {
+        const r = await runner.run("launch", { app: "com.demo" });
+        expect(r.status).toBe("settled");
+        expect(String(r.data?.bundle)).toBe("com.demo");
+        expect(fake.shells.some((c) => c.includes("aa start"))).toBe(true);
+      },
+      { policy: { apps: ["com.demo"] } },
+    );
   });
 
   it("reports a window that is not there", async () => {

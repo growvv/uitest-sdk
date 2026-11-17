@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AppManager } from "../../src/apps.js";
+import { AppManager, resolveAppList } from "../../src/apps.js";
 import { AppNotFoundError, LaunchError } from "../../src/errors.js";
 
 const APPS = [
@@ -177,6 +177,33 @@ describe("AppManager", () => {
     expect(await apps.current()).toBeNull();
   });
 
+  it("picks the newest foreground mission, not the first in the dump", async () => {
+    // Observed on a tablet with Zhihu visible: `aa dump -l` listed a stale WPS
+    // mission as FOREGROUND and Zhihu as FOREGROUND too. Taking the first
+    // match reported WPS while Zhihu was the app on screen, so `apps
+    // --current`, and anything that branches on it, named the wrong app.
+    // The later `start time` is the one on top.
+    const dump = `  current mission lists:{
+    Mission ID #1  mission name #[#cn.wps.office.hap:PromeAbility]
+      AbilityRecord ID #1
+        main name [PromeAbility]
+        bundle name [cn.wps.office.hap]
+        state #FOREGROUND  start time [120802971]
+        app state #FOREGROUND
+    Mission ID #2  mission name #[#com.zhihu.hmos:PhoneAbility]
+      AbilityRecord ID #2
+        main name [PhoneAbility]
+        bundle name [com.zhihu.hmos]
+        state #FOREGROUND  start time [326586304]
+        app state #FOREGROUND
+  }`;
+    const apps = new AppManager(fakeHdc({ "aa dump -l": dump }));
+    expect(await apps.current()).toEqual({
+      bundle: "com.zhihu.hmos",
+      ability: "PhoneAbility",
+    });
+  });
+
   it("stops, uninstalls and clears data with the documented commands", async () => {
     const hdc = fakeHdc();
     const apps = new AppManager(hdc);
@@ -203,5 +230,39 @@ describe("AppManager", () => {
     expect(hdc.calls.filter((c) => c === "bm dump -a")).toHaveLength(1);
     await apps.list({ refresh: true });
     expect(hdc.calls.filter((c) => c === "bm dump -a")).toHaveLength(2);
+  });
+});
+
+/**
+ * `--apps` took bundle ids only, while every other app-taking flag accepts the
+ * short names `launch` accepts. `--apps calculator` therefore matched nothing
+ * and blocked the calculator as well as everything else — found on a real
+ * device while running the acceptance, where the allow-list refused the one
+ * app it was supposed to permit.
+ */
+describe("resolveAppList", () => {
+  it("resolves short names the same way launch does", async () => {
+    const apps = new AppManager(fakeHdc());
+    expect(await resolveAppList(apps, ["calculator"])).toEqual(["com.huawei.hmos.calculator"]);
+  });
+
+  it("keeps full bundle ids and drops duplicates", async () => {
+    const apps = new AppManager(fakeHdc());
+    expect(
+      await resolveAppList(apps, ["com.demo.notes", "notes", "com.demo.notes"]),
+    ).toEqual(["com.demo.notes"]);
+  });
+
+  it("names an unresolvable entry instead of silently dropping it", async () => {
+    // A typo in an allow-list must fail loudly: silently dropping it turns
+    // "only these apps" into "everything else too".
+    const apps = new AppManager(fakeHdc());
+    // `catch` on a Promise<string[]> widens to string[] | Error; the promise
+    // only rejects here, so the value is always the error.
+    const err = (await resolveAppList(apps, ["calculator", "no-such-app"]).catch(
+      (e: unknown) => e,
+    )) as Error;
+    expect(err).toBeInstanceOf(AppNotFoundError);
+    expect(err.message).toContain("no-such-app");
   });
 });

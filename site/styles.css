@@ -92,6 +92,11 @@ pre {
   color: var(--fg);
 }
 
+/* The page you are on, so the nav does not read as a row of equal choices. */
+.nav-links a[aria-current="page"] {
+  color: var(--fg);
+}
+
 /* ------------------------------------------------------------------ hero */
 
 .hero {
@@ -1599,5 +1604,51 @@ td:nth-child(3) {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 4px 18px;
+  }
+}
+
+/* ------------------------------------------------- acceptance evidence */
+
+/* Two devices side by side. Each figure is a real capture; the grid keeps the
+   pair at the same height so a tablet shot and a phone shot read as one
+   comparison instead of two unrelated pictures. */
+.accept-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 26px 0 0;
+  align-items: start;
+}
+
+.accept-grid .api-figure {
+  margin: 0;
+}
+
+.accept-grid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 700px) {
+  .accept-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The nav gained a seventh destination with the acceptance report. Below
+   ~700 px the row no longer fits on one line, so let it wrap instead of
+   pushing the last links off the right edge where they cannot be tapped. */
+@media (max-width: 700px) {
+  .nav {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .nav-links {
+    flex-wrap: wrap;
+    gap: 10px 16px;
   }
 }

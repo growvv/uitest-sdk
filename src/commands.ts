@@ -458,7 +458,10 @@ export class CommandRunner {
       case "window":
         return this.window(raw);
       case "doctor": {
-        const report = await doctor(this.opts.device, this.session);
+        // The device the caller chose, when they chose one: `doctor` warns
+        // about an ambiguous attach only when the SDK had to pick.
+        const chosen = this.opts.device.deviceId || undefined;
+        const report = await doctor(this.opts.device, this.session, chosen);
         return { status: "settled", code: 0, text: renderDoctor(report), data: { ...report } };
       }
       case "screenshot":
@@ -630,8 +633,23 @@ export class CommandRunner {
     if (!this.session.apps) {
       throw new UitestError("launch needs an hdc connection", "ENOHDC");
     }
+    // The allow-list has to be checked against the bundle that will actually
+    // start, and before it starts: `launch` answers from hdc instead of going
+    // through the session's policy gate, so `--apps calculator` used to launch
+    // Settings. Resolving the name first is also what makes `--apps` usable
+    // with a short name like "settings".
+    const bundle = await this.session.apps.resolveBundle(String(raw.app));
+    const scope = this.session.policy.scope(bundle);
+    if (scope.kind === "block") {
+      return {
+        status: "blocked",
+        code: 2,
+        text: `blocked_by_policy · rule: ${scope.rule}\n${scope.reason}`,
+        data: { rule: scope.rule, reason: scope.reason, bundle },
+      };
+    }
     const before = await this.session.screen();
-    const result = await this.session.apps.launch(String(raw.app), { ability: asString(raw.ability) });
+    const result = await this.session.apps.launch(bundle, { ability: asString(raw.ability) });
     // The app's own window can take a moment to come up; poll for its bundle
     // rather than declaring success the instant `aa` returns.
     const deadline = Date.now() + 5000;

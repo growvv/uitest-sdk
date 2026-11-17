@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { renderReport, type EnvInfo } from "../../scripts/acceptance.js";
+import { envName, renderReport, type EnvInfo } from "../../scripts/acceptance.js";
 import { tagOf } from "../../src/session.js";
 
 // A made-up serial. The point of the test is that whatever string is passed as
@@ -36,6 +36,29 @@ describe("acceptance report", () => {
     expect(md).not.toContain(SERIAL_A);
     expect(md).not.toContain(SERIAL_B);
     expect(md).toContain(`| 设备 ID | ${tagOf(SERIAL_A)} | ${tagOf(SERIAL_B)} |`);
+  });
+
+  it("gives two physical devices a column each", () => {
+    // `envName()` used to be "device" for every serial and "emulator" for
+    // loopback, so two phones attached at once produced two columns with the
+    // same key: the second target's results overwrote the first's, and one
+    // whole column of the capability table came back empty or wrong.
+    const second = "SECOND-SERIAL-0001";
+    const md = renderReport(
+      [info(SERIAL_A, envName(SERIAL_A)), info(second, envName(second))],
+      [
+        { capability: "click", env: envName(SERIAL_A), status: "PASS", ms: 38, detail: "38 ms" },
+        { capability: "click", env: envName(second), status: "PASS", ms: 51, detail: "51 ms" },
+      ],
+    );
+    const header = /^\| 能力 \| .* \|$/m.exec(md)?.[0] ?? "";
+    const cells = [...header.matchAll(/([0-9a-f]{8})/g)].map((m) => m[1]);
+    expect(cells).toContain(tagOf(SERIAL_A));
+    expect(cells).toContain(tagOf(second));
+    expect(md).not.toContain(SERIAL_A);
+    expect(md).not.toContain(second);
+    expect(md).toContain("38 ms");
+    expect(md).toContain("51 ms");
   });
 
   // The committed report is what a reader actually sees. It says "generated,

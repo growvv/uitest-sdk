@@ -27,7 +27,7 @@ import { HdcRunner } from "../src/hdc.js";
 import { startLive, liveOptions } from "../src/live/cli.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../src/cast/ws.js";
 import { deviceTag } from "../src/trace.js";
-import { assertCapturable } from "./acceptance.js";
+import { assertCapturable, assertShadeClosed } from "./acceptance.js";
 import {
   RestartBudget,
   assistantCropHeight,
@@ -43,7 +43,16 @@ import {
 } from "./live-walk.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT_DIR = join(ROOT, "docs/acceptance/live");
+/**
+ * Where the evidence goes. Overridable so a run can keep its pictures out of
+ * the repository until a person has looked at them: these screenshots are
+ * committed and published, and the phone is on whatever app the scenario
+ * drives. The default stays `docs/acceptance/live` because the report links to
+ * files by that path.
+ */
+const OUT_DIR = process.env.UITEST_LIVE_ACCEPTANCE_DIR
+  ? resolve(process.env.UITEST_LIVE_ACCEPTANCE_DIR)
+  : join(ROOT, "docs/acceptance/live");
 const SHOT_DIR = join(OUT_DIR, "screenshots");
 const DEMO_DIR = join(OUT_DIR, "demo");
 const STATE_DIR = join(ROOT, ".work-bench/acceptance-live");
@@ -634,7 +643,11 @@ async function shotInto(
   const out = join(dir, `${name}.jpg`);
   await copyFile(String(saved.path), out);
   await cropJpeg(out, keepTop);
-  return relative(ROOT, out).replace(/\\/g, "/");
+  // Evidence staged outside the repository has no repository-relative path;
+  // report it absolute rather than as a `../../` chain that only resolves from
+  // this checkout.
+  const rel = relative(ROOT, out);
+  return (rel.startsWith("..") ? out : rel).replace(/\\/g, "/");
 }
 
 async function shot(c: LiveClient, name: string, keepTop?: number): Promise<string> {
@@ -936,6 +949,11 @@ async function preflight(target: string): Promise<Env> {
   const dev = await Device.connect({ deviceId: target });
   try {
     await assertCapturable(dev.hypium);
+    // The shade covers the app, so every scenario would be driving a panel
+    // over the app and every screenshot would be the person's notifications.
+    // On the tablet it was already open from an earlier run, and the feed
+    // never appeared. Same guard as the capability matrix, same failure.
+    await assertShadeClosed(dev.hypium);
     // The screen sleeps on its own schedule. A touch on a dark screen wakes
     // it and never reaches the app — measured as a long press that focuses
     // nothing and a tap that lands 20 ms late. Holding the timeout open for
@@ -1014,7 +1032,7 @@ ${browser}
 
 > 本报告由 \`npx tsx scripts/acceptance-live.ts --target <id>\` 生成；设备只以 8 位标签出现。
 > 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标）；长按证据只保留输入助手条及其下至少 ${ASSISTANT_MARGIN_PX} px（其下是搜索历史，位置随搜索词变化，所以按节点几何裁；条更高时留白按比例增加）。其余保持原始分辨率。
-> \`docs/acceptance/live/demo/\` 是官网动画用的整屏原图，同样裁去底部 ${BOTTOM_CROP_PX} px。
+> \`${join(OUT_DIR, "demo")}\` 是官网动画用的整屏原图，同样裁去底部 ${BOTTOM_CROP_PX} px。
 `;
 }
 
@@ -1614,7 +1632,7 @@ async function main(): Promise<number> {
         return {
           detail: `图片查看器内 80→120→160 双指放大；画面差异 ${changed.toFixed(1)}（阈值 8）`,
           evidence: [
-            "docs/acceptance/live/screenshots/08-pinch-before.jpg",
+            join(OUT_DIR, "screenshots", "08-pinch-before.jpg"),
             after,
             demo,
             demoZoomed,
@@ -1867,6 +1885,7 @@ async function main(): Promise<number> {
   process.stdout.write(
     `${ran - failed}/${ran} passed · report ${relative(ROOT, reportPath).replace(/\\/g, "/")}\n`,
   );
+  process.stdout.write(`evidence under ${OUT_DIR}\n`);
   return failed === 0 && ran > 0 ? 0 : 1;
 }
 
