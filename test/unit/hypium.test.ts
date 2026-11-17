@@ -535,3 +535,54 @@ describe("HypiumDriver · rotation", () => {
     expect(w.calls.some((c) => c.api === "Driver.setDisplayRotation")).toBe(false);
   });
 });
+
+describe("HypiumDriver · lock state", () => {
+  // The dump is a table whose rows start with " * name <tab> value <tab> desc".
+  // Splitting on whitespace therefore puts the field name at index 1, not the
+  // value — reading index 1 compared "screenLocked" against "true"/"false",
+  // never matched, and fell through to "is the display awake?". A phone that
+  // was awake and locked (exactly what the power key produces) then read as
+  // unlocked, and the acceptance run photographed its notification list.
+  const dump = [
+    "----------------------------------ScreenlockService----------------------------------",
+    "",
+    " Screenlock system state\tValue\t\tDescription",
+    " * screenState  \t\ttrue\t\tscreen on / off status",
+    " * offReason   \t\t\t0\t\tscreen failure reason",
+    " * interactiveState \t\t2\t\tscreen interaction status",
+    " * deviceLocked  \t\tfalse\t\t100",
+    " * authState   \t\t4\t\t100",
+    " * screenLocked  \t\ttrue\t\t100",
+  ].join("\n");
+
+  it("reads the value beside screenLocked, not the field name", async () => {
+    const w = world({
+      "shell:hidumper -s ScreenlockService -a -all": () => dump,
+      // Awake: the fallback would answer "not locked" and hide the bug.
+      "shell:hidumper -s PowerManagerService -a '-a'": () => "Current State: AWAKE",
+    });
+
+    expect(await w.driver.isDisplayLocked()).toBe(true);
+  });
+
+  it("reports an unlocked screen as unlocked", async () => {
+    const w = world({
+      "shell:hidumper -s ScreenlockService -a -all": () =>
+        dump.replace(" * screenLocked  \t\ttrue", " * screenLocked  \t\tfalse"),
+      "shell:hidumper -s PowerManagerService -a '-a'": () => "Current State: AWAKE",
+    });
+
+    expect(await w.driver.isDisplayLocked()).toBe(false);
+  });
+
+  // If the service ever stops printing the row, the awake/sleeping answer is
+  // the only evidence left, so it must still be used.
+  it("falls back to the power state when the row is missing", async () => {
+    const w = world({
+      "shell:hidumper -s ScreenlockService -a -all": () => "no such service",
+      "shell:hidumper -s PowerManagerService -a '-a'": () => "Current State: AWAKE",
+    });
+
+    expect(await w.driver.isDisplayLocked()).toBe(false);
+  });
+});

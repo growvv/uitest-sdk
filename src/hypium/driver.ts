@@ -356,15 +356,19 @@ export class HypiumDriver {
 
   /**
    * Reads `screenLocked` from the lock service dump. The dump is a table of
-   * `name <tab> value <tab> description`, so the value has to be read from the
-   * same line — splitting on whitespace would separate the name from it.
+   * ` * name <tab> value <tab> description` rows, so the field name sits at
+   * index 1 after a whitespace split and the value at index 2. Taking index 1
+   * compared the name against "true"/"false", which never matched — the method
+   * then fell through to "is the display awake?", and an awake but locked phone
+   * (what the power key leaves behind) read as unlocked.
    */
   async isDisplayLocked(): Promise<boolean> {
     const out = await this.hdcRunner.shell("hidumper -s ScreenlockService -a -all");
     for (const line of out.split(/\r?\n/)) {
-      if (!line.includes("screenLocked")) continue;
-      const value = line.split(/\s+/).filter(Boolean)[1];
-      if (value === "true" || value === "false") return value === "true";
+      const fields = line.split(/\s+/).filter(Boolean);
+      if (fields[1] !== "screenLocked") continue;
+      if (fields[2] === "true") return true;
+      if (fields[2] === "false") return false;
     }
     return !(await this.isDisplayOn());
   }
