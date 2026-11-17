@@ -590,6 +590,15 @@ for (const needle of [
   // screen on GPU-less machines, and the changelog must record the fix.
   "解码器由浏览器挑",
   "重开解码器",
+  // 0.9.3: the Origin check on the live WebSocket. This is the one release
+  // whose subject is a security hole, so the page has to say what the hole was
+  // and what the rule is — a reader who skips it keeps believing that opening
+  // a random tab is safe.
+  "0.9.3",
+  "投屏页只接受自己的来源",
+  "DNS rebinding",
+  "Origin: null",
+  "SECURITY.md",
   // 0.9.2: the package-quality pass. The changelog must record it, because
   // this is the release where the published numbers moved to match the report.
   "0.9.2",

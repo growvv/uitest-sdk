@@ -390,3 +390,4 @@ npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 | [12](https://github.com/growvv/uitest-sdk/blob/master/docs/12-findings-classified.md) | 结论分类汇总 |
 | [13](https://github.com/growvv/uitest-sdk/blob/master/docs/13-stage-log.md) | 阶段记录：0.3.0 → 0.4.0 的交付、发布与架构实测 |
 | [设计](https://github.com/growvv/uitest-sdk/blob/master/docs/superpowers/specs/2026-11-15-uitest-sdk-design.md) | SDK 设计文档 |
+| [SECURITY](https://github.com/growvv/uitest-sdk/blob/master/SECURITY.md) | 安全说明：`live` 暴露什么、Origin 校验挡住什么、哪些不在防护范围内 |

@@ -298,12 +298,14 @@ interface Client {
   socket: Socket;
   texts: Record<string, unknown>[];
   binaries: Buffer[];
+  /** The server answered with something other than 101. */
+  refused: boolean;
   send(message: Record<string, unknown>): void;
   close(): void;
 }
 
 /** A minimal browser: handshake, then collect frames until `predicate` holds. */
-async function connect(port: number, query = ""): Promise<Client> {
+async function connect(port: number, query = "", headers: Record<string, string> = {}): Promise<Client> {
   const socket = createConnection({ host: "127.0.0.1", port });
   await new Promise<void>((resolve, reject) => {
     socket.once("connect", resolve);
@@ -313,12 +315,22 @@ async function connect(port: number, query = ""): Promise<Client> {
   const binaries: Buffer[] = [];
   let buf: Buffer = Buffer.alloc(0);
   let upgraded = false;
+  let refused = false;
   let onUpgrade: (() => void) | null = null;
   socket.on("data", (d) => {
     buf = Buffer.concat([buf, d]);
     if (!upgraded) {
       const end = buf.indexOf("\r\n\r\n");
       if (end < 0) return;
+      const head = buf.subarray(0, end).toString("latin1");
+      if (!head.startsWith("HTTP/1.1 101")) {
+        refused = true;
+        upgraded = true;
+        buf = Buffer.alloc(0);
+        onUpgrade?.();
+        onUpgrade = null;
+        return;
+      }
       upgraded = true;
       buf = buf.subarray(end + 4);
       onUpgrade?.();
@@ -334,12 +346,20 @@ async function connect(port: number, query = ""): Promise<Client> {
   // A browser does not consider itself connected until the 101 arrives; waiting
   // for it keeps "connect then push a frame" from racing the server's attach.
   const upgradedP = new Promise<void>((resolve) => (onUpgrade = resolve));
-  socket.write(buildHandshake(`127.0.0.1:${port}`).replace("GET / HTTP/1.1", `GET /live${query} HTTP/1.1`));
+  const extra = Object.entries(headers)
+    .map(([k, v]) => `${k}: ${v}\r\n`)
+    .join("");
+  socket.write(
+    buildHandshake(`127.0.0.1:${port}`)
+      .replace("GET / HTTP/1.1", `GET /live${query} HTTP/1.1`)
+      .replace("Upgrade: websocket\r\n", `Upgrade: websocket\r\n${extra}`),
+  );
   await upgradedP;
   return {
     socket,
     texts,
     binaries,
+    refused,
     send(message) {
       socket.write(encodeTextFrame(JSON.stringify(message)));
     },
@@ -1054,5 +1074,63 @@ describe("LiveServer: takeover", () => {
     await h.server.close();
     expect(h.lanes()[0]!.ops("touchUp").length).toBeGreaterThan(0);
     expect(h.lanes()[0]!.closed).toBe(true);
+  });
+
+  // ---- Origin and control authority -------------------------------------
+  //
+  // A WebSocket ignores the same-origin policy, so without these checks any
+  // page the person happens to have open can open a socket to the fixed port,
+  // take control, and drive the phone. Each test below is one step of that
+  // attack, asserted to fail.
+
+  it("refuses a WebSocket from another site's origin", async () => {
+    const h = await start();
+    const c = await connect(h.port, "", { Origin: "https://evil.example" });
+    expect(c.refused).toBe(true);
+    expect(c.texts).toEqual([]);
+    c.socket.destroy();
+  });
+
+  it("refuses a null origin, which is a sandboxed frame or a file:// page", async () => {
+    const h = await start();
+    const c = await connect(h.port, "", { Origin: "null" });
+    expect(c.refused).toBe(true);
+    c.socket.destroy();
+  });
+
+  it("accepts the page's own origin", async () => {
+    const h = await start();
+    const c = await connect(h.port, "", { Origin: `http://127.0.0.1:${h.port}` });
+    expect(c.refused).toBe(false);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.close();
+  });
+
+  it("refuses a same-origin request made under a domain name", async () => {
+    // DNS rebinding: the attacker's domain resolves to 127.0.0.1, so Host and
+    // Origin agree on a name this server was never reachable under.
+    const h = await start();
+    const c = await connect(h.port, "", {
+      Host: `attacker.example:${h.port}`,
+      Origin: `http://attacker.example:${h.port}`,
+    });
+    expect(c.refused).toBe(true);
+    c.socket.destroy();
+  });
+
+  it("refuses a takeover from a page that was not served by this server", async () => {
+    // The end-to-end shape of the attack: a visited site opens the socket and
+    // asks for control. The handshake is refused, so nothing it sends — a
+    // takeover, a gesture — can reach the device. The write lane is opened at
+    // startup, so "no lane" is not the signal; "nothing on it" is.
+    const h = await start();
+    const a = await connect(h.port, "", { Origin: "https://evil.example" });
+    expect(a.refused).toBe(true);
+    a.send({ type: "control", action: "take" });
+    a.send({ type: "input", action: "down", x: 10, y: 20 });
+    await sleep(200);
+    expect(a.texts).toEqual([]);
+    expect(h.lanes().flatMap((l) => l.calls)).toEqual([]);
+    a.socket.destroy();
   });
 });

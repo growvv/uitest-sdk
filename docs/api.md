@@ -729,6 +729,10 @@ npx uitest-sdk live [--port 7000] [--privacy on|off] [--no-open] [--no-layout]
 ```
 
 - 默认只听 `127.0.0.1`；`--host` 改成别的地址前想清楚，能连上这个端口的人都能看到手机画面。
+- WebSocket 握手校验 `Origin`：页面必须来自客户端实际拨号的地址（`Origin` 的 host/port 与
+  `Host` 一致，scheme 为 `http:`），回环绑定时拨号名必须是回环名（挡 DNS rebinding），
+  `Origin: null` 拒绝，无 `Origin` 头的非浏览器客户端放行。不通过直接回 403。
+  细节与不在防护范围内的部分见 `SECURITY.md`。
 - 页面开着期间设备被这个进程占着，Agent 命令以 `lease_held` 停下；Ctrl-C 退出时释放。
 - `--privacy off` 只是页面**初始**状态：页面里的开关仍可以随时切换，服务端以它为准。
 - `--no-layout` 不读布局，只投屏；省掉每秒几次 `captureLayout`。
@@ -875,4 +879,4 @@ try {
 
 ---
 
-生成于 2026-11-17。行为与数字对应的源码版本：`0.9.2`。
+生成于 2026-11-18。行为与数字对应的源码版本：`0.9.3`。

@@ -187,8 +187,54 @@ describe("README acceptance figures", () => {
   });
 });
 
+describe("SECURITY.md", () => {
+  it("exists at the repository root and says how to report a vulnerability", () => {
+    // A security policy nobody can find is the same as no policy: npm links
+    // this file from the package page, and a reporter looks for the word
+    // "report" before anything else.
+    expect(existsSync(join(ROOT, "SECURITY.md"))).toBe(true);
+    const doc = read("SECURITY.md");
+    expect(doc).toMatch(/security\/advisories/);
+  });
+
+  it("states the Origin rule the server actually implements", () => {
+    // The doc's value is that it describes this code. If the rule in
+    // `origin.ts` changes and the doc does not, the doc starts promising a
+    // protection the server no longer gives.
+    const doc = read("SECURITY.md");
+    expect(doc).toContain("Origin");
+    expect(doc).toContain("403");
+    // Both halves of the allow-list: the port must match, and a loopback-bound
+    // server must be dialled by a loopback name (that is the rebinding guard).
+    expect(doc.toLowerCase()).toContain("dns rebinding");
+    expect(read("src/live/origin.ts")).toContain("isAddressLiteral");
+  });
+
+  it("does not promise a protection it disclaims", () => {
+    // A doc that says "no runtime dependencies" while package.json has four is
+    // worse than silence. Pin the claim to the manifest.
+    const doc = read("SECURITY.md");
+    const pkg = JSON.parse(read("package.json")) as { dependencies?: Record<string, string> };
+    const deps = Object.keys(pkg.dependencies ?? {});
+    if (doc.includes("没有运行时依赖")) {
+      expect(deps, "SECURITY.md says there are no runtime dependencies").toEqual([]);
+    }
+    // Whatever it does say, every real dependency has to be named.
+    for (const dep of deps) expect(doc).toContain(dep);
+  });
+
+  it("ships inside the published tarball", () => {
+    const files = (JSON.parse(read("package.json")) as { files: string[] }).files;
+    expect(files).toContain("SECURITY.md");
+  });
+
+  it("is linked from the README", () => {
+    expect(read("README.md")).toContain("SECURITY.md");
+  });
+});
+
 describe("npm tarball", () => {
-  it("contains the notice and the changelog", () => {
+  it("contains the notice, the changelog and the security policy", () => {
     const out = execFileSync("npm", ["pack", "--dry-run", "--json"], {
       cwd: ROOT,
       encoding: "utf8",
@@ -199,5 +245,6 @@ describe("npm tarball", () => {
     const paths = pack!.files.map((f) => f.path);
     expect(paths).toContain("NOTICE");
     expect(paths).toContain("CHANGELOG.md");
+    expect(paths).toContain("SECURITY.md");
   }, 120_000);
 });

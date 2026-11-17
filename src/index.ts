@@ -166,6 +166,7 @@ export type { H264Chunk, Rect, UiEvent, UiNode } from "./model.js";
 export {
   UitestError,
   DeviceNotConnectedError,
+  DeviceStateError,
   DaemonStartError,
   AgentProtocolError,
   AgentBusyError,
@@ -177,3 +178,4 @@ export {
   LeaseHeldError,
   UnsupportedError,
 } from "./errors.js";
+export type { DeviceState } from "./errors.js";

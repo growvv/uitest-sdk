@@ -8,6 +8,36 @@
 
 ## [未发布]
 
+## [0.9.3] — 2026-11-18
+
+安全修复。`live` 页面此前会接受**任何**网页发来的 WebSocket：你随便打开的一个标签页，
+本来就能接管你的手机。
+
+### 修复
+
+- **`live` 的 WebSocket 现在校验 `Origin`**。浏览器对 WebSocket 不做同源限制，而 `live` 的端口
+  是固定常量 7000，所以校验必须在服务端做，且是白名单：`Origin` 的 host 与 port 必须等于客户端
+  实际拨号的 `Host`，scheme 必须是 `http:`。绑在回环上时拨号名本身必须是回环名，这条挡的是
+  DNS rebinding；`Origin: null`（沙箱 iframe、`file://` 页面）一律拒绝；没有 `Origin` 头的
+  非浏览器客户端放行（它本来就能自己跑 `hdc`）。拒绝时直接回 **403**，不先升级再断开，会话内容
+  一个字节都不发出去。
+- **被拒绝的连接不再拖住进程**。只调 `socket.end()` 时，对方继续写就永远关不掉；该 socket 一直
+  算在服务的连接数里，`close()` 的回调永不触发。改为写完后在 `finish` 上 `destroy()`，同一场景
+  从「永不关闭」变成 1 ms 关闭。
+- **包入口补上 `DeviceStateError`**。`src/errors.ts` 有 13 个错误类，`src/index.ts` 只导出了 12 个，
+  漏掉的那个在运行时是 `undefined`，`instanceof` 会直接抛。同时导出它的 `DeviceState` 类型。
+
+### 新增
+
+- 根目录 `SECURITY.md`：漏洞报告渠道、`live` 暴露什么、Origin 校验挡住什么、以及**不在**防护
+  范围内的部分（`--privacy off`、屏幕上本来就有的东西、`policy` 只按词汇识别）。随包发布。
+- `test/unit/live-origin.test.ts`（10 条）与 `live-server.test.ts` 里 5 条端到端用例：
+  外部来源、`null`、DNS rebinding、同端口不同 host 全部被拒，自有来源通过。
+- `test/unit/package-entry.test.ts`：从 `errors.ts` 正则提取全部类名逐个核对包入口，另查
+  入口里的每个名字在运行时都不是 `undefined`、且没有重复导出。
+- `test/unit/live-cli-wiring.test.ts`（10 条）：`startLive` 的取租约顺序、会话或服务启动失败时
+  释放设备、`0.0.0.0` / `::` 打印回环地址、`--no-layout` 仍取显示尺寸。
+
 ## [0.9.2] — 2026-11-17
 
 包质量修补：没有新功能，也没有改动任何运行时行为。四处对外文档此前各说各话，现在都以
@@ -46,12 +76,6 @@
 - `--only` 局部跑写 `report-only.md`，不覆盖已提交的完整报告。
 - 无头 Chrome 在 macOS / Linux 上也能被真正结束。
 - 长按证据的裁切留白跟随输入助手条的高度。
-
-### 包内容
-
-- 新增根目录 `NOTICE`：记录 `assets/` 里三个华为签名二进制的版本、大小、md5 与来源，并说明 MIT 只覆盖本仓库源码。
-- 新增根目录 `CHANGELOG.md`（本文件），两者都进 `files`，随包发布。
-- `docs/api.md` 补齐 6 个此前未列出的错误类：`DeviceStateError`、`AppNotFoundError`、`LaunchError`、`ElementNotFoundError`、`LeaseHeldError`、`UnsupportedError`。
 
 ## [0.9.0] — 2026-11-17
 
@@ -199,6 +223,7 @@
 npm 分阶段发布（staged publishing）为新包名预留的占位版本，不包含代码。不要安装。
 
 [未发布]: https://github.com/growvv/uitest-sdk/compare/v0.9.2...HEAD
+[0.9.3]: https://github.com/growvv/uitest-sdk/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/growvv/uitest-sdk/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/growvv/uitest-sdk/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/growvv/uitest-sdk/compare/v0.8.0...v0.9.0

@@ -9,6 +9,7 @@ import { LiveState, type LiveStatus } from "./state.js";
 import { PLAYER_HTML } from "./player.js";
 import { LiveInput } from "./input.js";
 import type { InputSession } from "./input-lane.js";
+import { originAllowed } from "./origin.js";
 import {
   buildUpgradeResponse,
   decodeClientFrames,
@@ -112,6 +113,8 @@ export class LiveServer {
   private readonly layoutMs: number;
   private readonly watchdogMs: number;
   private readonly source: LiveSource;
+  /** The address the server bound, for the Origin check. */
+  private readonly boundHost: string;
 
   private cast: CastClient | null = null;
   private startingCast = false;
@@ -187,6 +190,7 @@ export class LiveServer {
     this.maskByDefault = opts.privacy !== false;
     this.privacy = this.maskByDefault;
     this.source = opts.source;
+    this.boundHost = opts.host ?? "127.0.0.1";
     this.live.onChange((next) => {
       if (next === "live") this.retryIndex = 0;
       this.broadcastText({ type: "state", state: next, reason: this.live.reason ?? null });
@@ -327,10 +331,41 @@ export class LiveServer {
 
   // ---- WebSocket ----------------------------------------------------------
 
+  /**
+   * Answer a WebSocket handshake we will not complete and take the socket down.
+   *
+   * `socket.end()` alone is not enough: a peer that keeps writing to a
+   * half-closed socket keeps it open (Node stops reading, the write side of the
+   * refusal never drains), and the socket stays in the server's connection
+   * count, so `server.close()` never fires its callback. Destroying on flush
+   * makes the refusal final — the status line still reaches a browser, which is
+   * all the client is owed.
+   */
+  private refuseUpgrade(socket: Socket, status: string): void {
+    socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+    socket.once("finish", () => socket.destroy());
+  }
+
   private onUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
     const path = (req.url ?? "/").split("?")[0];
     if (path !== "/live") {
-      socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+      this.refuseUpgrade(socket, "404 Not Found");
+      return;
+    }
+    // A WebSocket is exempt from the same-origin policy, so any page the person
+    // has open can dial this fixed port. The Origin check is what makes the
+    // page the only thing that can: without it a visited site takes control of
+    // the phone. See origin.ts for what each case means.
+    const origin = req.headers.origin;
+    const allowed = originAllowed(typeof origin === "string" ? origin : undefined, {
+      host: this.boundHost,
+      port: this.port,
+      hostHeader: String(req.headers.host ?? ""),
+    });
+    if (!allowed) {
+      // 403 rather than 101: the browser reports the refusal to its own console,
+      // and nothing about the session (frames, layout, client ids) is sent.
+      this.refuseUpgrade(socket, "403 Forbidden");
       return;
     }
     const key = String(req.headers["sec-websocket-key"] ?? "");
@@ -340,7 +375,7 @@ export class LiveServer {
     try {
       response = buildUpgradeResponse(key, protocol);
     } catch {
-      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+      this.refuseUpgrade(socket, "400 Bad Request");
       return;
     }
     socket.setNoDelay(true);
