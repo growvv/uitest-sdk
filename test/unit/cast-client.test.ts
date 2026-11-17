@@ -166,3 +166,36 @@ describe("H264CastClient.start", () => {
     expect(st.calls.filter((c) => c.startsWith("kill -9"))).toEqual([]);
   });
 });
+
+describe("H264CastClient.dispose", () => {
+  it("gives up on an onEnd the device never answers, so shutdown cannot hang", async () => {
+    // The acceptance run hung for thirty minutes with the live HTTP port still
+    // listening: `close()` waited on `dispose()`, `dispose()` awaited the
+    // `onEnd` callback, and after an eleven-minute stream the daemon was gone.
+    // gRPC does not time out a unary call on a channel stuck mid-handshake, so
+    // the await had no end. Shutdown must finish on its own and still clean up
+    // the daemon and the forward.
+    const { hdc, st } = fakeHdc();
+    const client = await H264CastClient.start(hdc, { mode: "stream" });
+    let closed = false;
+    (client as unknown as {
+      stub: { onEnd(req: object, cb: (e: Error | null) => void): void; close(): void };
+    }).stub = {
+      onEnd() {
+        // The device is gone: the callback never runs.
+      },
+      close() {
+        closed = true;
+      },
+    };
+
+    const started = performance.now();
+    await client.dispose();
+    const ms = performance.now() - started;
+
+    expect(ms).toBeLessThan(9000);
+    expect(closed).toBe(true);
+    expect(st.calls).toContain("kill -9 2000");
+    expect(st.removed).toHaveLength(1);
+  }, 15_000);
+});

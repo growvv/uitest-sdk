@@ -29,6 +29,13 @@ const STREAM_SOCKET = "scrcpy_grpc_socket";
 const RECORD_SOCKET = "screen_record_grpc_socket";
 /** Hardcoded in the extension binary; there is no CLI flag to change it. */
 const DEVICE_RECORD_PATH = "/data/local/tmp/mytest.mp4";
+/**
+ * How long `dispose()` waits for the device to acknowledge `onEnd`.
+ *
+ * A recording is flushed by then, or the daemon is gone and no acknowledgement
+ * is coming; either way the caller must not wait longer than this.
+ */
+const ON_END_TIMEOUT_MS = 8000;
 
 interface ReplyMessage {
   data: string;
@@ -242,10 +249,22 @@ export class H264CastClient implements CastClient {
     // In record mode the encoder is start/stop driven: `onStart` runs the muxer
     // and `onEnd` closes it, writing the file. `start()` already opened the
     // recording, so `onEnd` alone completes it.
+    //
+    // The wait is bounded: a unary gRPC call on a channel that is stuck
+    // mid-handshake is never timed out, and after a long stream the daemon can
+    // be gone. Waiting for that callback with no end hung `LiveServer.close()`
+    // for half an hour, leaving the live HTTP port listening. A stop that
+    // cannot complete is a recording that cannot be collected either — the
+    // cleanup below (kill, pull) still runs, and `stub.close()` cancels the
+    // call.
     await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, ON_END_TIMEOUT_MS);
       (this.stub as unknown as {
         onEnd(req: object, cb: (e: Error | null) => void): void;
-      }).onEnd({}, () => resolve());
+      }).onEnd({}, () => {
+        clearTimeout(timer);
+        resolve();
+      });
     }).catch(() => undefined);
 
     this.recordCall?.cancel();
