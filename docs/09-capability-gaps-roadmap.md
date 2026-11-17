@@ -457,6 +457,16 @@ npm `uitest-sdk@0.9.1`、tag `v0.9.1`、GitHub Release 与官网同一时间上�
 验收：`acceptance:handoff` 16/16、`acceptance.ts` 能力矩阵 16/16，16 张截图逐张核对
 （全部是知乎公开回答页，无锁屏、无通知栏、无账号或聊天内容）。
 
+### 0.9.2（已发，2026-11-17）
+
+npm `uitest-sdk@0.9.2`、tag `v0.9.2`、GitHub Release 与官网同一时间上线。没有功能改动，只补
+包的对外质量：新增根目录 `NOTICE`（三个华为签名二进制的版本、大小、md5、来源，并说明 MIT
+不覆盖它们）与 `CHANGELOG.md`（0.1.0 → 0.9.1 的完整记录），两者都进 `files`；`docs/api.md`
+的错误表补齐漏掉的 6 个类（原来只列 7 个，实际导出 13 个）；官网路线图删掉 0.9.0 已发的
+「`live` 页的点击交互」；README、`docs/api.md` 与官网的截图耗时统一为验收报告支持的
+`109–222 ms`（原来的 `107–193 ms` 上界低于实测 218 ms），README 的验收日期与 UI 树节点数也
+改成报告里的数字。新增 `test/unit/package-docs.test.ts`，把这些一致性全部变成断言。
+
 ### 下一次发版的步骤
 
 1. `npm version <x.y.z>`，并把 `docs/13-stage-log.md` 里所有 `（未发版）` 改成 `（x.y.z）`；

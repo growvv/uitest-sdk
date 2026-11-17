@@ -25,6 +25,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-9-2">0.9.2 · 对外文档与二进制声明</a>
       <a href="#v0-9-1">0.9.1 · 接管输入的八处修补</a>
       <a href="#v0-9-0">0.9.0 · 接管：在浏览器里操作手机</a>
       <a href="#v0-8-0">0.8.0 · 截图与录屏、多实例</a>
@@ -43,6 +44,35 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-9-2">
+        <div class="release-head">
+          <h2>0.9.2</h2>
+          <span class="release-date">2026-11-17</span>
+          <span class="release-tag">对外文档与二进制声明</span>
+        </div>
+        <p>没有功能改动，也没有动运行时。修的是包本身：四处对外文档此前各说各话，现在都以验收报告为准，并各有一条测试盯着。</p>
+
+        <h3>打包的三个二进制有了声明</h3>
+        <ul>
+          <li>新增根目录 <code>NOTICE</code>：逐条列出 <code>assets/</code> 里三个华为签名二进制的版本、大小、md5 与来源路径。</li>
+          <li>写明 MIT 只覆盖本仓库源码，二进制不随 MIT 授权、也不提供担保；不想再分发时删掉 <code>assets/</code> 下那三个文件，用 <code>Device.connect({ extensionDir })</code> 指向自己的副本。</li>
+          <li>新增根目录 <code>CHANGELOG.md</code>，覆盖 0.1.0 到 0.9.1。两个文件都进 <code>files</code>，随包发布。</li>
+        </ul>
+
+        <h3>错误表补齐，路线图删掉已发布的功能</h3>
+        <ul>
+          <li><code>docs/api.md</code> 的错误表原来只列 7 个类，源码导出了 13 个。补上 <code>DeviceStateError</code>、<code>AppNotFoundError</code>、<code>LaunchError</code>、<code>ElementNotFoundError</code>、<code>LeaseHeldError</code>、<code>UnsupportedError</code>。</li>
+          <li>本页的「计划中」删掉 <code>live</code> 页的点击交互——0.9.0 已发。检查脚本新增一条否定断言：这一段不得再出现已发布的功能。原来的检查只问「该有的在不在」，没有一条问「不该有的还在不在」。</li>
+        </ul>
+
+        <h3>实测数字对齐验收报告</h3>
+        <ul>
+          <li>截图耗时统一为 <strong>109–222 ms</strong>。原来的 <code>107–193 ms</code> 上界 193 低于最新实测的 218 ms，等于告诉读者 SDK 比实际快。</li>
+          <li>README 的验收日期改为 <code>2026-11-17</code>，UI 树节点数改为 <code>~180~430</code>（最新实测 349 节点）。</li>
+          <li>测试断言的是「公开区间必须覆盖报告里的实测值」，不要求各页数字相同——bench 表与验收表来自不同轮次，本来就该不同。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-9-1">
         <div class="release-head">
@@ -458,7 +488,6 @@
           <span class="release-tag">未发布 · 不是承诺</span>
         </div>
         <ul>
-          <li><code>live</code> 页的点击交互：画布上点一下等于在设备上点一下。要先定清楚它与租约、接管的规则——页面开着期间 <code>live</code> 进程持有设备租约，点击天然是「持租约的人」在操作，但页面必须把这件事说出来。</li>
           <li><code>perfmonitor.so</code>（HTTP 9999）性能指标接入。</li>
           <li>录制参数在设备侧可配置（目前文件路径写死在扩展里）。</li>
           <li>音频转发：需要自建 HAP 采集，得用使用者自己的华为账号签名。</li>

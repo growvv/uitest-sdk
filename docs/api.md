@@ -150,7 +150,7 @@ await dev.agent.triggerKey(keyCode);      // hypium Driver.triggerKey
 ### 截图
 
 ```ts
-const jpeg = await dev.agent.captureScreen();          // 608×1344 JPEG Buffer，107–193 ms
+const jpeg = await dev.agent.captureScreen();          // 608×1344 JPEG Buffer，109–222 ms
 const jpeg2 = await dev.agent.captureScreen({ scale: 1 }); // 1.1.10 上 scale 无效，仍返回 608×1344
 ```
 
@@ -546,6 +546,15 @@ for await (const chunk of cast.stream()) {
 | `AgentProtocolError` | `EPROTO` / `ETIMEDOUT` / `EBADJSON` / `ENOWINDOW` / `ENOBOUNDS` / `EBADARG` | 设备返回异常、请求超时、输出不是 JSON、找不到窗口/边界、参数非法 |
 | `AgentBusyError` | `EBUSY` | 设备全局锁被其它进程占着且重试耗尽；或该设备已有采集流（立即失败，不等待） |
 | `AgentConnectionError` | `ECONN` | 连接不可用、请求超时后连接被丢弃、关闭后继续调用 |
+| `DeviceStateError` | `ENODEVICE` / `EOFFLINE` / `EUNAUTHORIZED` | `DeviceNotConnectedError` 的子类：设备没插、离线、或没授权本机调试。带 `state`（`device_offline` / `device_needs_setup`），消息里给出下一步该做什么 |
+| `AppNotFoundError` | `ENOAPP` / `EAMBIGUOUS` | 应用没装、按名字找不到、或名字匹配到多个 bundle（`EAMBIGUOUS` 会列出候选） |
+| `LaunchError` | `ENOABILITY` / `ELAUNCH` | 应用没有入口 ability；或 `aa start` 失败（`aa` 可能退出码为 0 却在输出里报错） |
+| `ElementNotFoundError` | `ENOTFOUND` | `require()` 的组件选择器没有匹配到任何节点，消息里带选择器 |
+| `LeaseHeldError` | `ELEASE` | 设备租约在别的任务手里且对方还活着；或用 `--force` 之外的方式想抢 |
+| `UnsupportedError` | `EUNSUPPORTED` | 方法在设备上不存在，或这台设备/ABI 不支持该能力；消息说明原因，不静默降级 |
+
+`DeviceStateError.state` 与 CLI 的状态词同源（`device_offline` / `device_needs_setup`），
+所以脚本里判断设备状态时不用解析英文消息。
 
 ## 11. 并发与生命周期
 
@@ -866,4 +875,4 @@ try {
 
 ---
 
-生成于 2026-11-17。行为与数字对应的源码版本：`0.9.1`。
+生成于 2026-11-17。行为与数字对应的源码版本：`0.9.2`。

@@ -89,8 +89,8 @@ for (const [re, what] of forbidden) {
 }
 
 // ------------------------------------------------------------ section text
-function sectionHtml(id) {
-  const m = html.match(new RegExp(`<section[^>]*\\bid\\s*=\\s*"${id}"[^>]*>([\\s\\S]*?)</section>`));
+function sectionHtml(id, text = html) {
+  const m = text.match(new RegExp(`<section[^>]*\\bid\\s*=\\s*"${id}"[^>]*>([\\s\\S]*?)</section>`));
   return m ? m[1] : "";
 }
 
@@ -211,7 +211,7 @@ for (const gesture of ["点击", "长按", "滚动", "双指缩放", "键盘"]) 
 
 // ------------------------------------------------------- task 6: numbers
 const bench = sectionHtml("bench");
-for (const needle of ["107–193 ms", "21–50 ms", "386–640 ms", "15–89 fps", "10–16 fps"]) {
+for (const needle of ["109–222 ms", "21–50 ms", "386–640 ms", "15–89 fps", "10–16 fps"]) {
   if (!bench.includes(needle)) fail(`#bench 缺少实测数字「${needle}」`);
 }
 // The comparison with the hdc CLI and with the other capture methods is the
@@ -590,6 +590,11 @@ for (const needle of [
   // screen on GPU-less machines, and the changelog must record the fix.
   "解码器由浏览器挑",
   "重开解码器",
+  // 0.9.2: the package-quality pass. The changelog must record it, because
+  // this is the release where the published numbers moved to match the report.
+  "0.9.2",
+  "对外文档与二进制声明",
+  "NOTICE",
   // 0.9.1: the fixes the branch review and the release run turned up. The
   // changelog must record them, because two of them changed what a person
   // sees: their text no longer disappears on release.
@@ -608,6 +613,18 @@ for (const needle of [
   "UnsupportedError",
 ]) {
   if (!logHtml.includes(needle)) fail(`changelog.html 缺少「${needle}」`);
+}
+
+// The roadmap is the one section whose content expires on its own. 0.9.0
+// shipped the takeover and this list kept advertising it for a whole release,
+// because every check above only asks that things be present. This one asks
+// that a shipped feature be gone.
+const roadmap = sectionHtml("roadmap", logHtml);
+if (!roadmap) fail("changelog.html has no #roadmap section");
+for (const gone of ["点击交互", "画布上点一下"]) {
+  if (roadmap.includes(gone)) {
+    fail(`#roadmap still lists 「${gone}」 as planned; it shipped in 0.9.0`);
+  }
 }
 for (const href of ['href="docs.html"', 'href="changelog.html"', 'href="api.html"']) {
   if (!html.includes(href)) fail(`index.html 没有链接到 ${href}`);

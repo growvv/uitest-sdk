@@ -1,6 +1,6 @@
 {
   "name": "uitest-sdk",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "HarmonyOS uitest SDK and agent CLI: UI automation, screenshots, H.264 casting, MP4 recording, plus an MCP server and skill for coding agents",
   "license": "MIT",
   "repository": {
@@ -36,7 +36,9 @@
     "dist",
     "assets",
     "docs/api.md",
-    "examples/quickstart.mjs"
+    "examples/quickstart.mjs",
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20"

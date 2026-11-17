@@ -1,0 +1,63 @@
+uitest-sdk — third-party binaries bundled with this package
+===========================================================
+
+This file records what ships in `assets/` beyond this repository's own
+source code. It is a factual inventory, not a licence grant.
+
+1. What the MIT licence covers
+------------------------------
+
+`LICENSE` (MIT) covers the source code of this repository: everything under
+`src/`, `scripts/`, `test/`, `site/`, `examples/` and the prose under `docs/`.
+
+It does not cover the binaries listed in section 2. They are not built from
+this repository's source.
+
+2. The binaries
+---------------
+
+All three are device-side extensions produced and signed by Huawei
+Technologies as part of DevEco Studio / DevEco Testing. They are redistributed
+here unmodified so that a caller can run the SDK against a device without
+first locating a DevEco installation. The SDK loads them over `hdc`; it does
+not link against them.
+
+| ABI | File | Version | Bytes | MD5 |
+|---|---|---|---|---|
+| arm64 | `agent.so` | 1.1.10 | 600246 | `ebd787f91a55c968d837f09e80ad10cd` |
+| arm64 | `libscreen_casting.z.so` | 6.8-20260801 | 247989 | `8c8df9a96af21aac71d5091ffa0b1477` |
+| x86_64 | `agent.so` | 1.1.9 | 1460181 | `c094217d5ab7f8eaefebbb90307c3a3b` |
+
+Where each was obtained (see `assets/manifest.json` for the machine-readable
+form):
+
+- arm64 `agent.so` — `DevEco Testing/python/Lib/site-packages/devicetest/res/prototype/native/uitest_agent_v1.1.10.so`
+- arm64 `libscreen_casting.z.so` — from the hscrcpy server (HOScrcpy 2.12.9 build)
+- x86_64 `agent.so` — `@deveco/deveco-cli/node_modules/@deveco/deveco-cli-common/src/resources/uitest/uitest_agent_v1.1.9.x86_64.so`
+
+The casting binary's provenance is examined at length in
+`docs/09-capability-gaps-roadmap.md` §1.6. The bundled 6.8 build was committed
+to the hscrcpy repository as "add HOScrcpy 2.12.9 server SO 6.8/6.9-20260801";
+the 7.0 build discussed there is a different file and is not bundled here. The
+repository (hscrcpy) is MIT; that licence covers the repository's source, not
+the signed binary inside it.
+
+3. Status of the binaries
+-------------------------
+
+No licence, express or implied, is granted for the binaries in section 2.
+They remain the property of Huawei Technologies and are subject to whatever
+terms accompany DevEco Studio and DevEco Testing. They are included solely
+for interoperability: without them the SDK has nothing to talk to.
+
+Because the binaries are signed (the device's XPM check rejects unsigned
+`.so` files — see `docs/06-signing-xpm.md`), they cannot be rebuilt or
+modified. If you would rather not redistribute them, delete the three files
+under `assets/` and pass your own copies via `Device.connect({ extensionDir })`.
+
+4. No warranty
+--------------
+
+The package is provided "as is", without warranty of any kind, as stated in
+`LICENSE`. Nothing in this file extends, limits or replaces the terms that
+govern DevEco Studio or DevEco Testing.

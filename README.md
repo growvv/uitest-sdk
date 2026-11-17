@@ -43,8 +43,8 @@ try {
 | 原子触摸 | `agent.touchDown/Move/Up(x, y)` | 毫秒级 |
 | 文本输入 | `agent.inputText(x, y, text)` | 730~1540 ms（hypium 侧） |
 | 按键 | `agent.triggerKey(keyCode)` | 毫秒级 |
-| UI 树 | `agent.captureLayout()` | ~180~250 节点 |
-| 整屏截图 | `agent.captureScreen()` | **107~193 ms** |
+| UI 树 | `agent.captureLayout()` | ~180~430 节点 |
+| 整屏截图 | `agent.captureScreen()` | **109~222 ms** |
 | 窗口截图 | `agent.cropToWindow({ bundleName })` | 采集 + 裁剪 |
 | MJPEG 流 | `agent.streamScreen({ scale })` | 10~16 fps（需画面变化） |
 | H.264 投流 | `dev.createCast({ mode: "stream" })` | 15~89 fps（随 `frameRate`） |
@@ -332,6 +332,10 @@ Markdown 版本在 [`docs/api.md`](https://github.com/growvv/uitest-sdk/blob/mas
 | arm64 | `libscreen_casting.z.so` | 6.8-20260801 |
 | x86_64 | `agent.so` | 1.1.9 |
 
+这三个文件是华为 DevEco Studio / DevEco Testing 生成并签名的设备侧扩展，不是本仓库的源码，
+MIT 许可不覆盖它们。版本、大小、md5 与来源逐条记在 [`NOTICE`](https://github.com/growvv/uitest-sdk/blob/master/NOTICE)；
+不想要这份再分发，删掉 `assets/` 下这三个文件，用自己的副本即可（见下）。
+
 用自己的副本：
 
 ```ts
@@ -361,7 +365,7 @@ npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
 **一个中性的公开页面**（设置首页、知乎热榜这类）。脚本自己在截图前会检查屏幕是否锁着并尝试
 解锁，解不开（有 PIN）就中止而不是把通知栏拍下来；但页面上显示什么它管不了，提交前逐张看过。
 
-最新一次真机验收：**16/16 PASS**（BRA-AL00，API 26，2026-11-14），报告在
+最新一次真机验收：**16/16 PASS**（BRA-AL00，API 26，2026-11-17），报告在
 [`docs/acceptance/report.md`](https://github.com/growvv/uitest-sdk/blob/master/docs/acceptance/report.md)，
 含每个能力的截图、日志与可独立运行的最小复现脚本。报告覆盖的是投流、录制、布局与输入这些
 原有能力；0.7.x 新增的 `inspect` / `live` / `dev.files` 不在其中，它们的实测记录在

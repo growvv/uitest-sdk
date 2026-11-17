@@ -956,3 +956,29 @@ artifact，`deploy-pages` 看到两个同名 artifact 直接报错。正确做�
 
 `git diff --ignore-cr-at-eol docs/acceptance/` 的差异只有耗时、节点数与录制文件大小，
 这正是发版清单要求的形态。
+
+### L. 0.9.2：包质量五项，不发设备
+
+0.9.2 不动运行时。复盘时对着 `npm pack` 的产物逐项检查，发现五处对外文档各说各话，全部修掉
+并各留一条断言（`test/unit/package-docs.test.ts`，15 条）：
+
+1. **`docs/api.md` 只列了 7 个错误类，源码导出 13 个。** 补上 `DeviceStateError`、
+   `AppNotFoundError`、`LaunchError`、`ElementNotFoundError`、`LeaseHeldError`、
+   `UnsupportedError`，并把 `DeviceStateError.state` 与 CLI 状态词同源这件事写清楚。
+2. **`assets/` 里三个华为签名二进制在裸 MIT 下发布，没有任何说明。** 新增根目录 `NOTICE`：
+   逐条列出版本、大小、md5、来源路径，写明 MIT 只覆盖本仓库源码、二进制不随 MIT 授权、
+   不提供担保，以及不想再分发时删掉 `assets/*` 改用 `extensionDir`。
+3. **没有 `CHANGELOG.md`。** 新增，覆盖 0.1.0 → 0.9.1，按 Keep a Changelog 组织；测试断言
+   `package.json` 的版本必须出现在里面，所以下一次 bump 忘记写条目会直接失败。
+4. **官网路线图还挂着 0.9.0 已发的「`live` 页的点击交互」。** 删掉，并在
+   `scripts/check-site.mjs` 里加**否定断言**——这一段不得再出现 `点击交互` / `画布上点一下`。
+   原来的检查只问「该有的在不在」，没有任何一条问「不该有的还在不在」，所以它活过了一整个版本。
+   这条断言用注入旧文案的方式验证过会真的失败。
+5. **README 的验收数字落后两份报告。** 日期 `2026-11-14` → `2026-11-17`；截图 `107~193 ms` →
+   `109~222 ms`（上界 193 低于最新实测 218，等于宣称比实际快）；UI 树 `~180~250` →
+   `~180~430`（最新实测 349 节点）。同一处 `docs/api.md` 与官网两处（bench 表、能力卡）也一起改，
+   `check-site` 的 needle 同步。测试的做法是「published range 必须覆盖报告里的实测值」，
+   而不是要求各页数字相同——bench 表与验收表来自不同轮次，本来就该不同。
+
+全套 803 passed，两个 tsconfig 干净，`check-site.mjs` 通过，`npm pack --dry-run` 里能看到
+`NOTICE` 与 `CHANGELOG.md`。

@@ -1,0 +1,203 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+
+/**
+ * The package's outward-facing documents have to agree with the code.
+ *
+ * Every check here exists because one of them had already drifted: the docs
+ * listed 7 of the 13 error classes, the site still advertised a feature 0.9.0
+ * had shipped, and the tarball carried Huawei-signed binaries under a bare MIT
+ * licence with no notice at all. These assertions are what keeps them honest
+ * without a person re-reading them each release.
+ */
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+
+const errorsSource = read("src/errors.ts");
+const apiDoc = read("docs/api.md");
+
+/** Every `export class XError` in the source, in declaration order. */
+function errorClassNames(): string[] {
+  return [...errorsSource.matchAll(/^export class (\w+Error)\b/gm)].map((m) => m[1]!);
+}
+
+describe("docs/api.md · error table", () => {
+  it("documents every error class the package exports", () => {
+    const names = errorClassNames();
+    expect(names.length).toBeGreaterThan(10);
+    const missing = names.filter((name) => !apiDoc.includes(name));
+    expect(missing, `docs/api.md does not mention: ${missing.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("CHANGELOG.md", () => {
+  it("exists at the repository root", () => {
+    expect(existsSync(join(ROOT, "CHANGELOG.md"))).toBe(true);
+  });
+
+  it("has an entry for the version in package.json", () => {
+    // A release that bumps the version and forgets the changelog ships a
+    // package whose npm page shows no record of what changed.
+    const version = (JSON.parse(read("package.json")) as { version: string }).version;
+    expect(read("CHANGELOG.md")).toContain(version);
+  });
+
+  it("ships inside the published tarball", () => {
+    const files = (JSON.parse(read("package.json")) as { files: string[] }).files;
+    expect(files).toContain("CHANGELOG.md");
+  });
+});
+
+describe("NOTICE", () => {
+  it("exists and names the three bundled binaries", () => {
+    expect(existsSync(join(ROOT, "NOTICE"))).toBe(true);
+    const notice = read("NOTICE");
+    for (const name of ["agent.so", "libscreen_casting.z.so"]) {
+      expect(notice).toContain(name);
+    }
+    // MIT covers this repository's source. Saying so is the whole point: the
+    // bundled extensions are Huawei's signed builds, and the licence does not
+    // reach them.
+    expect(notice).toMatch(/MIT/);
+  });
+
+  it("ships inside the published tarball", () => {
+    const files = (JSON.parse(read("package.json")) as { files: string[] }).files;
+    expect(files).toContain("NOTICE");
+  });
+
+  it("lists the same versions as assets/manifest.json", () => {
+    const manifest = JSON.parse(read("assets/manifest.json")) as Record<
+      string,
+      Record<string, { version: string }>
+    >;
+    const notice = read("NOTICE");
+    for (const abi of Object.keys(manifest)) {
+      for (const [file, meta] of Object.entries(manifest[abi]!)) {
+        expect(notice, `${abi}/${file} version`).toContain(meta.version);
+      }
+    }
+  });
+
+  it("states a checksum that matches the file it ships", () => {
+    // The NOTICE's whole value is that a reader can check what they got. A
+    // stale md5 would tell them the download is corrupt when it is not.
+    const manifest = JSON.parse(read("assets/manifest.json")) as Record<
+      string,
+      Record<string, { size: number; md5: string }>
+    >;
+    const notice = read("NOTICE");
+    for (const abi of Object.keys(manifest)) {
+      for (const [file, meta] of Object.entries(manifest[abi]!)) {
+        const bytes = readFileSync(join(ROOT, "assets", abi, file));
+        expect(bytes.length, `${abi}/${file} size`).toBe(meta.size);
+        const md5 = createHash("md5").update(bytes).digest("hex");
+        expect(md5, `${abi}/${file} md5 in manifest`).toBe(meta.md5);
+        expect(notice, `${abi}/${file} md5 in NOTICE`).toContain(meta.md5);
+      }
+    }
+  });
+});
+
+describe("site roadmap", () => {
+  // `live` takeover shipped in 0.9.0 and the site kept listing it as planned.
+  // A public page promising work that already exists is a false statement,
+  // and it survived a release because nothing checked the section's content.
+  it("does not list the live takeover as still planned", () => {
+    const changelog = read("site/changelog.html");
+    const section = /<section[^>]*id="roadmap"[^>]*>([\s\S]*?)<\/section>/.exec(changelog)?.[1] ?? "";
+    expect(section).not.toBe("");
+    expect(section).not.toContain("页的点击交互");
+    expect(section).not.toContain("画布上点一下等于在设备上点一下");
+  });
+});
+
+describe("README acceptance figures", () => {
+  // The README is the package's front door on npm and GitHub. Its acceptance
+  // date and screenshot timing had both gone stale while the report they cite
+  // was regenerated twice.
+  it("cites the date of the report it points at", () => {
+    const readme = read("README.md");
+    const report = read("docs/acceptance/report.md");
+    const generated = /生成时间：(\d{4}-\d{2}-\d{2})/.exec(report)?.[1];
+    expect(generated).toBeTruthy();
+    expect(readme).toContain(generated!);
+  });
+
+  it("does not quote a screenshot timing the report contradicts", () => {
+    // The report is the measurement of record. A range whose upper bound is
+    // below the measured value tells a reader the SDK is faster than it is.
+    const report = read("docs/acceptance/report.md");
+    const measured = /`captureScreen` \| ✅ (\d+) ms/.exec(report)?.[1];
+    expect(measured).toBeTruthy();
+    const readme = read("README.md");
+    const claim = /\| 整屏截图 \| `agent\.captureScreen\(\)` \| \*\*(\d+)~(\d+) ms\*\* \|/.exec(readme);
+    expect(claim, "README no longer states a captureScreen range").toBeTruthy();
+    const high = Number(claim![2]);
+    expect(high).toBeGreaterThanOrEqual(Number(measured));
+  });
+
+  it("quotes a range docs/api.md's captureScreen line agrees with", () => {
+    const lines = apiDoc.split("\n").filter((l) => l.includes("dev.agent.captureScreen()"));
+    expect(lines.length).toBeGreaterThan(0);
+    const ranges = lines.flatMap((l) =>
+      [...l.matchAll(/(\d+)[–~-](\d+) ms/g)].map((m) => [Number(m[1]), Number(m[2])] as const),
+    );
+    expect(ranges.length, `no captureScreen line states a timing: ${lines.join(" | ")}`).toBeGreaterThan(0);
+    const measured = Number(/`captureScreen` \| ✅ (\d+) ms/.exec(read("docs/acceptance/report.md"))?.[1]);
+    for (const [low, high] of ranges) {
+      expect(high).toBeGreaterThanOrEqual(measured);
+      expect(low).toBeLessThanOrEqual(measured);
+    }
+  });
+
+  it("keeps every published screenshot range wide enough for the current report", () => {
+    // The bench table and the capability table are a few hundred lines apart
+    // and come from different runs, so they legitimately differ. What they may
+    // not do is exclude the latest measurement — that is how "107–193 ms"
+    // survived two regenerated reports.
+    const site = read("site/index.html");
+    const measured = Number(/`captureScreen` \| ✅ (\d+) ms/.exec(read("docs/acceptance/report.md"))?.[1]);
+    const ranges = [...site.matchAll(/整屏截图[^\n]*?(\d+)–(\d+) ms/g)].map(
+      (m) => [Number(m[1]), Number(m[2])] as const,
+    );
+    expect(ranges.length).toBeGreaterThan(1);
+    for (const [low, high] of ranges) {
+      expect(low, `a range starting at ${low} ms excludes the report's ${measured} ms`).toBeLessThanOrEqual(measured);
+      expect(high, `a range ending at ${high} ms excludes the report's ${measured} ms`).toBeGreaterThanOrEqual(measured);
+    }
+  });
+
+  it("keeps the UI-tree node count wide enough for the current report", () => {
+    // Same table, same failure mode: the count moves with whatever screen the
+    // acceptance run lands on, and the README's range was written for a lighter
+    // page than the one the report now measures.
+    const report = read("docs/acceptance/report.md");
+    const measured = Number(/`captureLayout` \| ✅ (\d+) nodes/.exec(report)?.[1]);
+    expect(measured).toBeGreaterThan(0);
+    const claim = /^\| UI 树 \| `agent\.captureLayout\(\)` \| ~(\d+)~(\d+) 节点 \|$/m.exec(read("README.md"));
+    expect(claim, "README no longer states a captureLayout node range").toBeTruthy();
+    expect(Number(claim![1])).toBeLessThanOrEqual(measured);
+    expect(Number(claim![2])).toBeGreaterThanOrEqual(measured);
+  });
+});
+
+describe("npm tarball", () => {
+  it("contains the notice and the changelog", () => {
+    const out = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      shell: process.platform === "win32",
+    });
+    const [pack] = JSON.parse(out) as Array<{ files: Array<{ path: string }> }>;
+    const paths = pack!.files.map((f) => f.path);
+    expect(paths).toContain("NOTICE");
+    expect(paths).toContain("CHANGELOG.md");
+  }, 120_000);
+});

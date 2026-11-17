@@ -3,6 +3,7 @@
     "agent.so": {
       "version": "1.1.10",
       "size": 600246,
+      "md5": "ebd787f91a55c968d837f09e80ad10cd",
       "source": "DevEco Testing/python/Lib/site-packages/devicetest/res/prototype/native/uitest_agent_v1.1.10.so"
     },
     "libscreen_casting.z.so": {
@@ -16,6 +17,7 @@
     "agent.so": {
       "version": "1.1.9",
       "size": 1460181,
+      "md5": "c094217d5ab7f8eaefebbb90307c3a3b",
       "source": "@deveco/deveco-cli/node_modules/@deveco/deveco-cli-common/src/resources/uitest/uitest_agent_v1.1.9.x86_64.so"
     }
   }
