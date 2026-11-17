@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Policy, DEFAULT_CONFIRM } from "../../src/policy.js";
+import { Policy, DEFAULT_CONFIRM } from "../../src/governance/policy.js";
 
 const policy = (opts = {}) => new Policy(opts);
 

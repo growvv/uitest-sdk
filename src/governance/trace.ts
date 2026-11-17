@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { deviceTag } from "./transport/tag.js";
+import { deviceTag } from "../transport/tag.js";
 
 /** A stable, non-reversible device identifier. The raw serial never leaves the host. */
 export { deviceTag };

@@ -5,8 +5,8 @@ import { join } from "node:path";
 import jpeg from "jpeg-js";
 import { CommandRunner, COMMANDS } from "../../src/commands.js";
 import { Session, tagOf } from "../../src/session.js";
-import { holdDevice, resumeDevice } from "../../src/hold.js";
-import { readLease } from "../../src/lease.js";
+import { holdDevice, resumeDevice } from "../../src/governance/hold.js";
+import { readLease } from "../../src/governance/lease.js";
 import type { UiNode } from "../../src/transport/model.js";
 
 const page = (text: string): UiNode => ({
@@ -258,6 +258,21 @@ describe("CommandRunner", () => {
     expect(r.text).toContain("Ask the person to unlock it");
     expect(r.text).not.toContain("saved:");
     expect(r.data?.image).toBeNull();
+  });
+
+  it("lists approvals waiting for a person in status", async () => {
+    await withRunner(async (runner) => {
+      const asked = await runner.run("tap", { text: "付款" });
+      expect(asked.status).toBe("approval_pending");
+      const id = String(asked.data?.approvalId);
+
+      const r = await runner.run("status", {});
+      expect(r.status).toBe("settled");
+      expect(r.text).toContain(`pending: ${id} tap payments com.demo expires-in-`);
+      const pending = r.data?.pending as { id: string; status: string }[];
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({ id, status: "pending" });
+    });
   });
 
   it("stops a live session when a person takes the device, and continues after resume", async () => {

@@ -26,7 +26,7 @@ import { Device } from "../src/driver/device.js";
 import { HdcRunner } from "../src/transport/hdc.js";
 import { startLive, liveOptions } from "../src/live/cli.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../src/cast/ws.js";
-import { deviceTag } from "../src/trace.js";
+import { deviceTag } from "../src/governance/trace.js";
 import { assertCapturable, assertShadeClosed } from "./acceptance.js";
 import {
   RestartBudget,

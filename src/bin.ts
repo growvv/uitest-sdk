@@ -4,7 +4,7 @@ import { main, parseArgv } from "./cli-main.js";
 import { agentConnected, connectAgent, mcpEntry } from "./connect.js";
 import type { AgentId } from "./connect.js";
 import { Device } from "./driver/device.js";
-import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevice } from "./hold.js";
+import { HOLD_TASK, handoffDevice, holdDevice, readHold, resolveTag, resumeDevice } from "./governance/hold.js";
 import { installSkill, refreshSkill } from "./install-skill.js";
 import { liveMain } from "./live/cli.js";
 import { McpServer } from "./mcp.js";

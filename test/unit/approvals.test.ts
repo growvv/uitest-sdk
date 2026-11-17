@@ -1,83 +1,163 @@
 import { describe, it, expect } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Approvals, Grants } from "../../src/approvals.js";
+import { Approvals, Grants } from "../../src/governance/approvals.js";
 
-const step = { command: "tap", args: { ref: 3 }, signature: "button|删除|1,2,3,4" };
+const step = { command: "tap", args: { text: "删除" }, signature: "sig-1" };
+
+function store(opts: { ttlMs?: number; now?: () => number } = {}): Approvals {
+  return new Approvals({ dir: mkdtempSync(join(tmpdir(), "uitest-appr-")), ...opts });
+}
+
+describe("approval decisions", () => {
+  it("cannot be consumed by the agent alone", () => {
+    const a = store();
+    const pending = a.request(step, "deletes", { bundle: "com.demo", task: "t" });
+    expect(a.consume(pending.id, step).kind).toBe("pending");
+  });
+
+  it("proceeds once after a person allows it", () => {
+    const a = store();
+    const pending = a.request(step, "deletes", { bundle: "com.demo", task: "t" });
+    expect(a.decide(pending.id, "allow", { by: "cli" }).kind).toBe("allowed");
+    expect(a.consume(pending.id, step)).toMatchObject({ kind: "approved", rule: "deletes" });
+    expect(a.consume(pending.id, step).kind).toBe("denied");
+  });
+
+  it("denies after a person denies, and survives a reload", () => {
+    const dir = mkdtempSync(join(tmpdir(), "uitest-appr-"));
+    const first = new Approvals({ dir });
+    const pending = first.request(step, "deletes");
+    expect(first.decide(pending.id, "deny", { by: "console", reason: "not now" }).kind).toBe("denied");
+    expect(new Approvals({ dir }).consume(pending.id, step)).toMatchObject({ kind: "denied" });
+  });
+
+  it("expires after 60 s by default", () => {
+    let now = 1_000;
+    const a = store({ now: () => now });
+    const pending = a.request(step, "deletes");
+    now += 60_001;
+    expect(a.consume(pending.id, step).kind).toBe("denied");
+    expect(a.pending()).toEqual([]);
+  });
+});
 
 describe("Approvals", () => {
   it("issues an id that is unguessable and unique", () => {
-    const a = new Approvals();
+    const a = store();
     const first = a.request(step);
     const second = a.request(step);
     expect(first.id).not.toBe(second.id);
     expect(first.id).toMatch(/^[0-9a-f]{8,}$/);
   });
 
-  it("is pending until the matching id is presented", () => {
-    const a = new Approvals();
-    const { id } = a.request(step);
-    expect(a.consume(id, step)).toEqual({ kind: "approved" });
-  });
-
   it("refuses an id that does not match this exact step", () => {
-    const a = new Approvals();
+    const a = store();
     const { id } = a.request(step);
-    const other = { command: "tap", args: { ref: 4 }, signature: "button|删除|1,2,3,4" };
+    a.decide(id, "allow", { by: "cli" });
+    const other = { command: "tap", args: { ref: 4 }, signature: "sig-1" };
     expect(a.consume(id, other)).toMatchObject({ kind: "denied" });
     // A mismatch must not burn the approval: the right step can still use it.
     expect(a.consume(id, step)).toEqual({ kind: "approved" });
   });
 
   it("refuses a stale approval when the target changed", () => {
-    const a = new Approvals();
+    const a = store();
     const { id } = a.request(step);
+    a.decide(id, "allow", { by: "cli" });
     const moved = { ...step, signature: "button|删除|9,9,9,9" };
     expect(a.consume(id, moved)).toMatchObject({ kind: "stale" });
   });
 
   it("allows an approval exactly once", () => {
-    const a = new Approvals();
+    const a = store();
     const { id } = a.request(step);
+    a.decide(id, "allow", { by: "cli" });
     expect(a.consume(id, step)).toEqual({ kind: "approved" });
     expect(a.consume(id, step)).toMatchObject({ kind: "denied" });
   });
 
   it("expires an approval after its window", () => {
     let now = 1000;
-    const a = new Approvals({ ttlMs: 500, now: () => now });
+    const a = store({ ttlMs: 500, now: () => now });
     const { id } = a.request(step);
     now = 1600;
     expect(a.consume(id, step)).toMatchObject({ kind: "denied" });
   });
 
   it("rejects an unknown id", () => {
-    const a = new Approvals();
+    const a = store();
     expect(a.consume("deadbeef", step)).toMatchObject({ kind: "denied" });
   });
 
-  it("clears everything on release", () => {
-    const a = new Approvals();
-    const { id } = a.request(step);
-    a.clear();
-    expect(a.consume(id, step)).toMatchObject({ kind: "denied" });
-  });
-
   it("lists pending approvals for status output", () => {
-    const a = new Approvals();
+    const a = store();
     const { id } = a.request(step);
-    expect(a.pending()).toEqual([expect.objectContaining({ id, command: "tap" })]);
+    expect(a.pending()).toEqual([expect.objectContaining({ id, command: "tap", status: "pending" })]);
   });
 
   it("reports a denied reason a person can act on", () => {
     let now = 1000;
-    const a = new Approvals({ ttlMs: 500, now: () => now });
+    const a = store({ ttlMs: 500, now: () => now });
     const { id } = a.request(step);
     now = 2000;
     const r = a.consume(id, step);
     expect(r.kind).toBe("denied");
     expect(r.kind === "denied" && r.reason).toMatch(/expired/);
+  });
+
+  it("keeps the first decision when asked twice", () => {
+    const dir = mkdtempSync(join(tmpdir(), "uitest-appr-"));
+    const first = new Approvals({ dir });
+    const { id } = first.request(step, "deletes");
+    expect(first.decide(id, "allow", { by: "cli" }).kind).toBe("allowed");
+    // The id alone is not enough to flip the answer: a second decision loses.
+    expect(new Approvals({ dir }).decide(id, "deny", { by: "console" })).toMatchObject({
+      kind: "denied",
+      reason: "already decided",
+    });
+    expect(new Approvals({ dir }).consume(id, step)).toMatchObject({ kind: "approved" });
+  });
+
+  it("reports an expired id instead of writing a decision", () => {
+    let now = 1000;
+    const a = store({ ttlMs: 500, now: () => now });
+    const { id } = a.request(step);
+    now = 2000;
+    expect(a.decide(id, "allow")).toMatchObject({ kind: "expired" });
+  });
+
+  it("keeps an id single-use across processes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "uitest-appr-"));
+    const { id } = new Approvals({ dir }).request(step);
+    new Approvals({ dir }).decide(id, "allow", { by: "cli" });
+    new Approvals({ dir }).consume(id, step);
+    expect(new Approvals({ dir }).consume(id, step)).toMatchObject({ kind: "denied" });
+  });
+
+  it("remembers the scope a person chose with the decision", () => {
+    const a = store();
+    const { id } = a.request(step, "deletes");
+    a.decide(id, "allow", { by: "console", scope: "task" });
+    expect(a.consume(id, step)).toMatchObject({ kind: "approved", scope: "task" });
+  });
+
+  it("refuses to remember an approval that carries no rule, without burning it", () => {
+    const a = store({ ttlMs: 500 });
+    const { id } = a.request(step);
+    a.decide(id, "allow", { by: "cli" });
+    expect(a.consume(id, step, { scope: "always" })).toMatchObject({ kind: "denied" });
+    // Not consumed: the person's allow still covers one plain replay.
+    expect(a.consume(id, step)).toEqual({ kind: "approved" });
+  });
+
+  it("reports the status of a decided id", () => {
+    const a = store();
+    const { id } = a.request(step, "deletes");
+    expect(a.status(id)).toMatchObject({ status: "pending" });
+    a.decide(id, "allow", { by: "cli" });
+    expect(a.status(id)).toMatchObject({ status: "allowed" });
   });
 });
 
@@ -114,16 +194,12 @@ describe("Grants", () => {
   });
 
   it("survives a new process", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "uitest-grants-"));
-    try {
-      const path = join(dir, "grants.json");
-      await Grants.open(path).then((g) => g.add({ ...grant, task: "cleanup", scope: "task" }));
-      const next = await Grants.open(path);
-      expect(next.permits({ rule: "deletes", bundle: "com.demo", task: "cleanup" })).not.toBeNull();
-      expect(next.permits({ rule: "deletes", bundle: "com.demo", task: "other" })).toBeNull();
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    const dir = mkdtempSync(join(tmpdir(), "uitest-grants-"));
+    const path = join(dir, "grants.json");
+    await Grants.open(path).then((g) => g.add({ ...grant, task: "cleanup", scope: "task" }));
+    const next = await Grants.open(path);
+    expect(next.permits({ rule: "deletes", bundle: "com.demo", task: "cleanup" })).not.toBeNull();
+    expect(next.permits({ rule: "deletes", bundle: "com.demo", task: "other" })).toBeNull();
   });
 
   it("drops task grants on resume and keeps always grants", () => {
@@ -133,87 +209,5 @@ describe("Grants", () => {
     expect(g.clearTask()).toBe(1);
     expect(g.permits({ rule: "deletes", bundle: "com.demo", task: "cleanup" })).not.toBeNull();
     expect(g.list()).toHaveLength(1);
-  });
-});
-
-describe("Approvals with a scope", () => {
-  it("returns the rule the approval was issued for", () => {
-    const a = new Approvals();
-    const { id } = a.request(step, "deletes");
-    expect(a.consume(id, step)).toEqual({ kind: "approved", rule: "deletes" });
-  });
-
-  it("refuses to remember an approval that carries no rule, without burning it", () => {
-    const a = new Approvals();
-    const { id } = a.request(step);
-    expect(a.consume(id, step, { scope: "always" })).toMatchObject({ kind: "denied" });
-    // Not consumed: the person can still answer "once".
-    expect(a.consume(id, step)).toEqual({ kind: "approved" });
-  });
-});
-
-describe("Approvals across processes", () => {
-  async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-    const dir = await mkdtemp(join(tmpdir(), "uitest-approvals-"));
-    try {
-      return await fn(dir);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  }
-
-  it("honours an id issued by an earlier process", async () => {
-    await withDir(async (dir) => {
-      const path = join(dir, "approvals.json");
-      const first = await Approvals.open(path);
-      const { id } = first.request(step);
-
-      // The CLI runs one command per process: the replay is a fresh instance.
-      const second = await Approvals.open(path);
-      expect(second.consume(id, step)).toEqual({ kind: "approved" });
-    });
-  });
-
-  it("keeps an id single-use across processes", async () => {
-    await withDir(async (dir) => {
-      const path = join(dir, "approvals.json");
-      const { id } = (await Approvals.open(path)).request(step);
-      await Approvals.open(path).then((a) => a.consume(id, step));
-      const third = await Approvals.open(path);
-      expect(third.consume(id, step)).toMatchObject({ kind: "denied" });
-    });
-  });
-
-  it("does not resurrect an id that a mismatch left intact", async () => {
-    await withDir(async (dir) => {
-      const path = join(dir, "approvals.json");
-      const { id } = (await Approvals.open(path)).request(step);
-      const other = { ...step, args: { ref: 4 } };
-      expect((await Approvals.open(path)).consume(id, other)).toMatchObject({ kind: "denied" });
-      // Still usable for the step it was issued for.
-      expect((await Approvals.open(path)).consume(id, step)).toEqual({ kind: "approved" });
-    });
-  });
-
-  it("starts empty when the file is corrupt", async () => {
-    await withDir(async (dir) => {
-      const path = join(dir, "approvals.json");
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(path, "nope");
-      expect((await Approvals.open(path)).pending()).toEqual([]);
-    });
-  });
-
-  it("drops expired entries instead of growing forever", async () => {
-    await withDir(async (dir) => {
-      const path = join(dir, "approvals.json");
-      const first = await Approvals.open(path, { ttlMs: 1 });
-      first.request(step);
-      await new Promise((r) => setTimeout(r, 5));
-      const later = await Approvals.open(path, { ttlMs: 1 });
-      later.request({ ...step, args: { ref: 9 } });
-      const raw = JSON.parse(await (await import("node:fs/promises")).readFile(path, "utf8"));
-      expect(Object.keys(raw.entries)).toHaveLength(1);
-    });
   });
 });

@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import type { ApprovalScope } from "./approvals.js";
+import type { ApprovalScope } from "./governance/approvals.js";
 import { doctor, renderDoctor } from "./doctor.js";
 import { EXIT_CODE, actionText, statusOf } from "./driver/agent/result.js";
 import type { ActionResult, ActionStatus } from "./driver/agent/result.js";
@@ -8,9 +8,9 @@ import { renderFull } from "./driver/agent/screen.js";
 import { parseOn } from "./driver/agent/selector.js";
 import { parseKeyName } from "./driver/agent/selector.js";
 import { LeaseHeldError, UitestError } from "./transport/errors.js";
-import { HOLD_TASK, handoffDevice } from "./hold.js";
+import { HOLD_TASK, handoffDevice } from "./governance/hold.js";
 import type { Session, SessionDevice, Target } from "./session.js";
-import type { TraceRecorder } from "./trace.js";
+import type { TraceRecorder } from "./governance/trace.js";
 
 export type ArgType = "string" | "number" | "boolean";
 
@@ -802,6 +802,11 @@ export class CommandRunner {
     const grantText = grants.length
       ? grants.map((g) => `${g.rule}@${g.bundle || "unknown"} (${g.scope})`).join(", ")
       : "none";
+    const pending = this.session.pendingApprovals();
+    const pendingLines = pending.map((p) => {
+      const left = Math.max(0, Math.ceil((p.expiresAt - Date.now()) / 1000));
+      return `pending: ${p.id} ${p.command} ${p.rule ?? "-"} ${p.bundle || "unknown"} expires-in-${left}s`;
+    });
     const lines = [
       `settled · connected`,
       `task: ${this.session.task}`,
@@ -812,12 +817,13 @@ export class CommandRunner {
       // Standing approvals are part of what the agent may do without asking;
       // hiding them would make the policy line a half-truth.
       `grants: ${grantText}`,
+      ...(pendingLines.length ? pendingLines : ["pending: none"]),
     ];
     return {
       status: "settled",
       code: 0,
       text: lines.join("\n"),
-      data: { task: this.session.task, device: this.session.tag, ...policy, grants },
+      data: { task: this.session.task, device: this.session.tag, ...policy, grants, pending },
     };
   }
 

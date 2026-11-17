@@ -7,7 +7,7 @@ import { CliRunner } from "./cli.js";
 import { Files } from "../transport/files.js";
 import { HdcRunner } from "../transport/hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
-import { deviceTag } from "../trace.js";
+import { deviceTag } from "../governance/trace.js";
 import { CASTING_EXTENSION, resolveCastingExtension } from "../cast/resolve.js";
 import {
   AgentBusyError,

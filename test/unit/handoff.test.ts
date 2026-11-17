@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Lease, readLease } from "../../src/lease.js";
-import { handoffDevice, holdDevice, resumeDevice, HOLD_TASK } from "../../src/hold.js";
+import { Lease, readLease } from "../../src/governance/lease.js";
+import { handoffDevice, holdDevice, resumeDevice, HOLD_TASK } from "../../src/governance/hold.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-handoff-"));

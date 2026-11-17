@@ -110,7 +110,7 @@ describe("doctor", () => {
     // for the same device.
     const { renderDoctor } = await import("../../src/doctor.js");
     const { tagOf } = await import("../../src/session.js");
-    const { deviceTag } = await import("../../src/trace.js");
+    const { deviceTag } = await import("../../src/governance/trace.js");
     const serial = "SYNTH0DEVICE0001";
     const text = renderDoctor(await doctor(device({ targets: [serial] })));
     const shown = /^targets: (\S+)$/m.exec(text)?.[1];

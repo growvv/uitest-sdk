@@ -3,7 +3,7 @@ import { parseArgv, formatHelp, formatResult, exitCodeForError } from "../../src
 import { COMMANDS } from "../../src/commands.js";
 import { DeviceStateError, LeaseHeldError, UitestError } from "../../src/transport/errors.js";
 import { runCommand } from "../../src/cli-main.js";
-import { Lease } from "../../src/lease.js";
+import { Lease } from "../../src/governance/lease.js";
 import { tagOf } from "../../src/session.js";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

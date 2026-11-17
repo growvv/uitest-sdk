@@ -2,8 +2,14 @@ import { dirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tagOf } from "./transport/tag.js";
 import { AppManager } from "./transport/apps.js";
-import { Approvals, Grants } from "./approvals.js";
-import type { ApprovalScope, Grant } from "./approvals.js";
+import { Approvals, Grants } from "./governance/approvals.js";
+import type {
+  ApprovalDecision,
+  ApprovalScope,
+  DecisionResult,
+  Grant,
+  PendingApproval,
+} from "./governance/approvals.js";
 import { Components, ComponentHandle } from "./driver/agent/components.js";
 import { Gestures } from "./driver/agent/gestures.js";
 import { On, selectorText, parseKeyName } from "./driver/agent/selector.js";
@@ -13,11 +19,11 @@ import { inspectScreen, renderPanel } from "./driver/agent/inspector.js";
 import type { InspectNode } from "./driver/agent/inspector.js";
 import { ScreenBuilder, findElement, findText, renderDiff, renderFull } from "./driver/agent/screen.js";
 import type { Screen, ScreenElement } from "./driver/agent/screen.js";
-import { Policy } from "./policy.js";
-import type { PolicyOptions } from "./policy.js";
+import { Policy } from "./governance/policy.js";
+import type { PolicyOptions } from "./governance/policy.js";
 import { FileRefStore } from "./refs.js";
-import { Lease } from "./lease.js";
-import { TraceRecorder } from "./trace.js";
+import { Lease } from "./governance/lease.js";
+import { TraceRecorder } from "./governance/trace.js";
 import { ElementNotFoundError, UitestError } from "./transport/errors.js";
 import { actionText } from "./driver/agent/result.js";
 import type { ActionResult } from "./driver/agent/result.js";
@@ -63,6 +69,8 @@ export interface SessionOptions {
   settleMs?: number;
   /** Do not read or write a trace file. */
   noTrace?: boolean;
+  /** How long a person has to answer an approval, in ms. Defaults to 60 s. */
+  approvalTtlMs?: number;
 }
 
 export type Target = number | { ref: number } | { text: string } | On;
@@ -194,6 +202,8 @@ export class Session {
   readonly trace: TraceRecorder | null;
   readonly task: string;
   readonly tag: string;
+  /** Where this session keeps refs, traces, approvals and grants. */
+  readonly stateDir: string;
 
   private readonly approvals: Approvals;
   private readonly grants: Grants;
@@ -217,7 +227,8 @@ export class Session {
     this.policy = new Policy(opts.policy);
     this.settleMs = Math.max(0, opts.settleMs ?? 3000);
     this.traceShots = opts.traceShots === true;
-    const stateDir = opts.stateDir ?? join(process.cwd(), DEFAULT_STATE);
+    this.stateDir = opts.stateDir ?? join(process.cwd(), DEFAULT_STATE);
+    const stateDir = this.stateDir;
     this.shotsDir = join(stateDir, "shots");
     this.tag = tagOf(device.deviceId);
     // The ref table is per device and outlives the process: the CLI runs one
@@ -227,7 +238,10 @@ export class Session {
     this.reader = new ScreenReader(device.agent, new ScreenBuilder(refs));
     // Approvals outlive the process for the same reason: the command that asks
     // for one and the command that replays it are separate invocations.
-    this.approvals = new Approvals({ path: join(stateDir, `approvals-${this.tag}.json`) });
+    this.approvals = new Approvals({
+      dir: join(stateDir, "approvals", this.tag),
+      ttlMs: opts.approvalTtlMs ?? 60_000,
+    });
     this.grants = new Grants({ path: join(stateDir, `grants-${this.tag}.json`) });
     this.components = new Components(device.agent);
     this.gestures = new Gestures(device.agent);
@@ -337,6 +351,25 @@ export class Session {
   /** Standing approvals, for `status` and the report. */
   grantList(): Grant[] {
     return this.grants.list();
+  }
+
+  /** Approvals waiting for a person, or answered and not yet consumed. */
+  pendingApprovals(): PendingApproval[] {
+    return this.approvals.pending();
+  }
+
+  /** The person-side answer to a pending approval (CLI or console). */
+  resolveApproval(
+    id: string,
+    decision: ApprovalDecision,
+    opts: { by?: "cli" | "console"; scope?: ApprovalScope; reason?: string } = {},
+  ): DecisionResult {
+    return this.approvals.decide(id, decision, opts);
+  }
+
+  /** Where one approval stands, or null when the id is unknown. */
+  approvalStatus(id: string): PendingApproval | null {
+    return this.approvals.status(id);
   }
 
   // ---------------------------------------------------------------- acting
@@ -964,15 +997,28 @@ ${renderFull(screen)}`, {
       if (result.kind === "approved") {
         // A remembered answer: the id itself stays single-use, but the rule it
         // carried now covers this app (and task, for `task`).
-        if ((approvalScope === "task" || approvalScope === "always") && result.rule) {
+        const scope = result.scope ?? approvalScope;
+        if ((scope === "task" || scope === "always") && result.rule) {
           this.grants.add({
             rule: result.rule,
             bundle: screen?.bundle ?? "",
-            task: approvalScope === "task" ? this.task : null,
-            scope: approvalScope,
+            task: scope === "task" ? this.task : null,
+            scope,
           });
         }
         return null;
+      }
+      if (result.kind === "pending") {
+        return {
+          status: "approval_pending",
+          text:
+            `approval_pending · approval_id: ${approvalId} · waiting for a person\n` +
+            "The same command with the same approvalId proceeds once a person allows it.",
+          extra: {
+            approvalId,
+            ...(decision.kind === "approval" ? { rule: decision.rule, reason: decision.reason } : {}),
+          },
+        };
       }
       if (result.kind === "stale") {
         return { status: "stale", text: `stale · ${result.reason}`, extra: { reason: result.reason } };
@@ -991,11 +1037,14 @@ ${renderFull(screen)}`, {
       task: this.task,
     });
     if (standing) return null;
-    const pending = this.approvals.request(step, decision.rule);
+    const pending = this.approvals.request(step, decision.rule, {
+      bundle: screen?.bundle ?? "",
+      task: this.task,
+    });
     return {
       status: "approval_pending",
       text:
-        `approval_pending · approval_id: ${pending.id} · rule: ${decision.rule}\n` +
+        `approval_pending · approval_id: ${pending.id} · rule: ${decision.rule} · waiting for a person\n` +
         `Ask the person to approve this exact step (${decision.reason}). Then repeat the same command with approvalId: ${pending.id}.`,
       extra: { approvalId: pending.id, rule: decision.rule, reason: decision.reason },
     };

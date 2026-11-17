@@ -190,10 +190,9 @@ describe("Session: standing approvals", () => {
       const ref = observed.screen!.elements.find((e) => e.label === "删除")!.ref;
       const asked = await s.tap(ref);
       expect(asked.status).toBe("approval_pending");
-      const approved = await s.tap(ref, {
-        approvalId: (asked as { approvalId: string }).approvalId,
-        approvalScope: "task",
-      });
+      const id = (asked as { approvalId: string }).approvalId;
+      expect(s.resolveApproval(id, "allow", { by: "cli", scope: "task" }).kind).toBe("allowed");
+      const approved = await s.tap(ref, { approvalId: id, approvalScope: "task" });
       expect(approved.status).toBe("settled");
       await s.release();
 
@@ -216,10 +215,9 @@ describe("Session: standing approvals", () => {
       const observed = await s.observe();
       const ref = observed.screen!.elements.find((e) => e.label === "删除")!.ref;
       const asked = await s.tap(ref);
-      const approved = await s.tap(ref, {
-        approvalId: (asked as { approvalId: string }).approvalId,
-        approvalScope: "always",
-      });
+      const id = (asked as { approvalId: string }).approvalId;
+      expect(s.resolveApproval(id, "allow", { by: "console", scope: "always" }).kind).toBe("allowed");
+      const approved = await s.tap(ref, { approvalId: id, approvalScope: "always" });
       expect(approved.status).toBe("settled");
       await s.release();
 
@@ -231,15 +229,15 @@ describe("Session: standing approvals", () => {
 
   it("forgets task grants when the person hands the phone back", async () => {
     await withDir(async (dir) => {
-      const { Grants } = await import("../../src/approvals.js");
-      const { resumeDevice } = await import("../../src/hold.js");
+      const { Grants } = await import("../../src/governance/approvals.js");
+      const { resumeDevice } = await import("../../src/governance/hold.js");
       const tag = tagOf("SERIAL");
       const path = join(dir, `grants-${tag}.json`);
       const grants = await Grants.open(path);
       grants.add({ rule: "deletes", bundle: "com.demo", task: "cleanup", scope: "task" });
       grants.add({ rule: "deletes", bundle: "com.demo", task: null, scope: "always" });
 
-      const { holdDevice } = await import("../../src/hold.js");
+      const { holdDevice } = await import("../../src/governance/hold.js");
       await holdDevice({ stateDir: dir, tag });
       expect(await resumeDevice({ stateDir: dir, tag })).toBe(true);
 
@@ -305,6 +303,7 @@ describe("Session: tap", () => {
       const s = await open(fake, dir);
       const pending = await s.tap({ text: "付款" });
       const id = pending.status === "approval_pending" ? pending.approvalId : "";
+      expect(s.resolveApproval(id, "allow", { by: "cli" }).kind).toBe("allowed");
       const r = await s.tap({ text: "付款" }, { approvalId: id });
       expect(r.status).toBe("settled");
       expect(fake.actions).toContainEqual({ kind: "Component.click", args: [] });
@@ -318,6 +317,7 @@ describe("Session: tap", () => {
       const s = await open(fake, dir);
       const pending = await s.tap({ text: "付款" });
       const id = pending.status === "approval_pending" ? pending.approvalId : "";
+      expect(s.resolveApproval(id, "allow", { by: "cli" }).kind).toBe("allowed");
       const r = await s.tap({ text: "WLAN" }, { approvalId: id });
       expect(r.status).toBe("approval_denied");
       expect(fake.actions).toHaveLength(0);

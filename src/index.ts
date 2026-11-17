@@ -67,14 +67,14 @@ export type {
 } from "./session.js";
 export { AppManager } from "./transport/apps.js";
 export type { AppInfo, LaunchOptions, LaunchResult, ListOptions as AppListOptions, ShellRunner } from "./transport/apps.js";
-export { Policy, DEFAULT_CONFIRM, POLICY_WORDS, SYSTEM_CHROME } from "./policy.js";
-export type { PolicyOptions, PolicyCheck, Decision, Rule, ConfirmRule } from "./policy.js";
-export { Approvals } from "./approvals.js";
-export type { ApprovalOptions, PendingApproval, StepIdentity, ConsumeResult } from "./approvals.js";
-export { Lease, readLease } from "./lease.js";
-export type { LeaseInfo, LeaseOptions } from "./lease.js";
-export { TraceRecorder, deviceTag } from "./trace.js";
-export type { TraceEntry, TraceRecord, TraceOptions, TaskReportResult } from "./trace.js";
+export { Policy, DEFAULT_CONFIRM, POLICY_WORDS, SYSTEM_CHROME } from "./governance/policy.js";
+export type { PolicyOptions, PolicyCheck, Decision, Rule, ConfirmRule } from "./governance/policy.js";
+export { Approvals } from "./governance/approvals.js";
+export type { ApprovalOptions, PendingApproval, StepIdentity, ConsumeResult } from "./governance/approvals.js";
+export { Lease, readLease } from "./governance/lease.js";
+export type { LeaseInfo, LeaseOptions } from "./governance/lease.js";
+export { TraceRecorder, deviceTag } from "./governance/trace.js";
+export type { TraceEntry, TraceRecord, TraceOptions, TaskReportResult } from "./governance/trace.js";
 export { doctor, renderDoctor, deviceTagOf } from "./doctor.js";
 export type { DoctorReport, Capabilities, TargetLister } from "./doctor.js";
 
@@ -92,8 +92,8 @@ export { agentTarget, connectAgent, agentConnected, mcpEntry } from "./connect.j
 export type { AgentId, AgentTarget, ConnectAgentOptions, ConnectAgentResult, McpEntryOptions } from "./connect.js";
 export { registerJsonMcp, registerTomlMcp, isMcpRegistered } from "./mcp-register.js";
 export type { McpEntry, RegisterMcpOptions, RegisterMcpResult } from "./mcp-register.js";
-export { handoffDevice, holdDevice, resumeDevice, readHold, resolveTag, HOLD_TASK } from "./hold.js";
-export type { HandoffOptions, HoldOptions, HoldResult } from "./hold.js";
+export { handoffDevice, holdDevice, resumeDevice, readHold, resolveTag, HOLD_TASK } from "./governance/hold.js";
+export type { HandoffOptions, HoldOptions, HoldResult } from "./governance/hold.js";
 export { DevicePool } from "./transport/pool.js";
 
 // The complete hypium 6.1.0.210 surface: one flat driver, 118 members.

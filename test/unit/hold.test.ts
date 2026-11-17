@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Lease, readLease } from "../../src/lease.js";
-import { holdDevice, resumeDevice, HOLD_TASK, resolveTag } from "../../src/hold.js";
+import { Lease, readLease } from "../../src/governance/lease.js";
+import { holdDevice, resumeDevice, HOLD_TASK, resolveTag } from "../../src/governance/hold.js";
 import { tagOf } from "../../src/session.js";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
