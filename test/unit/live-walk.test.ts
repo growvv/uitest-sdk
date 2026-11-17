@@ -7,6 +7,7 @@ import {
   parseOnly,
   readonlyGuardVerdict,
   shouldRun,
+  stabilityStep,
 } from "../../scripts/live-walk.js";
 
 /**
@@ -188,5 +189,46 @@ describe("readonlyGuardVerdict", () => {
     expect(isSearchEntryNode({ label: "热榜", cx: 608, cy: 200, w: 700, clickable: true, input: false })).toBe(true);
     // A tab label is not it: too narrow.
     expect(isSearchEntryNode({ label: "推荐", cx: 300, cy: 150, w: 120, clickable: true, input: false })).toBe(false);
+  });
+});
+
+/**
+ * The stability run's tick used to decide "back" on the feed predicate alone.
+ * That predicate only accepts 首页 with 推荐/关注, so a feed variant read as
+ * "not the feed" — and a back there backgrounds the app. Every later tick then
+ * scrolled the launcher, the stream went static (13 fps against 18), and the
+ * handover's Home key had nothing to leave.
+ */
+describe("stabilityStep", () => {
+  const ZHIHU = "com.zhihu.hmos";
+
+  it("scrolls on most ticks", () => {
+    expect(stabilityStep(ZHIHU, ZHIHU, true, 0)).toBe("scroll");
+    expect(stabilityStep(ZHIHU, ZHIHU, true, 13)).toBe("scroll");
+  });
+
+  it("types on the text ticks", () => {
+    expect(stabilityStep(ZHIHU, ZHIHU, true, 15)).toBe("text");
+    expect(stabilityStep(ZHIHU, ZHIHU, true, 16)).toBe("text");
+  });
+
+  it("never sends back while the app is in front on its feed", () => {
+    // Back on the feed backgrounds Zhihu; the rest of the run would type into
+    // the launcher.
+    for (const n of [17, 18, 19, 37, 38, 39]) {
+      expect(stabilityStep(ZHIHU, ZHIHU, true, n)).toBe("scroll");
+    }
+  });
+
+  it("sends back only on a page where back has somewhere to go", () => {
+    expect(stabilityStep(ZHIHU, ZHIHU, false, 17)).toBe("back");
+  });
+
+  it("relaunches when the app is not in front at all", () => {
+    // The bug: the launcher is not the feed, so the old tick sent back into it
+    // forever. Whatever the tick number, a backgrounded app is brought back.
+    expect(stabilityStep("com.ohos.sceneboard", ZHIHU, false, 17)).toBe("relaunch");
+    expect(stabilityStep("com.ohos.sceneboard", ZHIHU, false, 0)).toBe("relaunch");
+    expect(stabilityStep("com.ohos.sceneboard", ZHIHU, true, 5)).toBe("relaunch");
   });
 });

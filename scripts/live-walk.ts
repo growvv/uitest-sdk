@@ -84,6 +84,33 @@ export function assistantCropHeight(bar: Rect[], display: Size, shot: Size, marg
   return Math.max(1, Math.min(shot.height, Math.round((bottom + marginPx) * scale)));
 }
 
+/**
+ * What the stability run should send on this tick.
+ *
+ * The run used to decide "back" purely on the feed predicate. That predicate
+ * only accepts 首页 with 推荐/关注, so a feed variant read as "not the feed",
+ * a back there backgrounded Zhihu, and every later tick scrolled the
+ * launcher: the stream went static (13 fps against an 18 fps baseline) and the
+ * handover's Home key had nothing to leave. The bundle is the authority for
+ * "is the app in front"; the feed predicate only says whether back has
+ * somewhere to go.
+ */
+export type StabilityStep = "scroll" | "text" | "back" | "relaunch";
+
+export function stabilityStep(
+  bundle: string,
+  zhihuBundle: string,
+  onFeed: boolean,
+  n: number,
+): StabilityStep {
+  if (bundle !== zhihuBundle) return "relaunch";
+  const r = n % 20;
+  if (r < 14) return "scroll";
+  if (r < 17) return "text";
+  // Back only where it has somewhere to go: on the feed it backgrounds the app.
+  return onFeed ? "scroll" : "back";
+}
+
 interface Box {
   left: number;
   top: number;

@@ -36,6 +36,7 @@ import {
   parseOnly,
   readonlyGuardVerdict,
   shouldRun,
+  stabilityStep,
 } from "./live-walk.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -1612,37 +1613,37 @@ async function main(): Promise<number> {
         // and the ten-minute run is compared against it — which measures what
         // the claim is about: input does not decay over a long session.
         const tick = (client: LiveClient, n: number): void => {
-          const r = n % 20;
-          if (r < 14) {
-            // 70%: scroll. A negative step every eighth tick walks back up so
-            // the run does not end a thousand screens down.
+          const nodes = client.nodes();
+          const step = stabilityStep(nodes.bundle, ZHIHU_BUNDLE, isFeed(nodes.nodes), n);
+          if (step === "relaunch") {
+            // Back on a backgrounded app only walks the launcher; the app has
+            // to be brought back before any input means anything.
+            void relaunchZhihu();
+            return;
+          }
+          if (step === "scroll") {
+            // A negative step every eighth tick walks back up so the run does
+            // not end a thousand screens down.
             const down = n % 8 !== 7;
             client.sendInput({ action: "wheel", x: 608, y: 1200, dy: down ? 300 : -300 });
             return;
           }
-          if (r < 17) {
-            // 15%: text. ASCII keeps the typing path (a paste would clobber the
-            // device clipboard on every tick); the Chinese paste path is
-            // already covered by the keyboard scenario.
-            const field = pickField(client.nodes().nodes);
-            if (field) {
-              client.sendInput({ action: "text", text: "hm", x: field.cx, y: field.cy });
-            } else if (isFeed(client.nodes().nodes)) {
-              const entry = pickSearchEntry(client.nodes().nodes);
-              if (entry) {
-                client.sendInput({ action: "down", x: entry.cx, y: entry.cy });
-                client.sendInput({ action: "up", x: entry.cx, y: entry.cy });
-              }
-            }
+          if (step === "back") {
+            client.sendInput({ action: "key", key: "back" });
             return;
           }
-          // 15%: back, but only where it has somewhere to go. On the feed a
-          // back backgrounds the app and the rest of the run would type into
-          // the launcher; the feed gets one more scroll instead.
-          if (!isFeed(client.nodes().nodes)) {
-            client.sendInput({ action: "key", key: "back" });
-          } else {
-            client.sendInput({ action: "wheel", x: 608, y: 1200, dy: 300 });
+          // Text. ASCII keeps the typing path (a paste would clobber the device
+          // clipboard on every tick); the Chinese paste path is already covered
+          // by the keyboard scenario.
+          const field = pickField(nodes.nodes);
+          if (field) {
+            client.sendInput({ action: "text", text: "hm", x: field.cx, y: field.cy });
+          } else if (isFeed(nodes.nodes)) {
+            const entry = pickSearchEntry(nodes.nodes);
+            if (entry) {
+              client.sendInput({ action: "down", x: entry.cx, y: entry.cy });
+              client.sendInput({ action: "up", x: entry.cx, y: entry.cy });
+            }
           }
         };
 
