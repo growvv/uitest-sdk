@@ -42,7 +42,7 @@
 
     <article class="doc-body">
       <h1>使用文档</h1>
-      <p class="doc-meta">uitest-sdk <strong>0.8.0</strong> · Node.js ≥ 20 · MIT</p>
+      <p class="doc-meta">uitest-sdk <strong>0.9.0</strong> · Node.js ≥ 20 · MIT</p>
       <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。0.2.0 起，同一套能力还有一层命令行，可作为 <code>uitest-phone</code> 使用，也能以 MCP 暴露给 Agent。</p>
 
       <h2 id="install">1. 安装与前提</h2>
@@ -329,6 +329,7 @@ npx uitest-sdk live --no-layout        # 只投屏</code></pre>
       <p>状态机是 <code>idle → starting → live → reconnecting → stopping → stopped</code>，失败从任意状态进入 <code>failed</code> 并按 0.5/1/2/4/5 s 退避重启；页面重载有 5 s 宽限期，不重开投流。背压在 socket 写队列超过 1 MB 时丢增量帧并请求 IDR，页面侧 <code>decodeQueueSize &gt; 4</code> 时同样丢。</p>
       <p><strong>页头两个按钮：Shot 存截图，Record 录 MP4。</strong>截图走 <code>Session.observe({ out })</code>，所以遮罩规则和节点表是同一套——文字里藏起来的密码在像素里也是灰块。录屏另起一个 record daemon（gRPC 用自己的 socket，WebSocket 用端口 +1），画面不会停；同一时间只有一个录屏，页面关掉时正在录的那个会被停掉并写盘。实测录制期间画面保持 29–30 fps。</p>
       <p>真机 1216×2688 / 30 fps 实测：首帧约 3.1 s（含 daemon 启动），画面持续变化时页面绘制 <strong>18.5 fps</strong>，帧间隔中位 33 ms、p90 55 ms，每帧平均 11.6 KB。</p>
+      <p><strong>接管：页面默认只读，点页头「接管」后画布就是设备</strong><span class="doc-tag">0.9.0</span>。点击、长按、拖动、滚动、双指缩放、键盘输入、<code>back</code> / <code>home</code> 都直接落在手机上。输入走<strong>第二条通道</strong>——独立的 <code>hdc fport</code> 与 agent 连接（<code>device.openInputLane()</code>），和读布局那条互不排队：2 s 的长按不会让节点表停 2 s。真机实测点击注入的写通道往返 p50 <strong>3.9 ms</strong>、p95 18.9 ms；整轮混合输入（含 456 ms 的滚轮调用）p50 275.4 ms。控制权独占：另一个页面 <code>take</code> 会收到 <code>busy by &lt;clientId&gt;</code>，控制者离开或输入出错时广播 <code>readonly</code>；按住 10 s 无移动只抬指针、保留控制权。键盘停顿 300 ms 整段落字，拼音组合期间不上屏、<code>compositionend</code> 时整词落下。</p>
       <p>这条链路每一步的耗时都量过：服务端把 Annex-B 转 AVCC 并封装成帧是 <strong>12 µs/帧</strong>（关键帧 43 µs），浏览器解码 1216×2688 是 <strong>1.57 ms/帧</strong>（硬解）到 2.46 ms/帧（强制软解），画布绘制 0.07 ms。30 fps 的 33 ms 预算里只用掉约 5%，瓶颈在设备侧编码器。<a href="index.html#codec">和 hscrcpy / HOScrcpy / HarmonyMirror 的逐行对比见首页</a>，<a href="index.html#showcase">真实页面截图见首页「实拍」</a>。</p>
       <pre><code>import { LiveServer } from "uitest-sdk";
 
@@ -509,7 +510,7 @@ try {
   await Promise.all(devices.map((d) =&gt; d.dispose()));
 }</code></pre>
 
-      <p class="doc-meta">文档对应 uitest-sdk 0.8.0（2026-11-16）。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告。</p>
+      <p class="doc-meta">文档对应 uitest-sdk 0.9.0（2026-11-17）。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告。</p>
     </article>
   </main>
 

@@ -168,6 +168,186 @@ function initShowcase() {
   for (const cycle of cycles) observer.observe(cycle.fig);
 }
 
+/**
+ * Plays the takeover demo: five real screenshots from one phone session.
+ *
+ * The frames were captured with this project driving the device — feed,
+ * search results for 「鸿蒙」, an article, the image viewer, and the viewer
+ * after a two-finger zoom — so the animation only points at what the pictures
+ * already show. Coordinates are percentages of the same 608×1144 captures.
+ * Without JS, or with reduced motion, the first frame and first step stay lit.
+ */
+const CONTROL_STEPS = [
+  // cursor x%, cursor y%, wait before acting, how long the step stays up
+  { x: 26, y: 6.4, act: 1200, hold: 4200 },
+  { x: 50, y: 27, act: 900, hold: 3200 },
+  { x: 50, y: 62, act: 900, hold: 3000 },
+  { x: 50, y: 45, act: 800, hold: 4600 },
+];
+const CONTROL_TYPE = "鸿蒙";
+const CONTROL_TYPE_MS = 260;
+
+function initControl() {
+  const demo = document.querySelector("[data-control-demo]");
+  if (!demo) return;
+  const phone = demo.querySelector(".control-phone");
+  const frames = [...demo.querySelectorAll(".control-frame")];
+  const steps = [...demo.querySelectorAll(".control-steps li")];
+  const cursor = demo.querySelector(".control-cursor");
+  const ripple = demo.querySelector(".control-ripple");
+  const keys = demo.querySelector(".control-keys");
+  const keysText = demo.querySelector(".control-keys-text");
+  if (!phone || frames.length !== 5 || !cursor || !ripple || !keys || !keysText) return;
+
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // A step lights its own row; the frame is chosen by the phase, because two
+  // steps share the article (reading it, then opening its image).
+  const showStep = (i) => steps.forEach((el, n) => el.classList.toggle("is-on", n === i));
+  const showFrame = (i) => frames.forEach((el, n) => el.classList.toggle("is-on", n === i));
+
+  const clearMotion = () => {
+    frames.forEach((el) => el.classList.remove("is-scrolled"));
+    phone.classList.remove("is-pinch");
+  };
+
+  const moveCursor = (x, y) => {
+    cursor.style.left = x + "%";
+    cursor.style.top = y + "%";
+  };
+
+  const pulse = () => {
+    ripple.style.left = cursor.style.left;
+    ripple.style.top = cursor.style.top;
+    ripple.classList.remove("is-on");
+    void ripple.offsetWidth;
+    ripple.classList.add("is-on");
+  };
+
+  const play = (index) => {
+    const step = CONTROL_STEPS[index];
+    clearMotion();
+    showStep(index);
+
+    if (index === 0) {
+      // Feed: tap the search field, type into the device's caret, and the
+      // results page comes up — the frame the next step taps on.
+      showFrame(0);
+      cursor.classList.add("is-live");
+      moveCursor(78, 86);
+      setTimeout(() => {
+        moveCursor(step.x, step.y);
+        setTimeout(() => {
+          pulse();
+          setTimeout(() => {
+            keys.classList.add("is-on");
+            keysText.textContent = "待输入";
+            let n = 0;
+            const type = () => {
+              keysText.textContent = CONTROL_TYPE.slice(0, ++n);
+              if (n < CONTROL_TYPE.length) {
+                setTimeout(type, CONTROL_TYPE_MS);
+              } else {
+                setTimeout(() => {
+                  keys.classList.remove("is-on");
+                  keysText.textContent = "待输入";
+                  showFrame(1);
+                }, 700);
+              }
+            };
+            setTimeout(type, 220);
+          }, 380);
+        }, 800);
+      }, 200);
+      return;
+    }
+
+    if (index === 1) {
+      // Results: tap the first card.
+      showFrame(1);
+      moveCursor(50, 60);
+      setTimeout(() => {
+        moveCursor(step.x, step.y);
+        setTimeout(() => {
+          pulse();
+          setTimeout(() => showFrame(2), 380);
+        }, 700);
+      }, 150);
+      return;
+    }
+
+    if (index === 2) {
+      // Article: hold and drag upward; the picture slides with the finger.
+      showFrame(2);
+      moveCursor(50, 78);
+      setTimeout(() => {
+        frames[2].classList.add("is-scrolled");
+        setTimeout(() => frames[2].classList.remove("is-scrolled"), 1200);
+      }, step.act);
+      return;
+    }
+
+    // The article's image opens the viewer, and two fingers spread on it.
+    showFrame(2);
+    moveCursor(50, 55);
+    setTimeout(() => {
+      pulse();
+      setTimeout(() => {
+        showFrame(3);
+        setTimeout(() => {
+          phone.classList.add("is-pinch");
+          setTimeout(() => {
+            phone.classList.remove("is-pinch");
+            showFrame(4);
+          }, 1500);
+        }, 500);
+      }, 420);
+    }, step.act);
+  };
+
+  if (reduced) {
+    showStep(0);
+    showFrame(0);
+    return;
+  }
+
+  let index = 0;
+  let timer = null;
+  const start = () => {
+    if (timer) return;
+    const tick = () => {
+      play(index);
+      timer = setTimeout(() => {
+        index = (index + 1) % CONTROL_STEPS.length;
+        tick();
+      }, CONTROL_STEPS[index].hold);
+    };
+    tick();
+  };
+  const stop = () => {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+    clearMotion();
+    keys.classList.remove("is-on");
+  };
+
+  if (!("IntersectionObserver" in window)) {
+    start();
+    return;
+  }
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) start();
+        else stop();
+      }
+    },
+    { threshold: 0.25 },
+  );
+  observer.observe(demo);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // A motion-independent marker that the script actually ran; check-site.mjs
   // asserts it in a headless browser, because a plain text check cannot.
@@ -176,4 +356,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initReveal();
   initTyping();
   initShowcase();
+  initControl();
 });

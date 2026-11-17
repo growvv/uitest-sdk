@@ -607,4 +607,18 @@ describe("Device.connect", () => {
     await expect(dev.agent.call("CtrlCmd", { api: "x", args: [] })).rejects.toThrow();
     await agent.close();
   });
+
+  it("opens a second input lane and removes its forward on close", async () => {
+    const agent = await startFakeAgent();
+    hdcState.listening = true;
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    const input = await dev.openInputLane();
+    await expect(input.lane.click(10, 20)).resolves.toBeUndefined();
+    expect(hdcState.shellCalls.filter((c) => c.includes("start-daemon"))).toHaveLength(0);
+    await input.close();
+    expect(hdcState.removedPorts).toContain(hdcState.agentPort);
+    await dev.dispose();
+    await agent.close();
+  });
 });

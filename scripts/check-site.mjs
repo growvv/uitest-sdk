@@ -52,7 +52,7 @@ const pages = [
 ];
 
 // ------------------------------------------------------------------- anchors
-const sections = ["hero", "terminal", "cli", "showcase", "bench", "compare", "codec", "features", "arch", "video", "limits"];
+const sections = ["hero", "terminal", "cli", "control", "showcase", "bench", "compare", "codec", "features", "arch", "video", "limits"];
 for (const id of sections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(html)) fail(`index.html is missing id="${id}"`);
 }
@@ -166,6 +166,47 @@ for (const name of [
 // on 2026-11-16. They include device open, one step, settle and release.
 for (const needle of ["1.2 s", "1.7 s", "2.3 s"]) {
   if (!cli.includes(needle)) fail(`#cli 缺少实测耗时「${needle}」`);
+}
+
+// ------------------------------------------------- 0.9.0: the control demo
+// Takeover is the release's headline feature, and prose cannot show what it
+// feels like. The section plays four frames captured on a real phone, so the
+// page must carry all four, name the gestures, and degrade to a still frame.
+const control = sectionHtml("control");
+for (const needle of [
+  "接管",
+  "assets/control/1-feed.jpg",
+  "assets/control/2-article.jpg",
+  "assets/control/3-search.jpg",
+  "assets/control/4-image.jpg",
+  "assets/control/5-zoomed.jpg",
+  "data-control-demo",
+  "知乎",
+]) {
+  if (!control.includes(needle)) fail(`#control 缺少「${needle}」`);
+}
+// The frames are the evidence: a placeholder would be tiny next to the real
+// 608×1144 captures, and a missing file would 404 on the deployed site.
+for (const name of ["1-feed.jpg", "2-article.jpg", "3-search.jpg", "4-image.jpg", "5-zoomed.jpg"]) {
+  const p = join(SITE, "assets", "control", name);
+  if (!existsSync(p)) fail(`missing site/assets/control/${name}`);
+  const size = statSync(p).size;
+  if (size < 40 * 1024) fail(`assets/control/${name} is only ${Math.round(size / 1024)} KB`);
+}
+// Five frames — four screens and the zoomed viewer — and the first one lit
+// in the markup: with no JS (or reduced motion) the visitor still sees the
+// feed, not an empty phone.
+const frames = control.match(/class="control-frame[^"]*"/g) ?? [];
+if (frames.length !== 5) fail(`#control 有 ${frames.length} 帧，应为 5 帧`);
+if (!frames.some((c) => /\bis-on\b/.test(c))) fail("#control 没有默认点亮第一帧");
+if (!/<ol class="control-steps">/.test(control)) fail("#control 缺少步骤列表");
+const controlList = control.match(/<ol class="control-steps">([\s\S]*?)<\/ol>/)?.[1] ?? "";
+const controlSteps = (controlList.match(/<li\b/g) ?? []).length;
+if (controlSteps !== 4) fail(`#control 的步骤有 ${controlSteps} 条，应为 4 条（一个手势一条）`);
+// The gesture vocabulary is the claim; naming it keeps the section honest
+// about what a takeover actually supports.
+for (const gesture of ["点击", "长按", "滚动", "双指缩放", "键盘"]) {
+  if (!control.includes(gesture)) fail(`#control 没有提到手势「${gesture}」`);
 }
 
 // ------------------------------------------------------- task 6: numbers
@@ -485,6 +526,11 @@ for (const needle of [
   "device_offline",
   "--approval-scope",
   "升级不需要重跑",
+  // 0.9.0: the page can drive the phone, through a second lane.
+  "接管",
+  "openInputLane",
+  "busy by",
+  "3.9 ms",
 ]) {
   if (!docsHtml.includes(needle)) fail(`docs.html 缺少「${needle}」`);
 }
@@ -544,6 +590,11 @@ for (const needle of [
   // screen on GPU-less machines, and the changelog must record the fix.
   "解码器由浏览器挑",
   "重开解码器",
+  // 0.9.0: takeover, the second input lane, and the acceptance numbers.
+  "0.9.0",
+  "接管",
+  "第二条通道",
+  "换手",
   // 0.5.0: the complete hypium surface.
   "0.5.0",
   "完整 hypium API：118 个方法",
@@ -613,6 +664,15 @@ if (/^\s*export\s/m.test(js)) {
 // visitor with no JS sees a correct static pair rather than nothing.
 if (!/function initShowcase/.test(js)) fail("main.js has no initShowcase; the showcase would never animate");
 if (!/prefers-reduced-motion/.test(js)) fail("main.js does not honour prefers-reduced-motion in the showcase");
+// The control demo is the second moving part. It must have a driver, start on
+// scroll, and stay still under reduced motion — the same contract as the
+// showcase, checked the same way.
+if (!/function initControl/.test(js)) fail("main.js has no initControl; the takeover demo would never play");
+if (!/\[data-control-demo\]/.test(js)) fail("initControl does not look for [data-control-demo]");
+// The checkout is CRLF on Windows, so the block's terminator is `\r\n}\r\n`.
+const controlBlock = js.match(/function initControl[\s\S]*?\r?\n}\r?\n/)?.[0] ?? "";
+if (!/prefers-reduced-motion/.test(controlBlock)) fail("initControl does not honour prefers-reduced-motion");
+if (!/IntersectionObserver/.test(controlBlock)) fail("initControl does not wait for the section to be visible");
 // Each figure must have its first step lit in the markup: without JS (or with
 // reduced motion) a visitor sees one correct row+box+label, not an empty
 // overlay. Asserting it globally is not enough — one lit figure would hide an
