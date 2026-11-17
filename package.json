@@ -21,7 +21,8 @@
     "typecheck": "npm run build -w uitest-sdk && tsc -p tsconfig.json && npm run typecheck -ws --if-present",
     "typecheck:tests": "npm run build -w uitest-sdk && npm run typecheck:tests -ws --if-present",
     "check:site": "node scripts/check-site.mjs",
-    "check:layers": "node scripts/check-layers.mjs"
+    "check:layers": "node scripts/check-layers.mjs",
+    "check:skill": "node scripts/check-skill.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

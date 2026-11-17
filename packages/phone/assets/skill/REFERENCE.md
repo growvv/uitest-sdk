@@ -423,6 +423,36 @@ page shows — the stream, the node table, masking, screenshots, recording — i
 served by `uitest-sdk` and reused by the console; the phone package no longer
 starts a page.
 
+### report
+
+```
+report [--task name] [--title "text"]
+```
+
+Writes an HTML report of every step this task recorded, across commands.
+Steps are spread over one trace file per CLI invocation, so the report reads
+them back by task name; the output says how many files it merged.
+
+### status
+
+```
+status
+```
+
+Reports the task, the device's 8-character tag, the effective policy,
+standing grants and pending approvals. It does not touch the device.
+
+### handoff
+
+```
+handoff --reason "what the person must do"
+```
+
+The agent's side of a takeover: writes "held by a person" on the device's
+lease and returns `handoff` (exit 2). Every later command stops with
+`lease_held` until the person runs `uitest-phone resume`. Agents call it as
+the MCP tool `uitest_handoff`.
+
 
 ## Selectors
 
@@ -515,9 +545,33 @@ Latin words match on word boundaries, so `pay` does not fire inside
 approval set.
 
 An approval id is bound to the command, its arguments and the target's
-signature. It is single-use and expires after 10 minutes. A step whose target
-moved between approval and execution returns `stale`; a step that changed in any
-other way returns `approval_denied`.
+signature. It is single-use and expires 60 seconds after the step was gated. A
+step whose target moved between approval and execution returns `stale`; a step
+that changed in any other way returns `approval_denied`.
+
+### Answering an approval
+
+```bash
+uitest-phone approvals list [--json] [--tag <tag>] [--state-dir dir]
+uitest-phone approvals allow <id> [--scope once|task|always] [--reason text] [--yes]
+uitest-phone approvals deny <id> [--reason text] [--state-dir dir]
+```
+
+This is the person's side of the gate, not an agent command: it never opens a
+device, and it is how a person answers a step the policy flagged. An agent
+that holds an id must not run it — the agent asks the person and the person
+answers. `allow` requires an interactive confirmation unless `--yes` is given;
+with no terminal attached and no `--yes` it exits 2 with `approval_refused`.
+
+`list` scans every device directory under `<state-dir>/approvals/` and prints
+`id`, command, bundle, task, rule, age and time left. `--json` emits an array
+of the same rows with `tag`, `ageMs` and `expiresInMs`. `--tag` narrows the
+list to one device's 8-character hash; `allow`/`deny` find the tag from the id
+and refuse when the same id exists under several devices.
+
+A denial's `--reason` is what the agent sees as `approval_denied · <reason>`.
+An allow's `--scope` is stored with the decision and becomes the grant when
+the agent replays the step.
 
 `--approval-scope` decides how long the answer lasts. `once` (default) replays
 the one step. `task` remembers the rule for the same app until `resume` or a
@@ -534,12 +588,19 @@ drops `task` grants — the context they were given in is gone — and keeps
 <state-dir>/
   leases/<device-hash>.lock        one task per device
   refs-<device-hash>.json          ref table, so refs outlive a command
-  approvals-<device-hash>.json     ids a person has been asked for
+  approvals/<device-hash>/         one file set per approval id
+    <id>.json                      the step waiting for a person
+    <id>.allow / <id>.deny         the person's answer
+    <id>.used                      the id was redeemed
   grants-<device-hash>.json        rules a person asked not to be asked again
   traces/<timestamp>-<task>.jsonl  one file per command
   traces/<timestamp>-<title>.html
   shots/                           per-step screenshots, with --trace-shots
 ```
+
+The request and the answer are separate files, and only a person-side channel
+writes the answer. That is what makes the gate fail closed: an agent can read
+the directory and still cannot approve its own step.
 
 The ref and approval files are what make the one-command-per-invocation model
 work: the ref an `observe` printed still addresses the same element in the

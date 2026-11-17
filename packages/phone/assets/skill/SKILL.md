@@ -98,6 +98,9 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 
 | Goal | Command |
 | --- | --- |
+| Check the connection | `doctor` |
+| Read the screen | `observe` |
+| Hand the phone to a person | `handoff --reason "Sign in"` |
 | Tap by ref | `tap --ref 12` |
 | Tap by label | `tap --text WLAN` |
 | Tap by selector | `tap --selector "type=Button&text=Save"` |
@@ -211,6 +214,12 @@ of every element under the target, plus the app argument for `launch`.
 `commits` (确认 / 保存) is deliberately *not* on the default list: it is the
 label of half the ordinary form buttons on a phone, and asking on every one
 would train the person to approve without reading.
+
+`approval_pending` means stop and ask the person. Never run
+`uitest-phone approvals` yourself: that command is the person's side of the
+gate, and an agent answering its own request would defeat it. The id expires
+60 seconds after the step was gated. Retry only after the person says it was
+allowed.
 
 When you get `approval_pending`:
 

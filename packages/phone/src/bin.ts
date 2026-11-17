@@ -9,6 +9,7 @@ import {
   resolveTag,
   resumeDevice,
 } from "uitest-sdk/govern";
+import { approvalsMain } from "./approvals.js";
 import { main, parseArgv } from "./cli-main.js";
 import { connectAgent, mcpEntry } from "./connect.js";
 import type { AgentId } from "./connect.js";
@@ -38,6 +39,7 @@ async function run(argv: string[]): Promise<number> {
   }
   if (first === "install-skill") return installSkillMain(argv.slice(1));
   if (first === "connect") return connectMain(argv.slice(1));
+  if (first === "approvals") return approvalsMain(argv.slice(1));
   if (first === "hold") return holdMain(argv.slice(1));
   if (first === "handoff") return handoffMain(argv.slice(1));
   if (first === "resume") return resumeMain(argv.slice(1));

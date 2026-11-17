@@ -41,6 +41,7 @@ export function formatHelp(): string {
   lines.push(
     "",
     "not commands (they do not open the device the same way):",
+    "  approvals            list, allow or deny a step waiting for a person",
     "  connect              register the MCP server in an agent's settings and install the skill",
     "  handoff              ask a person to take the phone for a step only they can do",
     "  hold                 take the device for yourself; agent commands then stop with lease_held",

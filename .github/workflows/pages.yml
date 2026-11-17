@@ -42,6 +42,9 @@ jobs:
       # Site links and version banners were only checked at deploy time, so a
       # PR could merge a site that the deploy job would then refuse to publish.
       - run: node scripts/check-site.mjs
+      # The skill is the only documentation an agent reads before calling the
+      # CLI; a command without a row is a call it may make and lose.
+      - run: node scripts/check-skill.mjs
       - run: npm test
   deploy:
     needs: test
