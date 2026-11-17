@@ -28,7 +28,13 @@ import { startLive, liveOptions } from "../src/live/cli.js";
 import { buildHandshake, decodeFrames, encodeTextFrame } from "../src/cast/ws.js";
 import { deviceTag } from "../src/trace.js";
 import { assertCapturable } from "./acceptance.js";
-import { RestartBudget } from "./live-walk.js";
+import {
+  RestartBudget,
+  assistantCropHeight,
+  clientPointFor,
+  parseOnly,
+  shouldRun,
+} from "./live-walk.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "docs/acceptance/live");
@@ -252,17 +258,23 @@ class LiveClient {
 
 interface ScenarioResult {
   name: string;
-  status: "PASS" | "FAIL";
+  status: "PASS" | "FAIL" | "SKIP";
   ms: number;
   detail: string;
   evidence: string[];
 }
+
+/** `--only a,b`: run selected scenarios while iterating; null runs all. */
+let onlyFilter: string[] | null = null;
 
 async function scenario(
   name: string,
   run: () => Promise<{ detail: string; evidence?: string[] }>,
 ): Promise<ScenarioResult> {
   const started = performance.now();
+  if (!shouldRun(name, onlyFilter)) {
+    return { name, status: "SKIP", ms: 0, detail: "未运行（--only 过滤）", evidence: [] };
+  }
   try {
     const out = await run();
     return {
@@ -562,15 +574,8 @@ async function settle(c: LiveClient, quietMs = 1200, ms = 12_000): Promise<void>
 /** Tab bar plus system navigation: the account avatar and unread count live here. */
 const BOTTOM_CROP_PX = 200;
 
-/**
- * Keeps the top strip of the screen and drops the rest.
- *
- * The long-press evidence is the input assistant above the keyboard; below it
- * sits the search page's history, which is the person's own. 280 px still
- * caught the first history row (`北京全路通信信号研究…`), so the cut is 228 px —
- * the assistant bar ends at 192, and the history starts at 232.
- */
-const TOP_CROP_PX = 228;
+/** Margin below the input assistant's bar, in display pixels. */
+const ASSISTANT_MARGIN_PX = 24;
 
 /** The launcher's app grid; its search history sits below. */
 const LAUNCHER_CROP_PX = 360;
@@ -804,12 +809,18 @@ async function runBrowserChecks(
           .join(" | ");
         return `no field on the device (display ${display ? "yes" : "no"}; screen: ${seen})`;
       }
+      // The canvas draws the decoded frame, which is half the display on this
+      // MJPEG path, so the press is placed by the display size. Using the
+      // canvas size here used to cancel out against the page's own error;
+      // with the page fixed, that would put the press in the corner.
+      const rect = (await evaluate(`(() => {
+        const r = document.getElementById('screen').getBoundingClientRect();
+        return { left: r.left, top: r.top, width: r.width, height: r.height };
+      })()`)) as { left: number; top: number; width: number; height: number };
+      const at = clientPointFor({ x: field.cx, y: field.cy }, display, rect);
       await evaluate(`(() => {
         const c = document.getElementById('screen');
-        const r = c.getBoundingClientRect();
-        const x = r.left + (${field.cx} / c.width) * r.width;
-        const y = r.top + (${field.cy} / c.height) * r.height;
-        const init = { clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', button: 0, bubbles: true };
+        const init = { clientX: ${at.x}, clientY: ${at.y}, pointerId: 1, pointerType: 'mouse', button: 0, bubbles: true };
         c.dispatchEvent(new PointerEvent('pointerdown', init));
         c.dispatchEvent(new PointerEvent('pointerup', init));
         return true;
@@ -825,7 +836,6 @@ async function runBrowserChecks(
       add("真实页面：拼音组合不上屏", false, focused);
       return checks;
     }
-    const beforeEnglish = deviceKey();
     await evaluate(`(() => {
       const t = document.getElementById('text-input');
       t.focus();
@@ -833,7 +843,7 @@ async function runBrowserChecks(
       t.dispatchEvent(new Event('input', { bubbles: true }));
       return true;
     })()`);
-    const englishLanded = await until(async () => deviceKey() !== beforeEnglish, 8000);
+    const englishLanded = await until(async () => deviceKey().includes("scrcpy"), 8000);
     add(
       "真实页面：英文 300 ms 空闲落设备",
       englishLanded,
@@ -944,17 +954,19 @@ function renderReport(
   browserChecks: BrowserCheck[],
 ): string {
   const passed = results.filter((r) => r.status === "PASS").length;
+  const skipped = results.filter((r) => r.status === "SKIP").length;
   const rows = results
     .map(
       (r) =>
-        `| ${r.name} | ${r.status === "PASS" ? "✅ PASS" : "❌ FAIL"} | ${r.ms} | ${r.detail} | ${r.evidence.join("<br>") || "—"} |`,
+        `| ${r.name} | ${r.status === "PASS" ? "✅ PASS" : r.status === "SKIP" ? "⏭ SKIP" : "❌ FAIL"} | ${r.ms} | ${r.detail} | ${r.evidence.join("<br>") || "—"} |`,
     )
     .join("\n");
   const browser = browserChecks.length
     ? browserChecks
         .map((b) => `- [${b.status === "PASS" ? "x" : " "}] ${b.name} — ${b.detail}`)
         .join("\n")
-    : "- [ ] 未运行：加 `--browser` 用无头 Chrome 打开真实 live 页面执行这两项";
+    : "- [ ] 未运行：`browser keyboard` 场景被 `--only` 过滤掉了";
+
   return `# live 页接管输入验收报告
 
 - 设备：${env.tag}（${env.model}，${env.osVersion}）
@@ -962,20 +974,20 @@ function renderReport(
 - 应用：知乎 ${env.zhihu}
 - 代码：${env.commit}
 - 开始：${env.startedAt}
-- 结果：**${passed}/${results.length} PASS**
+- 结果：**${passed}/${results.length - skipped} PASS**${skipped ? `（另有 ${skipped} 项未运行：\`--only\` 过滤，本次不是完整验收）` : ""}
 ${inputStats ? `- 本次注入延迟：p50 ${inputStats.p50.toFixed(1)} ms · p95 ${inputStats.p95.toFixed(1)} ms · n=${inputStats.n}\n` : ""}
 | 场景 | 结果 | 耗时 (ms) | 说明 | 证据 |
 |---|---|---|---|---|
 ${rows}
 
-## 浏览器人工检查
+## 真实页面键盘检查
 
-在真实页面里执行（\`--browser\` 用无头 Chrome 加载同一个页面、同一台设备，键盘事件走页面的真实监听器；不是模拟服务器）：
+`browser keyboard` 场景用无头 Chrome 打开同一个 live 页面、同一台设备，键盘事件走页面的真实监听器（不是模拟服务器）：
 
 ${browser}
 
 > 本报告由 \`npx tsx scripts/acceptance-live.ts --target <id>\` 生成；设备只以 8 位标签出现。
-> 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标）；长按证据只保留顶部 ${TOP_CROP_PX} px（其下是搜索历史）。其余保持原始分辨率。
+> 证据截图底部裁去 ${BOTTOM_CROP_PX} px（登录账号的头像与未读角标）；长按证据只保留输入助手条及其下 ${ASSISTANT_MARGIN_PX} px（其下是搜索历史，位置随搜索词变化，所以按节点几何裁）。其余保持原始分辨率。
 > \`docs/acceptance/live/demo/\` 是官网动画用的整屏原图，同样裁去底部 ${BOTTOM_CROP_PX} px。
 `;
 }
@@ -997,6 +1009,8 @@ async function main(): Promise<number> {
   };
   // Shortening these is for iterating on the script; the committed run uses
   // the plan's ten minutes and one minute.
+  const onlyAt = process.argv.indexOf("--only");
+  onlyFilter = parseOnly(onlyAt >= 0 ? process.argv[onlyAt + 1] : undefined);
   const stabilityMsArg = (flag("--stability-min") ?? DEFAULT_STABILITY_MS / 60_000) * 60_000;
   const baselineMsArg = (flag("--baseline-min") ?? DEFAULT_BASELINE_MS / 60_000) * 60_000;
   await mkdir(SHOT_DIR, { recursive: true });
@@ -1213,7 +1227,17 @@ async function main(): Promise<number> {
             `the hold did not open the input assistant at ${field.cx},${field.cy} (ops ${beforeN}→${afterN}, screen: ${seen})`,
           );
         }
-        const evidence = await shot(a!, "03-long-press", TOP_CROP_PX);
+        // The assistant bar moves with the search text (a long query wraps and
+        // pushes it down), so the crop follows the bar's own geometry instead
+        // of a fixed height — a constant either cut the bar or kept a history
+        // row, and both happened on this device.
+        const display = a!.nodes().display;
+        if (!display) throw new Error("no display size in the layout");
+        const evidence = await shot(
+          a!,
+          "03-long-press",
+          assistantCropHeight(assist, display, { width: display.width / 2, height: display.height / 2 }, ASSISTANT_MARGIN_PX),
+        );
         // Close the keyboard, then the search page.
         a!.sendInput({ action: "key", key: "back" });
         await sleep(600);
@@ -1729,13 +1753,14 @@ async function main(): Promise<number> {
   await writeFile(join(OUT_DIR, "report.md"), report, "utf8");
 
   for (const r of results) {
-    process.stdout.write(
-      `${r.status === "PASS" ? "PASS" : "FAIL"} ${r.name} (${r.ms} ms) — ${r.detail}\n`,
-    );
+    process.stdout.write(`${r.status} ${r.name} (${r.ms} ms) — ${r.detail}\n`);
   }
   const failed = results.filter((r) => r.status === "FAIL").length;
-  process.stdout.write(`${results.length - failed}/${results.length} passed · report ${relative(ROOT, join(OUT_DIR, "report.md")).replace(/\\/g, "/")}\n`);
-  return failed === 0 && results.length > 0 ? 0 : 1;
+  const ran = results.filter((r) => r.status !== "SKIP").length;
+  process.stdout.write(
+    `${ran - failed}/${ran} passed · report ${relative(ROOT, join(OUT_DIR, "report.md")).replace(/\\/g, "/")}\n`,
+  );
+  return failed === 0 && ran > 0 ? 0 : 1;
 }
 
 const code = await main();

@@ -26,7 +26,7 @@
 | 控制模型 | 默认只读；显式「接管」，同一时刻只有一个页面能操作 |
 | 输入范围 | 点、长按、滑动滚动、键盘、返回/Home、双指缩放；对齐 scrcpy |
 | 架构 | 读通道（现有 `session.agent`）只做 capture/layout/screenshot/record；写通道是第二条 fport + `AgentClient`，只做触摸/按键/文本/矩阵 |
-| 坐标 | 客户端按画布内在像素换算成设备像素；两端都 clamp |
+| 坐标 | 客户端按显示尺寸换算成设备像素（帧可能是半尺寸），clamp 到显示；两端都 clamp |
 | 双指 | `PointerMatrix` 分段注入（设备只认预计算的矩阵手势），不是逐帧双指事件 |
 | 键盘 | 客户端缓冲，300 ms 空闲或回车时发送；≤12 个 ASCII 字符逐字输入，更长或含非 ASCII 用粘贴（覆盖设备剪贴板） |
 | 系统键 | 返回 = 2，Home = 1，回车 = 2054，删除 = 2055 |
@@ -160,7 +160,9 @@ AgentInputLane：第二条 fport + AgentClient → 设备 Gestures/Driver
   - 否则 → `inputText(point, text, { paste: true, addition: true })`，1.3–1.9 s，**会覆盖设备剪贴板**；输入条下方常驻一行小字提示。
 - 目标点优先级：页面消息里带的点（用户刚点的输入框）→ 最近一次布局里 `focused && input` 的节点中心 → 本次接管中最后一次按下的点 → 显示区域中心。
 - 回车键的行为：先 flush 文本，再发 `key: "enter"`（2054）。这样「输入 → 搜索」一步到位；只想打字不想回车就用「发送」按钮。
-- 组合输入（拼音）期间不 flush；`compositionend` 才把整词放进缓冲。非 ASCII 必然走粘贴，不做逐字 IME 模拟。
+- 组合输入（拼音）期间不 flush，也不发系统键：回车此时是选词，`flushText` 自己拒绝、输入框的 Enter
+  处理直接返回，Esc 与「回车」按钮同样不会把拼音发出去。`compositionend` 才把整词放进缓冲。非 ASCII
+  必然走粘贴，不做逐字 IME 模拟。
 
 ### 6.5 系统键
 
@@ -172,9 +174,12 @@ AgentInputLane：第二条 fport + AgentClient → 设备 Gestures/Driver
 
 ### 6.6 坐标与字号
 
-- 画布内在尺寸就是解码帧尺寸（`canvas.width/height`），等于设备当前旋转下的像素。
-- `x = round((clientX - rect.left) * canvas.width / rect.width)`，`y` 同理，再 clamp 到 `[0, width-1]`、`[0, height-1]`。
-- 不使用 `hello.width` 做换算（`--no-layout` 时为 0）；`hello.display` 只用于节点框定位（现状不变）。
+- 画布内在尺寸是解码帧尺寸（`canvas.width/height`），**不总等于显示尺寸**：`--scale 2` 的投流和
+  所有 MJPEG 设备（x86_64 模拟器）给的是 608×1344，显示是 1216×2688。
+- 输入是设备像素，所以换算按显示尺寸：`x = round((clientX - rect.left) * display.width / rect.width)`，
+  `y` 同理，再 clamp 到 `[0, display.width-1]`、`[0, display.height-1]`。双指的 `half` 上限也取显示短边的一半。
+- 显示尺寸取 `hello.width/height`（即布局里的 `screen.display`）；`--no-layout` 时它为 0，退回画布尺寸，
+  也就是「客户端按画布内在尺寸 clamp」。节点框一直按显示尺寸定位，现状不变。
 
 ## 7. 接管状态机
 

@@ -376,7 +376,7 @@ hscrcpy 的音频采集给了现成范例：`audio-companion/` 是一个标准 H
 | **实时帧率显示** | 客户端统计帧间隔 | ✅ `live` 页头的 fps 读数（浏览器侧按解码后的帧计）；SDK 侧另有 `FpsMeter` 供调用方自己统计 |
 | **码率上限 120 Mibps** | `-bitRate` 透传 | ✅ `CastOptions.bitRate` / `CastConfig.bitRate` 原样透传给 `OH_MD_KEY_BITRATE`，无上限限制；`live` 暂无 `--bit-rate` 旗标，走配置或 API |
 | **截图/录屏按钮** | `snapshot_display` / casting `-m 1` | ✅ `live` 页头的 Shot / Record 按钮。截图走 `Session.observe({ out })`，所以隐私遮罩与节点表同一套；录屏起一个独立的 record daemon（grpc 用自己的 socket、ws 用端口 +1），不打断画面 |
-| **触摸注入（点击 / 长按 / 拖动 / 滚动 / 双指）** | scrcpy 控制协议：`down/move/up`、多指 pointer id | ✅ `live` 页「接管」后的画布；独立写通道，实测点击 p50 3.2 ms、p95 24 ms，整轮混合输入 p50 290 ms。见 [13](13-stage-log.md) |
+| **触摸注入（点击 / 长按 / 拖动 / 滚动 / 双指）** | scrcpy 控制协议：`down/move/up`、多指 pointer id | ✅ `live` 页「接管」后的画布；独立写通道，实测点击 p50 3.4 ms、p95 16.3 ms，整轮混合输入 p50 291.8 ms。见 [13](13-stage-log.md) |
 | **键盘输入与系统键** | `injectText` + 按键映射 | ✅ 写通道的 `text` / `key`：停顿 300 ms 整段落字，拼音组合期间不上屏；`back` 只弹一层，`home` 回桌面 |
 | **剪贴板粘贴** | `Ctrl+V` → 读本机剪贴板 → `Driver.inputText` | ✅ `type --paste` / `Session.type(…, { paste: true })`。实测 36 字符 1325 ms 对逐字符 2761 ms，中文与 emoji 完整。注意 `InputTextMode.addition` 在 `Driver.inputText` 路径上是空操作（只在 `Component.inputText` 上追加），所以没有对外暴露 |
 

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { RestartBudget } from "../../scripts/live-walk.js";
+import {
+  RestartBudget,
+  assistantCropHeight,
+  clientPointFor,
+  parseOnly,
+  shouldRun,
+} from "../../scripts/live-walk.js";
 
 /**
  * The pinch scenario's walk can land somewhere that is neither the search
@@ -30,5 +36,99 @@ describe("RestartBudget", () => {
     budget.take();
     budget.take();
     expect(budget.left()).toBe(0);
+  });
+});
+
+/**
+ * The browser checks press the page's canvas over a device field. The canvas
+ * is 608×1344 (the half-size frame an MJPEG device delivers) while the display
+ * is 1216×2688, so the press has to be placed by the display size. Dividing by
+ * the canvas put the press at the top-left corner — and that mistake cancelled
+ * out against the page's own one, so it only showed once the page was fixed.
+ */
+describe("clientPointFor", () => {
+  const display = { width: 1216, height: 2688 };
+  const rect = { left: 0, top: 0, width: 400, height: 800 };
+
+  it("puts the centre of the display at the centre of the canvas", () => {
+    expect(clientPointFor({ x: 608, y: 1344 }, display, rect)).toEqual({ x: 200, y: 400 });
+  });
+
+  it("puts a field near the top at the top, not a quarter of the way down", () => {
+    // The search field sits at y≈180 of 2688 — 6.7% down, not 13.4%.
+    const p = clientPointFor({ x: 608, y: 180 }, display, rect);
+    expect(p.y).toBeCloseTo(53.57, 1);
+  });
+
+  it("honours the canvas offset", () => {
+    const offset = { left: 120, top: 40, width: 400, height: 800 };
+    expect(clientPointFor({ x: 608, y: 1344 }, display, offset)).toEqual({ x: 320, y: 440 });
+  });
+});
+
+describe("shouldRun", () => {
+  it("runs everything without a filter", () => {
+    expect(shouldRun("pinch", null)).toBe(true);
+    expect(shouldRun("pinch", [])).toBe(true);
+  });
+
+  it("matches a scenario by substring, case-insensitively", () => {
+    expect(shouldRun("browser keyboard", ["browser"])).toBe(true);
+    expect(shouldRun("browser keyboard", ["KEY"])).toBe(true);
+    expect(shouldRun("browser keyboard", ["pinch"])).toBe(false);
+  });
+
+  it("matches any of several filters", () => {
+    expect(shouldRun("pinch", ["tap", "pinch"])).toBe(true);
+  });
+
+  it("always runs takeover, which every later scenario depends on", () => {
+    // Without a controller the server correctly ignores input, and a skipped
+    // takeover would make every selected scenario fail for the wrong reason.
+    expect(shouldRun("takeover", ["pinch"])).toBe(true);
+  });
+});
+
+describe("parseOnly", () => {
+  it("is null when the flag is absent, so everything runs", () => {
+    expect(parseOnly(undefined)).toBeNull();
+  });
+
+  it("splits and trims a comma list", () => {
+    expect(parseOnly(" browser keyboard , pinch ")).toEqual(["browser keyboard", "pinch"]);
+  });
+});
+
+describe("assistantCropHeight", () => {
+  const display = { width: 1216, height: 2688 };
+  const shot = { width: 608, height: 1144 };
+
+  it("keeps the bar and a margin, in screenshot pixels", () => {
+    // 1230 + 220 = 1450 display px, plus the 24 px margin, halved for the
+    // 608-wide capture → 627.
+    const height = assistantCropHeight([{ y: 1230, h: 220 }], display, shot);
+    expect(height).toBe(Math.round((1450 + 24) / 2));
+  });
+
+  it("follows the bar when a long query pushes it down", () => {
+    const short = assistantCropHeight([{ y: 1230, h: 220 }], display, shot);
+    const long = assistantCropHeight([{ y: 1400, h: 220 }], display, shot);
+    expect(long).toBeGreaterThan(short);
+  });
+
+  it("uses the lowest of the bar's nodes", () => {
+    const height = assistantCropHeight(
+      [
+        { y: 1230, h: 120 },
+        { y: 1400, h: 200 },
+      ],
+      display,
+      shot,
+    );
+    expect(height).toBe(Math.round((1600 + 24) / 2));
+  });
+
+  it("never exceeds the screenshot", () => {
+    expect(assistantCropHeight([{ y: 2600, h: 200 }], display, shot)).toBe(shot.height);
   });
 });
