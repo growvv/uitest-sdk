@@ -189,6 +189,10 @@ interface Harness {
   lanes(): FakeInputLane[];
   /** How many times the source was asked for an input lane. */
   openInputs(): number;
+  /** Lets a `createCast` held by `holdCast` finish. */
+  releaseCast(): void;
+  /** How many times the source was asked for a cast. */
+  castOpens(): number;
 }
 
 const running: ViewerServer[] = [];
@@ -218,9 +222,17 @@ async function start(
     hooks?: ViewerHooks;
     /** A page to serve instead of the built-in player. */
     page?: string;
+    /**
+     * Holds `createCast` pending until the returned function is called, so a
+     * test can close the server while a cast is still being opened.
+     */
+    holdCast?: boolean;
   } = {},
 ): Promise<Harness> {
   const cast = new FakeCast();
+  let releaseCast: (() => void) | null = null;
+  const castGate = over.holdCast ? new Promise<void>((r) => (releaseCast = r)) : null;
+  let castOpens = 0;
   let screen = fakeScreen();
   let reads = 0;
   let shots = 0;
@@ -261,6 +273,8 @@ async function start(
       : {}),
     source: {
       async createCast() {
+        castOpens++;
+        if (castGate) await castGate;
         return cast;
       },
       ...(over.displayOnly
@@ -323,6 +337,8 @@ async function start(
     releaseStop: () => releaseStop?.(),
     lanes: () => lanes,
     openInputs: () => openInputs,
+    releaseCast: () => releaseCast?.(),
+    castOpens: () => castOpens,
   };
 }
 
@@ -817,6 +833,29 @@ describe("ViewerServer", () => {
 });
 
 describe("ViewerServer: capture and record", () => {
+  // A tab that connects while the cast is still being opened, followed by a
+  // close before it arrives, is the normal way a person leaves a page: the
+  // stream is opening, they lose interest, the tab goes. The cast that lands
+  // afterwards has nobody reading it, so nobody but the server can dispose it.
+  // Left alone it keeps the device-side daemon and its port forward alive,
+  // which on the acceptance runs was two leaked `localabstract:uitest_live_*`
+  // forwards per run and a process that never exited.
+  it("disposes a cast that arrives after close", async () => {
+    const h = await start({ holdCast: true });
+    const c = await connect(h.port);
+    await until(() => h.castOpens() === 1);
+
+    const closed = h.server.close();
+    await closed;
+    // The cast lands after the server has already finished shutting down: it
+    // is nobody's now, and only the server can dispose it.
+    h.releaseCast();
+    await sleep(50);
+
+    expect(h.cast.disposed).toBe(true);
+    c.close();
+  });
+
   it("saves a screenshot and tells every tab where it went", async () => {
     const h = await start();
     const c = await connect(h.port);

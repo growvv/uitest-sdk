@@ -1154,6 +1154,14 @@ export class ViewerServer {
     try {
       this.transition("starting");
       cast = await this.source.createCast();
+      // `close()` may have finished while this was in flight. It disposed the
+      // cast it knew about, which was none, and this one is now nobody's: it
+      // holds the device's daemon and an fport, and the page it was opened for
+      // is gone. Dispose it here or it outlives the process.
+      if (this.closing) {
+        await cast.dispose().catch(() => undefined);
+        return;
+      }
       this.cast = cast;
       this.requestIdr("attach");
       // x86_64 devices have no H.264 extension and get an MJPEG client instead.
