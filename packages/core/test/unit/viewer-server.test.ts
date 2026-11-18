@@ -64,6 +64,14 @@ class FakeCast implements CastClient {
   private waiter: ((c: H264Chunk | null) => void) | null = null;
   disposed = false;
   idrRequests = 0;
+  /** Resolves when a `slowDispose` cast has been told to dispose. */
+  disposeStarted: (() => void) | null = null;
+  private disposeGate: Promise<void> | null = null;
+
+  /** Makes `dispose()` wait until `releaseDispose()` is called. */
+  holdDispose(gate: Promise<void>): void {
+    this.disposeGate = gate;
+  }
 
   push(chunk: H264Chunk): void {
     if (this.waiter) {
@@ -95,6 +103,8 @@ class FakeCast implements CastClient {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.disposeStarted?.();
+    if (this.disposeGate) await this.disposeGate;
     this.waiter?.(null);
   }
 }
@@ -846,12 +856,44 @@ describe("ViewerServer: capture and record", () => {
     await until(() => h.castOpens() === 1);
 
     const closed = h.server.close();
-    await closed;
-    // The cast lands after the server has already finished shutting down: it
-    // is nobody's now, and only the server can dispose it.
+    // The cast lands while the server is shutting down: it is nobody's now,
+    // and only the server can dispose it. `close()` waits for exactly this,
+    // so the release comes before the await.
     h.releaseCast();
-    await sleep(50);
+    await closed;
 
+    expect(h.cast.disposed).toBe(true);
+    c.close();
+  });
+
+  it("does not return from close while a cast it was opening is still landing", async () => {
+    // The caller may exit the process the moment `close()` resolves. When a
+    // `createCast` is in flight, the cast it eventually returns holds the
+    // device daemon and an fport; disposing it inside `runCast` after `close()`
+    // has already resolved means the caller can exit mid-dispose and leave
+    // both behind. `close()` waits for the open to settle instead.
+    const h = await start({ holdCast: true });
+    const c = await connect(h.port);
+    await until(() => h.castOpens() === 1);
+
+    let releaseDispose: () => void = () => {};
+    h.cast.holdDispose(new Promise<void>((r) => (releaseDispose = r)));
+
+    const closed = h.server.close();
+    // The cast lands while close() is still waiting for it.
+    h.releaseCast();
+    let finished = false;
+    void closed.then(() => {
+      finished = true;
+    });
+    await sleep(60);
+    // The dispose is held open. If close() had already returned, the caller
+    // would be free to exit now and leave the daemon and fport behind.
+    expect(finished).toBe(false);
+    releaseDispose();
+
+    await closed;
+    // By the time close() resolves, the late cast has been fully disposed.
     expect(h.cast.disposed).toBe(true);
     c.close();
   });

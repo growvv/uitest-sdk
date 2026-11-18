@@ -41,3 +41,11 @@ export class ElementNotFoundError extends UitestError {}
 export class LeaseHeldError extends UitestError {}
 /** The device or host cannot serve this API, and no fallback is offered. */
 export class UnsupportedError extends UitestError {}
+/**
+ * The approval request could not be written, so no person can answer it.
+ *
+ * Fail-closed: nothing touches the device. Typed because the CLI and an MCP
+ * caller both need to classify it — a bare `Error` reached them as an
+ * unclassifiable failure, which the project promises never happens.
+ */
+export class ApprovalWriteError extends UitestError {}

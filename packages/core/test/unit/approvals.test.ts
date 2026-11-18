@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Approvals, Grants } from "../../src/governance/approvals.js";
+import { UitestError } from "../../src/transport/errors.js";
 
 const step = { command: "tap", args: { text: "删除" }, signature: "sig-1" };
 
@@ -24,6 +25,26 @@ describe("approval decisions", () => {
     const a = new Approvals({ dir: join(file, "approvals") });
 
     expect(() => a.request(step, "deletes")).toThrow();
+  });
+
+  // The project promises "every failure is a `UitestError` subclass with a
+  // stable code", and `exitCodeForError` can only classify those. A plain
+  // Error here reached the CLI as exit 1 with an untyped error and an MCP
+  // caller as an exception it could not classify.
+  it("fails with a typed error carrying a stable code", () => {
+    const root = mkdtempSync(join(tmpdir(), "uitest-appr-"));
+    const file = join(root, "not-a-dir");
+    writeFileSync(file, "");
+    const a = new Approvals({ dir: join(file, "approvals") });
+
+    let thrown: unknown;
+    try {
+      a.request(step, "deletes");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(UitestError);
+    expect((thrown as UitestError).code).toBe("EAPPROVALWRITE");
   });
 
   it("cannot be consumed by the agent alone", () => {

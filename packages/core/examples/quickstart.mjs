@@ -23,9 +23,20 @@ try {
 
   const t1 = performance.now();
   // A coordinate is not a target: tap takes a ref, text, selector or On.
-  // The centre of the screen has no label, so this presses the keypad instead.
-  await session.act.tap({ text: "7" });
-  console.log(`✓ tap({ text: "7" })  ${Math.round(performance.now() - t1)} ms`);
+  // This taps the calculator's "7" key, so the calculator has to be in front —
+  // `act.launch` is what puts it there. Without it the phone may be on the
+  // launcher, nothing is labelled "7", and the status says so.
+  await session.act.launch("calculator");
+  const tap = await session.act.tap({ text: "7" });
+  if (tap.status !== "settled") {
+    console.log(
+      `✗ tap({ text: "7" })  ${tap.status} — open the calculator and run again ` +
+        `(nothing on this screen is labelled "7")`,
+    );
+    process.exitCode = 1;
+  } else {
+    console.log(`✓ tap({ text: "7" })  ${Math.round(performance.now() - t1)} ms`);
+  }
 
   const t2 = performance.now();
   await session.act.swipe({
@@ -37,7 +48,14 @@ try {
 
   const t3 = performance.now();
   const shot = await session.observe.screenshot({ out: "screen.jpg" });
-  console.log(`✓ screenshot() → ${shot.path}  ${Math.round(performance.now() - t3)} ms`);
+  // A locked phone writes no file, and the path is returned anyway: check the
+  // status before pointing a person at a picture that does not exist.
+  if (shot.result.status !== "settled") {
+    console.log(`✗ screenshot()  ${shot.result.status} — no file was written`);
+    process.exitCode = 1;
+  } else {
+    console.log(`✓ screenshot() → ${shot.path}  ${Math.round(performance.now() - t3)} ms`);
+  }
 } finally {
   await session.close();
 }

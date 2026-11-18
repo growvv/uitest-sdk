@@ -188,6 +188,16 @@ export class ViewerServer {
   private retryIndex = 0;
   /** In-flight disposal of a cast that died; the next open waits for it. */
   private castDisposal: Promise<void> | null = null;
+  /**
+   * The cast open that is still in flight, if any.
+   *
+   * `close()` awaits this. A cast that lands after shutdown is disposed inside
+   * `runCast`, and without this the caller could see `close()` resolve and exit
+   * the process while that dispose was still running — leaving the device
+   * daemon and its port forward behind, which is the leak `close()` exists to
+   * prevent.
+   */
+  private castOpening: Promise<void> | null = null;
   private reading = false;
   private reread = false;
   private lastReadAt = 0;
@@ -371,6 +381,11 @@ export class ViewerServer {
     const disposal = this.castDisposal;
     this.castDisposal = null;
     if (disposal) await disposal;
+    // A cast still being opened is nobody's yet: `runCast` disposes it when it
+    // lands, and that dispose is the only thing that frees the device daemon
+    // and its fport. Wait for it, or the caller exits mid-dispose.
+    const opening = this.castOpening;
+    if (opening) await opening.catch(() => undefined);
 
     await new Promise<void>((resolve) => {
       this.server.close(() => resolve());
@@ -1140,6 +1155,19 @@ export class ViewerServer {
   private async runCast(): Promise<void> {
     if (this.cast || this.startingCast || this.closing) return;
     this.startingCast = true;
+    // Tracked so `close()` can wait for a cast that lands after shutdown: it
+    // is disposed here, and a caller that exits as soon as `close()` resolves
+    // would otherwise cut the dispose off and leave the daemon and fport.
+    const opening = this.openCast();
+    this.castOpening = opening;
+    try {
+      await opening;
+    } finally {
+      if (this.castOpening === opening) this.castOpening = null;
+    }
+  }
+
+  private async openCast(): Promise<void> {
     // A replacement must not start while the previous client is still winding
     // down: MJPEG's `dispose()` stops the shared agent's capture, so it would
     // stop the new stream instead of the old one.

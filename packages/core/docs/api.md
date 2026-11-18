@@ -619,6 +619,7 @@ for await (const chunk of cast.stream()) {
 | `ElementNotFoundError` | `ENOTFOUND` | `require()` 的组件选择器没有匹配到任何节点，消息里带选择器 |
 | `LeaseHeldError` | `ELEASE` | 设备租约在别的任务手里且对方还活着；或用 `--force` 之外的方式想抢 |
 | `UnsupportedError` | `EUNSUPPORTED` | 方法在设备上不存在，或这台设备/ABI 不支持该能力；消息说明原因，不静默降级 |
+| `ApprovalWriteError` | `EAPPROVALWRITE` | 审批请求写不进状态目录（只读、满了、路径被占）：没有人能看到这条请求，所以失败而不是返回一个没人能答的 id。设备没有被碰过 |
 
 `DeviceStateError.state` 与 CLI 的状态词同源（`device_offline` / `device_needs_setup`），
 所以脚本里判断设备状态时不用解析英文消息。
@@ -796,7 +797,7 @@ ref、审批、租约与 trace 都在 `--state-dir`（默认 `.uitest-phone/`）
 
 | 子路径 | 提供 |
 |---|---|
-| `uitest-sdk` | `connect` / `connectDevice` / `Session` / `Device` / `tagOf` / `VERSION` / 13 个错误类 |
+| `uitest-sdk` | `connect` / `connectDevice` / `Session` / `Device` / `tagOf` / `VERSION` / 14 个错误类 |
 | `uitest-sdk/commands` | `COMMANDS`、`CommandRunner`、`parseArgv`、`exitCodeForError`、`EXIT_CODE`、`doctor`、`renderDoctor`、`statusOf` / `actionText` / `isOk` |
 | `uitest-sdk/cast` | `createCast`、`CastConfig`、`Recording`、`FpsMeter`、三种 `CastClient`、WebSocket 帧与 NAL 助手 |
 | `uitest-sdk/viewer` | `startViewerServer`、`createViewerSource`、`renderPlayerPage`、`openInput`、`originAllowed`、`inspectScreen` / `renderPanel` |

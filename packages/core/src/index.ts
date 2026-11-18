@@ -68,5 +68,6 @@ export {
   ElementNotFoundError,
   LeaseHeldError,
   UnsupportedError,
+  ApprovalWriteError,
 } from "./transport/errors.js";
 export type { DeviceState } from "./transport/errors.js";

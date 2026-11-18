@@ -10,13 +10,21 @@
 
 ## [0.10.1] — 2026-11-18
 
-全分支评审后的修正版。没有破坏性变更。
+全分支评审后的修正版。一处类型收窄：`observe.apps()` 现在只承诺它真的返回的字段。
 
+- **`observe.apps()` 的返回类型收窄**：`AppInfo[]` → `Array<{ bundle: string }>`。
+  `ability` 从来没被填过（启动时才解析），一直读到 `undefined`。运行时行为不变；
+  但如果你在 TypeScript 里读 `apps[0].ability`，这段代码现在不编译了——删掉它，
+  或在启动时从 `launch` 的结果取。
 - **审批的授权范围由人决定**：`approvals allow` 不带 `--scope` 就是「这一次」。
   此前 agent 重放时加 `--approval-scope always` 能把一句普通的「同意」变成覆盖
   该状态目录下所有任务的长期授权。
 - **失败的拒绝不再假装成功**：审批已经有相反答案时返回 `conflict`，CLI 以非零
   退出并说明「已被允许，重放会继续」，console 同样提示。
+- **审批请求写不进磁盘时抛 `ApprovalWriteError`**（`code: EAPPROVALWRITE`），
+  不再返回一个没人能答的 id。它是 `UitestError` 的子类，CLI 与 MCP 都能归类。
+- **console 的冲突提示不会再被刷新冲掉**：提示写在审批列表之外，先发列表、后发
+  原因，下一次点击时才清掉。
 - 公开类型补齐：`WindowResult`、`InspectResult`、`DragOptions`、`Point`、`Rect`、
   `H264Chunk`、`SessionAgent` / `SessionDevice` 等签名里出现的类型都能从包里导入。
 - 文档与示例修正：quickstart 的 `tap` 改用真实目标；README、API 参考与站点示例的

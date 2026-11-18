@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { ApprovalWriteError } from "../transport/errors.js";
 
 export interface StepIdentity {
   command: string;
@@ -158,8 +159,10 @@ export class Approvals {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 });
       writeFileSync(join(this.dir, `${id}.json`), JSON.stringify(entry), { flag: "wx", mode: 0o600 });
     } catch (e) {
-      throw new Error(
+      throw new ApprovalWriteError(
         `the approval request could not be written to ${this.dir}: ${e instanceof Error ? e.message : String(e)}`,
+        "EAPPROVALWRITE",
+        e,
       );
     }
     return { ...entry, status: "pending" };
