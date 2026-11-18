@@ -1,0 +1,9 @@
+uitest-mirror
+=============
+
+This package's own source is MIT-licensed (see LICENSE).
+
+It contains no native binaries and no bundled assets: the device extensions it
+uses — agent.so and libscreen_casting.z.so — ship inside the `uitest-sdk`
+dependency and are Huawei's signed builds; the MIT licence does not reach them.
+See uitest-sdk's NOTICE for their versions and checksums.

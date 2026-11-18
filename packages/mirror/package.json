@@ -1,0 +1,45 @@
+{
+  "name": "uitest-mirror",
+  "version": "0.1.0",
+  "description": "A HarmonyOS scrcpy: one command, a device window, keyboard and mouse, optional recording",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/growvv/uitest-sdk.git",
+    "directory": "packages/mirror"
+  },
+  "homepage": "https://growvv.github.io/uitest-sdk/",
+  "keywords": [
+    "harmonyos",
+    "openharmony",
+    "mirror",
+    "scrcpy",
+    "screen",
+    "remote-control"
+  ],
+  "type": "module",
+  "bin": {
+    "uitest-mirror": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build && npm --prefix ../.. test",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "uitest-sdk": "~0.11.0"
+  }
+}
