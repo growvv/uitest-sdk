@@ -3,6 +3,10 @@
 Independent pass over the same tree, to grade Codex's report rather than accept it.
 Line numbers checked against `master` at `57cfd21`.
 
+**Status:** all three confirmed defects and the duplication minors below are fixed;
+the error-taxonomy minor is addressed by documenting every thrown code and by a test
+that keeps it that way. See `README.md` in this directory for the commit-level record.
+
 ## Confirmed defects
 
 ### 1. `uitest-console --record` never starts a recording — Important

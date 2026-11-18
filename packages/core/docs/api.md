@@ -620,6 +620,51 @@ for await (const chunk of cast.stream()) {
 | `LeaseHeldError` | `ELEASE` | 设备租约在别的任务手里且对方还活着；或用 `--force` 之外的方式想抢 |
 | `UnsupportedError` | `EUNSUPPORTED` | 方法在设备上不存在，或这台设备/ABI 不支持该能力；消息说明原因，不静默降级 |
 | `ApprovalWriteError` | `EAPPROVALWRITE` | 审批请求写不进状态目录（只读、满了、路径被占）：没有人能看到这条请求，所以失败而不是返回一个没人能答的 id。设备没有被碰过 |
+| `UitestError`（直接抛出） | 见下表 | 参数、投屏与手势的失败没有专属类，只有 code |
+
+### 10.1 参数与选择器
+
+调用方的错，设备没有被碰过。`EBADARG` 与 `EINVALIDARGUMENT` 都表示「参数不对」：
+前者是投屏层的既有 code（`createCast`、`CastConfig.set`），后者是命令层的。两者都保留，
+因为脚本已经在按 code 分支；新代码用 `EINVALIDARGUMENT`。
+
+| code | 触发条件 |
+|---|---|
+| `EBADARG` | 投屏参数非法：`scale` 越界、`record` 没有 `outputPath`、`port` 不在 1..65535 |
+| `EINVALIDARGUMENT` | 命令参数非法：点写成不是 `x,y`、必填参数缺失、类型不对 |
+| `EINVALIDSELECTOR` | 选择器为空或语法不对 |
+| `ESELECTOR` | 原始选择器缺少设备引用 |
+| `EWINDOWFILTER` | 窗口过滤条件非法 |
+| `EINVALIDKEY` | 按键名或键码不认识 |
+| `EINVALIDBUNDLE` | bundle 名或 id 非法 |
+| `EINVALIDABILITY` | ability 名非法 |
+| `EINVALIDBUTTON` | 鼠标键不认识 |
+| `EINVALIDDIRECTION` | 滚动或光标方向不认识 |
+| `EINVALIDROTATION` | 旋转角度不是 0/90/180/270 |
+| `EINVALIDAREA` | 截图/录制的区域参数非法 |
+| `EINVALIDPROPERTY` | 想设置的属性名不认识 |
+| `EINVALIDGESTURE` | 手势参数非法：`steps < 1`、`durationMs <= 0` |
+| `EINVALIDCAPTURE` | 采集参数非法 |
+| `EINVALIDHDC` | `hdc` 透传命令没有参数 |
+| `EUNKNOWNCOMMAND` | 命令表里没有这个名字 |
+
+### 10.2 投屏
+
+| code | 触发条件 |
+|---|---|
+| `ECASTCLOSED` | WebSocket 连接在回复到达前关闭 |
+| `ECASTCONNECT` | 转发端口连不上或超时 |
+| `ECASTTIMEOUT` | 命令没有在时限内收到回复 |
+| `ECASTUPGRADE` | 扩展拒绝了 WebSocket 升级，或升级超时 |
+
+### 10.3 手势与设备操作
+
+| code | 触发条件 |
+|---|---|
+| `EGESTURE` | 设备没有返回 `PointerMatrix` 引用 |
+| `ECAPTURE` | 截图返回了空数据 |
+| `ECLEAR` | `clearAppData` 失败 |
+| `EUNINSTALL` | 卸载失败 |
 
 `DeviceStateError.state` 与 CLI 的状态词同源（`device_offline` / `device_needs_setup`），
 所以脚本里判断设备状态时不用解析英文消息。

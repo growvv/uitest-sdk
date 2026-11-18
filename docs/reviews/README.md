@@ -57,8 +57,25 @@ finding names, then the code changed until it passed, then the whole suite ran.
 | I6 | `package-docs.test.ts` — "names every product a reader should install instead" | the core README names `uitest-mirror`; root README says three products |
 | M1 | `gen-acceptance.test.ts` — `unacceptedVersions` cases | a current version with no report is an error the caller exits 1 on |
 
-`npm test` → 114 files, 1113 tests passing. `npm run typecheck`,
+`npm test` → 118 files, 1119 tests passing. `npm run typecheck`,
 `npm run typecheck:tests`, `check-layers`, `check-site` and `check-skill` all pass.
+
+## Cross-check findings, also fixed
+
+The second pass (`cross-check-findings.md`) found three defects of its own and a
+set of duplication and taxonomy minors. All of them are now addressed:
+
+| Finding | Fix | Test |
+|---|---|---|
+| `session.view.open()` used a private `openBrowser` instead of core's `openWindow` | it calls `openWindow`, and `openBrowser` is deleted | `api-shared-paths.test.ts` |
+| `session.cast.record()` re-implemented `Recording.start` (mkdir, ws port offset, gRPC socket name; `RECORD_PORT_OFFSET` declared twice) | it builds a `Recording` and uses it | `api-shared-paths.test.ts` |
+| `connectTcp` copied in `driver/device.ts` and `input/open.ts`; `pids` copied in `cast/daemon.ts` and `driver/device.ts` | one `transport/helpers.ts` | `transport-helpers.test.ts` |
+| `waitForStop` copied between the console and the mirror | one `viewer/lifecycle.ts`, exported as `uitest-sdk/viewer` | `wait-for-stop.test.ts` |
+| 25 thrown codes missing from the documented table; `EBADARG` vs `EINVALIDARGUMENT` | every code is documented, the two argument codes are explained, and a test fails when a new code is thrown undocumented | `error-codes-documented.test.ts` |
+
+`DevicePool` is left exported and unused: it is a documented library capability
+(`uitest-sdk/drivers`) with its own tests, not dead product code, and removing a
+public export is a breaking change that this review did not ask for.
 
 ## Declined — with reason
 

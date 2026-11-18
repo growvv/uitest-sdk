@@ -1,9 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { consoleOptions, consoleOptionsFrom, startConsole, waitForStop } from "../../src/cli.js";
+import { consoleOptions, consoleOptionsFrom, startConsole } from "../../src/cli.js";
 import type { ConsoleCliOptions } from "../../src/cli.js";
 import type { Screen } from "uitest-sdk";
 
@@ -96,48 +95,6 @@ function options(over: Partial<ConsoleCliOptions> = {}): ConsoleCliOptions {
     ...over,
   };
 }
-
-describe("waitForStop", () => {
-  // A supervisor on Windows cannot deliver SIGTERM: `child.kill()` terminates
-  // the process outright, so the handler that releases the device never runs
-  // and the console's port forward outlives it. Twenty such forwards filled
-  // 8012..8031 and the next run could not open the tunnel at all. Closing the
-  // child's stdin is the signal a supervisor *can* send on every platform.
-  it("stops when the supervisor closes stdin", async () => {
-    const stdin = new EventEmitter() as EventEmitter & { resume(): void };
-    stdin.resume = () => undefined;
-    const signals = new EventEmitter();
-
-    const stopped = waitForStop({ stdin, signals });
-    stdin.emit("end");
-    await expect(stopped).resolves.toBeUndefined();
-  });
-
-  it("still stops on SIGINT from a terminal", async () => {
-    const stdin = new EventEmitter() as EventEmitter & { resume(): void };
-    stdin.resume = () => undefined;
-    const signals = new EventEmitter();
-
-    const stopped = waitForStop({ stdin, signals });
-    signals.emit("SIGINT");
-    await expect(stopped).resolves.toBeUndefined();
-  });
-
-  it("resolves once, whichever comes first", async () => {
-    const stdin = new EventEmitter() as EventEmitter & { resume(): void };
-    stdin.resume = () => undefined;
-    const signals = new EventEmitter();
-
-    let stops = 0;
-    const stopped = waitForStop({ stdin, signals }).then(() => {
-      stops++;
-    });
-    signals.emit("SIGTERM");
-    stdin.emit("end");
-    await stopped;
-    expect(stops).toBe(1);
-  });
-});
 
 describe("startConsole", () => {
   it("opens the session without a lease, so an agent keeps working", async () => {

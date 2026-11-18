@@ -19,6 +19,10 @@ export { openInput } from "../input/open.js";
 export type { InputHost } from "../input/open.js";
 export { AgentInputLane } from "../input/lane.js";
 export type { InputLane, InputSession, InputAgent } from "../input/lane.js";
+// The stop signal every product's CLI needs: a supervisor on Windows can
+// only close stdin, and a product that does not hear it leaves its lease and
+// its port forward behind. One implementation, exported rather than copied.
+export { waitForStop } from "../viewer/lifecycle.js";
 export { originAllowed } from "../viewer/origin.js";
 export type { OriginContext } from "../viewer/origin.js";
 export { LiveState } from "../viewer/state.js";

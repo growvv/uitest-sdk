@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { AgentClient, isBusyException } from "./agent/client.js";
 import { CliRunner } from "./cli.js";
 import { Files } from "../transport/files.js";
+import { connectTcp, pids } from "../transport/helpers.js";
 import { HdcRunner } from "../transport/hdc.js";
 import { HypiumDriver } from "./hypium/driver.js";
 import { deviceTag } from "../governance/trace.js";
@@ -48,18 +49,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Parses `pidof` output. Multiple pids come back space-separated on one line. */
-function pids(output: string): Set<string> {
-  return new Set(output.split(/\s+/).filter((t) => /^\d+$/.test(t)));
-}
-
-function connectTcp(port: number): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const sock = net.createConnection(port, "127.0.0.1");
-    sock.once("connect", () => resolve(sock));
-    sock.once("error", reject);
-  });
-}
 
 /**
  * Owns one device: pushes the agent extension, makes sure a daemon is

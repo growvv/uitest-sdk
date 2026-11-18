@@ -3,6 +3,7 @@ import { connect, tagOf } from "uitest-sdk";
 import type { ConnectOptions } from "uitest-sdk";
 import { LeaseHeldError, UitestError } from "uitest-sdk";
 import { createViewerSource, openInput, openWindow, renderPlayerPage, startViewerServer } from "uitest-sdk/viewer";
+import { waitForStop } from "uitest-sdk/viewer";
 import type { ViewerServer, ViewerSource } from "uitest-sdk/viewer";
 import { VERSION } from "./version.js";
 
@@ -280,32 +281,6 @@ export async function startMirror(
   }
 }
 
-/**
- * Resolves when the person or their supervisor asks this mirror to stop.
- *
- * SIGINT/SIGTERM cover a terminal. They are not enough for a supervisor: on
- * Windows `child.kill()` terminates the process outright and no handler runs,
- * so the lease and the hdc forward are never released. Closing stdin is a
- * signal every platform delivers, so it counts as the same request.
- */
-export function waitForStop(io: {
-  stdin: { resume(): void; on(event: string, listener: () => void): unknown };
-  signals: { once(event: string, listener: () => void): unknown };
-}): Promise<void> {
-  io.stdin.resume();
-  return new Promise<void>((resolve) => {
-    let stopped = false;
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      resolve();
-    };
-    io.signals.once("SIGINT", stop);
-    io.signals.once("SIGTERM", stop);
-    io.stdin.on("end", stop);
-    io.stdin.on("close", stop);
-  });
-}
 
 const HELP = `usage: uitest-mirror [--serial id] [--transport grpc|ws|mjpeg] [--max-fps 15|30|60|120]
                      [--bit-rate N] [--max-size N] [--record file.mp4]

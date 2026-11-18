@@ -1,9 +1,8 @@
 import type { HdcRunner } from "../transport/hdc.js";
+import { pids } from "../transport/helpers.js";
 
-/** Parses `pidof` output. Multiple pids come back space-separated on one line. */
-export function pids(output: string): Set<string> {
-  return new Set(output.split(/\s+/).filter((t) => /^\d+$/.test(t)));
-}
+// Kept on this module's surface: the cast clients import both from here.
+export { pids };
 
 /**
  * Finds the pid whose argv carries `socketName`, from `ps -ef` output.

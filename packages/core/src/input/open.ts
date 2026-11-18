@@ -3,6 +3,7 @@ import { AgentClient } from "../driver/agent/client.js";
 import { AgentInputLane } from "./lane.js";
 import type { InputSession } from "./lane.js";
 import type { HdcRunner } from "../transport/hdc.js";
+import { connectTcp } from "../transport/helpers.js";
 
 /** The part of a connected device an input lane needs; `Device` satisfies it. */
 export interface InputHost {
@@ -13,13 +14,6 @@ export interface InputHost {
   readonly retryOnBusy?: boolean;
 }
 
-function connectTcp(port: number): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const sock = net.createConnection(port, "127.0.0.1");
-    sock.once("connect", () => resolve(sock));
-    sock.once("error", reject);
-  });
-}
 
 /**
  * Opens a second agent connection dedicated to input.

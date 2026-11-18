@@ -1,6 +1,4 @@
-import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { Device } from "./driver/device.js";
 import type { DeviceOptions } from "./driver/device.js";
 import { Session as CoreSession } from "./operations/session.js";
@@ -41,8 +39,10 @@ import type { TraceRecorder, TraceRecord } from "./governance/trace.js";
 import { castConfigPath, CastConfig } from "./cast/config.js";
 import type { CastSettings } from "./cast/config.js";
 import { createCast } from "./cast/create.js";
+import { Recording } from "./cast/record.js";
 import type { CastClient, CastOptions } from "./cast/types.js";
 import { createViewerSource } from "./viewer/source.js";
+import { openWindow } from "./viewer/window.js";
 import { keepAwake } from "./keep-awake.js";
 import type { KeepAwakeHandle } from "./keep-awake.js";
 import { startViewerServer } from "./viewer/server.js";
@@ -169,26 +169,6 @@ export interface GovernApi {
   recent(limit?: number): Promise<TraceRecord[]>;
 }
 
-/** Records the socket/port pair a recording daemon needs to live beside the stream. */
-const RECORD_PORT_OFFSET = 1;
-
-/** Opens the URL in the platform's default browser; failure is not fatal. */
-function openBrowser(url: string): void {
-  const [command, args] =
-    process.platform === "win32"
-      ? ["cmd", ["/c", "start", "", url]]
-      : process.platform === "darwin"
-        ? ["open", [url]]
-        : ["xdg-open", [url]];
-  try {
-    const child = spawn(command, args, { detached: true, stdio: "ignore" });
-    child.on("error", () => undefined);
-    child.unref();
-  } catch {
-    // The URL is returned either way.
-  }
-}
-
 /**
  * One task's view of one device, shaped by what an agent is doing.
  *
@@ -283,22 +263,22 @@ export class Session {
         createCast(this.device, { ...(await this.castDefaults()), mode: "stream", ...opts }),
       record: async (opts) => {
         const { out, ...rest } = opts;
-        await mkdir(dirname(out), { recursive: true });
-        const stream = await this.castDefaults();
-        const ws = (rest.transport ?? stream.transport) === "ws";
-        const cast = await createCast(this.device, {
-          ...stream,
-          ...rest,
-          mode: "record",
-          ...(ws
-            ? { port: (rest.port ?? stream.port ?? 5000) + RECORD_PORT_OFFSET }
-            : { socketName: `uitest_record_${process.pid}` }),
+        // `Recording` owns the rule that a record daemon must not share the
+        // stream's socket or port. Re-implementing it here was a second copy
+        // that would silently drift — and the failure mode is a second daemon
+        // on the stream's own socket, which takes the picture away.
+        const recording = new Recording({
+          stateDir: this.stateDir,
           outputPath: out,
+          socketName: `uitest_record_${process.pid}`,
+          createCast: (castOpts) => createCast(this.device, castOpts),
+          streamCast: { ...(await this.castDefaults()), ...rest, mode: "stream" },
         });
+        await recording.start();
         return {
           path: out,
           stop: async () => {
-            await cast.dispose();
+            await recording.stop();
             return out;
           },
         };
@@ -334,7 +314,7 @@ export class Session {
         const host = opts.host ?? "127.0.0.1";
         const shown = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
         const url = `http://${shown}:${server.port}/`;
-        if (opts.open !== false) openBrowser(url);
+        if (opts.open !== false) openWindow(url);
         this.views.add(server);
         return {
           url,
