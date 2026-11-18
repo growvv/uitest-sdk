@@ -83,9 +83,15 @@ describe("gitHead", () => {
 
   // Three runners each had their own copy, and a fix in one would have left
   // the other two stamping `+dirty` on every first run at a new version.
+  //
+  // They exclude the evidence tree, not just their own product's directory.
+  // The three products ship together and are accepted one after another, so
+  // excluding only the current run's directory makes the second and third
+  // report `+dirty` because of the first one's uncommitted output — three
+  // reports of one clean release, two of them claiming the tree was modified.
   it.each(RUNNERS)("%s stamps the commit through the shared helper", (name) => {
     const text = readFileSync(new URL(`scripts/${name}`, ROOT), "utf8");
     expect(text).not.toMatch(/function gitHead\(/);
-    expect(text).toMatch(/gitHead\(\{ exclude: \[relative\(ROOT, OUT\)\] \}\)/);
+    expect(text).toMatch(/gitHead\(\{ exclude: \[relative\(ROOT, EVIDENCE\)\] \}\)/);
   });
 });

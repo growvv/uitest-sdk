@@ -36,7 +36,11 @@ const VERSION = (
     version: string;
   }
 ).version;
-const OUT = process.env.UITEST_ACCEPTANCE_DIR ?? join(ROOT, "docs", "acceptance", `${PRODUCT}-${VERSION}`);
+// The whole evidence tree: the three products are accepted one after another
+// in one sitting, and each run must not read the previous run's uncommitted
+// output as a modification to the code.
+const EVIDENCE = join(ROOT, "docs", "acceptance");
+const OUT = process.env.UITEST_ACCEPTANCE_DIR ?? join(EVIDENCE, `${PRODUCT}-${VERSION}`);
 const SHOTS = join(OUT, "screenshots");
 const LOGS = join(OUT, "logs");
 const WORK = join(ROOT, ".work-bench", "accept-console");
@@ -784,7 +788,7 @@ async function run(targets: string[]): Promise<number> {
     date: localDate(),
     // The run's own evidence is not a modification to the code: a first
     // run at a new version would otherwise stamp itself `+dirty`.
-    commit: gitHead({ exclude: [relative(ROOT, OUT)] }),
+    commit: gitHead({ exclude: [relative(ROOT, EVIDENCE)] }),
     devices,
     cases,
     summary,
