@@ -1,6 +1,6 @@
 {
   "name": "uitest-sdk",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "HarmonyOS UI automation SDK: layout, screenshots, H.264/WebSocket casting, input, approvals and leases — the library other tools build on",
   "license": "MIT",
   "repository": {

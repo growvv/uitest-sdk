@@ -221,15 +221,20 @@ describe("startMirror", () => {
    */
   it("reports the window's close so the command can stop", async () => {
     let onClose: (() => void) | undefined;
+    let profile: boolean | undefined;
     const fake = fakeSession();
     const run = await startMirror(
       OPTIONS,
       async () => fake.session as never,
       (_url, opts) => {
         onClose = (opts as { onClose?: () => void }).onClose;
+        profile = (opts as { profile?: boolean }).profile;
         return { opened: true };
       },
     );
+    // Without a profile of its own the browser joins the running one and the
+    // launcher exits at once — which the product reads as "the window closed".
+    expect(profile).toBe(true);
     expect(onClose).toBeTypeOf("function");
     let stopped = false;
     void run.windowClosed.then(() => (stopped = true));
@@ -237,6 +242,22 @@ describe("startMirror", () => {
     await run.windowClosed;
     expect(stopped).toBe(true);
     await run.close();
+  });
+
+  /**
+   * Ctrl+C and a closed stdin stop the mirror without the window going away.
+   * Leaving the window behind shows a page whose server is gone.
+   */
+  it("closes the window it opened when the product stops", async () => {
+    let closedWindow = 0;
+    const fake = fakeSession();
+    const run = await startMirror(
+      OPTIONS,
+      async () => fake.session as never,
+      () => ({ opened: true, close: () => (closedWindow += 1) }),
+    );
+    await run.close();
+    expect(closedWindow).toBe(1);
   });
 
   /**

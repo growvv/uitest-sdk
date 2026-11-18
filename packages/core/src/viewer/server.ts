@@ -496,6 +496,17 @@ export class ViewerServer {
   }
 
   private onUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
+    // A page that connects while the server is shutting down is not a client:
+    // attaching it would put a WebSocket into the set after `finishClose` had
+    // already closed them all, and `server.close()` would never fire — it waits
+    // for every connection, and `closeAllConnections()` does not cover an
+    // upgraded socket. Measured on a device: the product hung until killed and
+    // left the `--stay-awake` override behind. A browser reload racing a
+    // shutdown is exactly this.
+    if (this.closing) {
+      this.refuseUpgrade(socket, "503 Service Unavailable");
+      return;
+    }
     const path = (req.url ?? "/").split("?")[0];
     if (path !== "/live") {
       this.refuseUpgrade(socket, "404 Not Found");

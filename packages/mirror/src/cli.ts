@@ -253,7 +253,15 @@ export async function startMirror(
 
     const url = `http://127.0.0.1:${server.port}/`;
     const { width, height } = await session.device.agent.getDisplaySize();
-    window(url, { size: windowSizeFor(width, height), onClose: markWindowClosed });
+    // A profile of its own is what makes this process the window: without it
+    // the browser hands the URL to a running instance and exits at once, and
+    // the run would stop the moment it started.
+    const opened = window(url, {
+      size: windowSizeFor(width, height),
+      onClose: markWindowClosed,
+      profile: true,
+    });
+    const closeWindow = (opened as { close?: () => void }).close;
 
     const started = server;
     let closed = false;
@@ -266,6 +274,9 @@ export async function startMirror(
         if (closed) return;
         closed = true;
         await started.close();
+        // Stopping for any reason other than the window — stdin, Ctrl+C —
+        // must not leave it showing a page whose server is gone.
+        closeWindow?.();
         if (awake) await awake.restore().catch(() => undefined);
         await session.close();
       },

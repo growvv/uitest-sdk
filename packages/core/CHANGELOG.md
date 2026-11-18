@@ -8,6 +8,34 @@
 
 ## [未发布]
 
+## [0.11.1] — 2026-11-19
+
+第二轮全仓评审（`docs/reviews/codex-architecture-review-2.md`）之后的修正版，
+外加验收 `uitest-mirror` 时暴露的两个窗口缺陷。没有破坏性变更；一处行为变化
+写在下面第一条。
+
+- **`openWindow` 不再把「浏览器没启动」当成「窗口被关掉」**。`spawn` 找不到
+  可执行文件时不会抛错，而是异步发出 `error` 和退出码为负的 `close`；把那次
+  `close` 当作人关窗，让 `uitest-mirror` 一启动就退出。现在只有真正发出过
+  `spawn` 的子进程退出才算关窗。
+- **Windows 上按安装路径找浏览器**。`msedge.exe` / `chrome.exe` 不在 PATH 上，
+  此前打印了 URL 却从不打开窗口。新增 `resolveBrowserPath`。
+- **`openWindow({ profile: true })`**：给窗口一个独立 profile。浏览器已有实例时，
+  新进程只是把 URL 交给它并在几十毫秒内退出——那不是窗口的寿命。镜像类产品用这个
+  选项，让进程就是窗口。
+- **`openWindow` 返回 `close()`**：产品因 stdin 关闭或 Ctrl+C 停止时关掉自己开的
+  窗口，不留一个指向已停服务的页面。
+- **每个 ws 视图有自己的设备端口**：`session.view.open()` 的第二个及以后的视图在
+  ws 传输上此前都落到设备端口 5000，第二个页面会接管第一个的 daemon。现在按视图
+  序号分配 5000、5002、5004……
+- **并发生命周期收口**：`Session.close`、`Recording.start/stop`、
+  `Device.dispose`、`ViewerServer.close` 都改为等待同一个进行中的操作，第二次调用
+  不再提前返回；`Device.connect` 重连或健康检查重启起的 daemon 也会被 `dispose()`
+  收掉；两个投流客户端在 `ps -ef` 还没显示自己的 daemon 时，按 pidof 差值只杀那一个
+  新进程。
+- **启动失败的错误不再残留**：一次 `--record` 启动失败后，后续重试成功时新接入的
+  标签页不再被告知「录制失败」。
+
 ## [0.11.0] — 2026-11-18
 
 第四个产品 `uitest-mirror` 需要的四处能力。全部是新增，没有破坏性变更。

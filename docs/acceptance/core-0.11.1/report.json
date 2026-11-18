@@ -1,0 +1,269 @@
+{
+  "product": "core",
+  "version": "0.11.1",
+  "date": "2026-11-19",
+  "commit": "3ae6a42+dirty",
+  "devices": [
+    {
+      "tag": "7544d645",
+      "model": "MLR-AL10",
+      "resolution": "1600x2560"
+    }
+  ],
+  "cases": [
+    {
+      "id": "viewer-mirror",
+      "title": "viewer 镜像（真实浏览器）",
+      "status": "pass",
+      "detail": "1600x2560 · 0 notes",
+      "screenshots": [
+        "viewer-mirror-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "device": "7544d645"
+    },
+    {
+      "id": "viewer-inspect",
+      "title": "viewer 节点表",
+      "status": "pass",
+      "detail": "22 node rows",
+      "screenshots": [
+        "viewer-inspect-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "device": "7544d645"
+    },
+    {
+      "id": "viewer-privacy",
+      "title": "viewer 隐私开关",
+      "status": "pass",
+      "detail": "switch on->off->on (was true) · 遮罩在读布局时完成，不覆盖在画面上",
+      "screenshots": [
+        "viewer-privacy-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "device": "7544d645"
+    },
+    {
+      "id": "connect",
+      "title": "connect() 与会话",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "com.huawei.hmos.calculator · 1600x2560",
+      "screenshots": [
+        "connect-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1422
+    },
+    {
+      "id": "click",
+      "title": "act.tap 点击",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 1250 ms",
+      "screenshots": [
+        "click-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2368
+    },
+    {
+      "id": "swipe",
+      "title": "act.swipe 滑动",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 1968 ms",
+      "screenshots": [
+        "swipe-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 3171
+    },
+    {
+      "id": "touch",
+      "title": "触摸协议 down/move/up",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "down/move/up ok",
+      "screenshots": [
+        "touch-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 977
+    },
+    {
+      "id": "triggerKey",
+      "title": "act.key 系统按键",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · power",
+      "screenshots": [
+        "triggerKey-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5763
+    },
+    {
+      "id": "captureLayout",
+      "title": "observe.layout UI 树",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "224 nodes",
+      "screenshots": [
+        "captureLayout-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2769
+    },
+    {
+      "id": "captureScreen",
+      "title": "observe.screenshot 截图",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "118 ms · 48996 B",
+      "screenshots": [
+        "captureScreen-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 371
+    },
+    {
+      "id": "cropScreen",
+      "title": "按 bundle 裁剪截图",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "com.huawei.hmos.calculator · 68500 B",
+      "screenshots": [
+        "cropScreen-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1755
+    },
+    {
+      "id": "streamScreen",
+      "title": "streamScreen MJPEG 取帧",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "12.1 fps",
+      "screenshots": [
+        "streamScreen-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1769
+    },
+    {
+      "id": "createCast",
+      "title": "cast.open H.264 投流",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "h264 · 31 B",
+      "screenshots": [
+        "createCast-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2556
+    },
+    {
+      "id": "createCastRecord",
+      "title": "cast.record MP4 录制",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "219129 B mp4",
+      "screenshots": [
+        "createCastRecord-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 8470
+    },
+    {
+      "id": "dualCast",
+      "title": "两路并发投流",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "31 B / 31 B",
+      "screenshots": [
+        "dualCast-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 4424
+    },
+    {
+      "id": "dumpLayout",
+      "title": "cli.dumpLayout",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "226 nodes",
+      "screenshots": [
+        "dumpLayout-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2098
+    },
+    {
+      "id": "queue",
+      "title": "并发调用排队",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "10 calls · 98 ms",
+      "screenshots": [
+        "queue-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 866
+    },
+    {
+      "id": "rpcDuringStream",
+      "title": "投流期间调用 RPC",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "6 ms",
+      "screenshots": [
+        "rpcDuringStream-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1045
+    },
+    {
+      "id": "streamUiActions",
+      "title": "UI 事件流",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "session opens; synthetic touches are not reported (device behaviour)",
+      "screenshots": [
+        "streamUiActions-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1242
+    },
+    {
+      "id": "security-origin",
+      "title": "viewer 来源校验（7 种握手）",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "7/7 handshakes · origin: 101",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "package",
+      "title": "npm 包内容",
+      "status": "pass",
+      "detail": "161 个文件 · 1051 KB · 无 src/test/bin · 3 个设备扩展",
+      "screenshots": [],
+      "kind": "log",
+      "device": "host"
+    }
+  ],
+  "summary": {
+    "passed": 21,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rerun": [
+    "unset HDC_SERVER_PORT",
+    "npx tsx scripts/acceptance-core.ts --targets <id>[,<id>]",
+    "node scripts/gen-acceptance-pages.mjs"
+  ],
+  "issues": []
+}

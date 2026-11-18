@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appWindowCommand, openWindow } from "../../src/viewer/window.js";
+import { appWindowCommand, openWindow, resolveBrowserPath } from "../../src/viewer/window.js";
 
 describe("appWindowCommand", () => {
   // The platform is always named here. Reading it from the host made this test
@@ -31,6 +31,148 @@ describe("appWindowCommand", () => {
     const cmd = appWindowCommand("edge", "http://127.0.0.1:7050/", "win32", "500,900");
     expect(cmd.args).toContain("--window-size=500,900");
     expect(cmd.args).not.toContain("--window-size=1100,900");
+  });
+
+  it("gives the window its own profile when asked", () => {
+    const cmd = appWindowCommand("edge", "http://127.0.0.1:7050/", "win32", "500,900", "C:/tmp/p1");
+    expect(cmd.args).toContain("--user-data-dir=C:/tmp/p1");
+    expect(cmd.args).toContain("--no-first-run");
+  });
+
+  it("uses the shared profile when no profile is asked for", () => {
+    const cmd = appWindowCommand("edge", "http://127.0.0.1:7050/", "win32");
+    expect(cmd.args.some((a) => a.startsWith("--user-data-dir="))).toBe(false);
+  });
+
+  /**
+   * A browser that joins an already-running instance hands the URL over and
+   * the launched process exits within a few hundred milliseconds. Its exit is
+   * therefore not the window closing — which is why the mirror, whose whole
+   * lifetime is the window's, asks for a profile of its own.
+   */
+  it("gives each profiled window a different profile directory", () => {
+    const profiles: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      openWindow("http://127.0.0.1:7042/", {
+        platform: "win32",
+        browser: "edge",
+        exists: () => false,
+        profile: true,
+        spawn: (_command, args) => {
+          profiles.push(args.find((a) => a.startsWith("--user-data-dir="))!);
+          return { on: () => undefined };
+        },
+        print: () => undefined,
+      });
+    }
+    expect(profiles).toHaveLength(2);
+    expect(profiles[0]).toMatch(/^--user-data-dir=/);
+    expect(profiles[0]).not.toBe(profiles[1]);
+  });
+
+  /**
+   * A browser that is not on PATH does not throw from `spawn`; the failure
+   * arrives asynchronously as `error` followed by `close` with a negative exit
+   * code. Counting that `close` as the person shutting the window made
+   * `uitest-mirror` exit the moment it started on a bench without Edge.
+   */
+  it("does not report a close for a browser that never launched", async () => {
+    const { EventEmitter } = await import("node:events");
+    let closes = 0;
+    const child = new EventEmitter() as unknown as { unref(): void };
+    child.unref = () => undefined;
+    openWindow("http://127.0.0.1:7042/", {
+      platform: "win32",
+      browser: "edge",
+      spawn: () => child,
+      onClose: () => (closes += 1),
+      print: () => undefined,
+    });
+    // What Node emits for `spawn("msedge.exe")` with no such file.
+    (child as unknown as EventEmitter).emit("error", Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    (child as unknown as EventEmitter).emit("close", -4058, null);
+    expect(closes).toBe(0);
+  });
+
+  it("reports a close once the browser really ran and exited", async () => {
+    const { EventEmitter } = await import("node:events");
+    let closes = 0;
+    const child = new EventEmitter() as unknown as { unref(): void };
+    child.unref = () => undefined;
+    openWindow("http://127.0.0.1:7042/", {
+      platform: "win32",
+      browser: "edge",
+      spawn: () => child,
+      onClose: () => (closes += 1),
+      print: () => undefined,
+    });
+    (child as unknown as EventEmitter).emit("spawn");
+    (child as unknown as EventEmitter).emit("exit", 0, null);
+    expect(closes).toBe(1);
+  });
+
+  /**
+   * `msedge.exe` is not on PATH on a normal Windows install. The product used
+   * to spawn the bare name, get an asynchronous `ENOENT`, and open nothing —
+   * a mirror that printed a URL and showed no window.
+   */
+  it("uses the installed path for Edge when it is not on PATH", () => {
+    const installed = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+    expect(resolveBrowserPath("edge", "win32", (p) => p === installed)).toBe(installed);
+  });
+
+  it("falls back to the bare name when no install is found", () => {
+    expect(resolveBrowserPath("chrome", "win32", () => false)).toBe("chrome.exe");
+  });
+
+  it("opens the browser from its installed path", () => {
+    const spawned: string[] = [];
+    const result = openWindow("http://127.0.0.1:7042/", {
+      platform: "win32",
+      browser: "chrome",
+      exists: (p) => p === "C:/Program Files/Google/Chrome/Application/chrome.exe",
+      spawn: (command) => {
+        spawned.push(command);
+        return { on: () => undefined };
+      },
+      print: () => undefined,
+    });
+    expect(result.opened).toBe(true);
+    expect(spawned).toEqual(["C:/Program Files/Google/Chrome/Application/chrome.exe"]);
+  });
+
+  /**
+   * A product that stops for any reason other than the window — stdin closed,
+   * Ctrl+C — must not leave the window it opened pointing at a dead server.
+   */
+  it("closes the window it opened", async () => {
+    const { EventEmitter } = await import("node:events");
+    const child = new EventEmitter() as unknown as { unref(): void; pid: number };
+    child.unref = () => undefined;
+    child.pid = 4242;
+    const killed: number[] = [];
+    const result = openWindow("http://127.0.0.1:7042/", {
+      platform: "win32",
+      browser: "edge",
+      exists: () => false,
+      spawn: () => child,
+      kill: (pid) => killed.push(pid),
+      print: () => undefined,
+    });
+    result.close?.();
+    expect(killed).toEqual([4242]);
+  });
+
+  it("has nothing to close when no window opened", () => {
+    const result = openWindow("http://127.0.0.1:7042/", {
+      platform: "linux",
+      spawn: () => {
+        throw new Error("ENOENT");
+      },
+      print: () => undefined,
+    });
+    expect(result.opened).toBe(false);
+    expect(result.close).toBeUndefined();
   });
 
   it("reports the URL when no window can be opened", () => {

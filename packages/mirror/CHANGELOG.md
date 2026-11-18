@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.1 (2026-11-19)
+
+Runs on `uitest-sdk@0.11.1`. Fixes what the first acceptance run found: the
+window the product opens is now the window it watches.
+
+- **The window is a window, not a hand-off.** The browser is launched with a
+  profile of its own, so the process this command spawned lives as long as the
+  window. Before this, a browser that was already running took the URL and the
+  launcher exited at once — and because a closed window is a stop signal, the
+  product stopped the moment it started.
+- **A browser that is not installed is not a closed window.** On Windows
+  `msedge.exe` and `chrome.exe` are not on PATH; the launch failed
+  asynchronously and was read as "the person closed the window". The installed
+  path is now used, and only a process that really ran can report a close.
+- **Stopping for any other reason closes the window**, so Ctrl+C or a closed
+  stdin does not leave a page pointing at a server that is gone.
+- Runs on core's lifecycle fixes: a second `close()`/`stop()` joins the first
+  instead of returning early, and a daemon the reconnect started is cleaned up
+  too.
+
 ## 0.1.0 (2026-11-18)
 
 First release: a HarmonyOS scrcpy as the fourth package in this repository.

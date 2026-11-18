@@ -1021,6 +1021,34 @@ describe("ViewerServer: capture and record", () => {
     c.close();
   });
 
+  /**
+   * A page that attaches while the server is shutting down.
+   *
+   * A browser reload, or the window the product is about to close, opens a
+   * second WebSocket exactly as `close()` runs. That socket was attached to the
+   * client set and then never closed: `closeAllConnections()` does not cover
+   * upgraded sockets, so `server.close()` never fired its callback and the
+   * product hung until it was killed — leaving the `--stay-awake` override on
+   * the phone. Measured on a real device: 40 s and counting.
+   */
+  it("refuses a page that connects while it is closing", async () => {
+    const h = await start({ holdCast: true });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+
+    // `close()` waits for the cast being opened; while it does, a reload lands.
+    const closing = h.server.close();
+    await sleep(50);
+    const late = await connect(h.port);
+    expect(late.refused).toBe(true);
+    expect(late.texts).toHaveLength(0);
+
+    h.releaseCast();
+    await closing;
+    c.close();
+    late.close();
+  });
+
   it("makes a second close wait for the first to finish", async () => {
     // `close()` used to return immediately when another close was in progress.
     // A caller that awaited the second call — a supervisor shutting two pages
