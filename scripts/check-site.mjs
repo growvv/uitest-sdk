@@ -8,7 +8,7 @@
  * exits 1 otherwise.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -39,6 +39,7 @@ const files = [
   "changelog.html",
   "api.html",
   "acceptance.html",
+  "acceptance-0.9.4.html",
   "styles.css",
   "main.js",
 ];
@@ -50,7 +51,10 @@ const html = readFileSync(join(SITE, "index.html"), "utf8");
 const docsHtml = readFileSync(join(SITE, "docs.html"), "utf8");
 const logHtml = readFileSync(join(SITE, "changelog.html"), "utf8");
 const apiHtml = readFileSync(join(SITE, "api.html"), "utf8");
-const acceptHtml = readFileSync(join(SITE, "acceptance.html"), "utf8");
+// 0.10.0: acceptance.html became the hub; the single-package record it used to
+// hold is kept verbatim as the historical 0.9.4 page.
+const acceptHtml = readFileSync(join(SITE, "acceptance-0.9.4.html"), "utf8");
+const hubHtml = readFileSync(join(SITE, "acceptance.html"), "utf8");
 const css = readFileSync(join(SITE, "styles.css"), "utf8");
 const js = readFileSync(join(SITE, "main.js"), "utf8");
 const pages = [
@@ -58,7 +62,8 @@ const pages = [
   ["docs.html", docsHtml],
   ["changelog.html", logHtml],
   ["api.html", apiHtml],
-  ["acceptance.html", acceptHtml],
+  ["acceptance.html", hubHtml],
+  ["acceptance-0.9.4.html", acceptHtml],
 ];
 
 // ------------------------------------------------------------------- anchors
@@ -725,7 +730,7 @@ const acceptSections = [
 ];
 for (const id of acceptSections) {
   if (!new RegExp(`\\bid\\s*=\\s*"${id}"`).test(acceptHtml)) {
-    fail(`acceptance.html is missing id="${id}"`);
+    fail(`acceptance-0.9.4.html is missing id="${id}"`);
   }
 }
 // The page is one article rather than <section>s, so a section runs from its
@@ -733,7 +738,7 @@ for (const id of acceptSections) {
 // being satisfied by text that belongs to a different step.
 function acceptBlock(id) {
   const start = acceptHtml.indexOf(`<h2 id="${id}">`);
-  if (start < 0) fail(`acceptance.html has no #${id} block`);
+  if (start < 0) fail(`acceptance-0.9.4.html has no #${id} block`);
   const rest = acceptHtml.slice(start + 1);
   const next = rest.indexOf("<h2 id=");
   return next < 0 ? rest : rest.slice(0, next);
@@ -749,7 +754,7 @@ for (const [id, rows] of [
 ]) {
   const block = acceptBlock(id);
   const n = (block.match(/<tr>/g) ?? []).length - (block.match(/<thead>/g) ?? []).length;
-  if (n !== rows) fail(`acceptance.html #${id} has ${n} rows, expected ${rows}`);
+  if (n !== rows) fail(`acceptance-0.9.4.html #${id} has ${n} rows, expected ${rows}`);
 }
 
 for (const needle of [
@@ -805,7 +810,7 @@ for (const needle of [
   // release's page: its version must stay the one it measured.
   "0.9.4",
 ]) {
-  if (!acceptHtml.includes(needle)) fail(`acceptance.html 缺少「${needle}」`);
+  if (!acceptHtml.includes(needle)) fail(`acceptance-0.9.4.html 缺少「${needle}」`);
 }
 // The 16 capability names the matrix claims, and the 10 live scenarios: a
 // matrix that quietly lost a row would still read as "everything passed".
@@ -815,7 +820,7 @@ for (const name of [
   "dualCast", "dumpLayout", "queue", "rpcDuringStream", "streamUiActions",
 ]) {
   if (!acceptBlock("step4").includes(`<code>${name}</code>`)) {
-    fail(`acceptance.html 的能力矩阵缺少 ${name}`);
+    fail(`acceptance-0.9.4.html 的能力矩阵缺少 ${name}`);
   }
 }
 for (const scenario of [
@@ -823,7 +828,7 @@ for (const scenario of [
   "browser keyboard", "system keys", "pinch", "stability",
 ]) {
   if (!acceptBlock("step5").includes(scenario)) {
-    fail(`acceptance.html 的接管场景缺少 ${scenario}`);
+    fail(`acceptance-0.9.4.html 的接管场景缺少 ${scenario}`);
   }
 }
 // Every screenshot the page shows must be a real JPEG of a real capture. A
@@ -831,7 +836,7 @@ for (const scenario of [
 // bytes and the size rather than only the path.
 for (const [, src] of acceptHtml.matchAll(/<img src="(assets\/acceptance\/[^"]+)"/g)) {
   const p = join(SITE, src);
-  if (!existsSync(p)) fail(`acceptance.html references a missing image: ${src}`);
+  if (!existsSync(p)) fail(`acceptance-0.9.4.html references a missing image: ${src}`);
   const b = readFileSync(p);
   if (b[0] !== 0xff || b[1] !== 0xd8 || b[b.length - 2] !== 0xff || b[b.length - 1] !== 0xd9) {
     fail(`${src} is not a complete JPEG`);
@@ -861,12 +866,88 @@ for (const tag of ["7544d645", "6c585f5b"]) {
 // instead are eight lowercase hex digits. Words like ERR_PACKAGE_PATH_NOT_EXPORTED
 // contain underscores and code identifiers are lowercase, so neither matches.
 const serialish = acceptHtml.match(/\b(?=[A-Z0-9]{10,}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{10,}\b/g);
-if (serialish) fail(`acceptance.html looks like it contains a device serial: ${serialish[0]}`);
+if (serialish) fail(`acceptance-0.9.4.html looks like it contains a device serial: ${serialish[0]}`);
 // Every other page must link to it, or the report exists and nobody finds it.
 for (const [name, text] of pages) {
-  if (name === "acceptance.html") continue;
+  if (name === "acceptance.html" || name === "acceptance-0.9.4.html") continue;
   if (!text.includes('href="acceptance.html"')) fail(`${name} does not link to acceptance.html`);
 }
+
+// ------------------------------------- 0.10.0: one report per product per version
+// Every product is accepted on its own, and the page for it is generated from
+// the machine-written report. The check derives the expected set from
+// `packages/*/package.json`, so a version bump with no acceptance fails here
+// rather than shipping a release nobody ran.
+const REPORTS_DIR = join(ROOT, "docs", "acceptance");
+const reportDirs = existsSync(REPORTS_DIR)
+  ? readdirSync(REPORTS_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+  : [];
+const reports = [];
+for (const dir of reportDirs) {
+  const file = join(REPORTS_DIR, dir, "report.json");
+  if (!existsSync(file)) continue;
+  const r = JSON.parse(readFileSync(file, "utf8"));
+  reports.push({ ...r, dir });
+}
+if (reports.length === 0) fail("docs/acceptance has no report.json: every product must be accepted");
+
+const PRODUCT_LABEL = { core: "uitest-sdk", phone: "uitest-phone", console: "uitest-console", mirror: "uitest-mirror" };
+for (const [product, label] of Object.entries(PRODUCT_LABEL)) {
+  const pkgFile = join(ROOT, "packages", product, "package.json");
+  if (!existsSync(pkgFile)) continue;
+  const { version } = JSON.parse(readFileSync(pkgFile, "utf8"));
+  const has = reports.some((r) => r.product === product && r.version === version);
+  if (!has) fail(`packages/${product} is ${version} but docs/acceptance has no ${product}-${version}/report.json`);
+}
+
+for (const r of reports) {
+  const label = PRODUCT_LABEL[r.product];
+  if (!label) fail(`report ${r.dir} names an unknown product: ${r.product}`);
+  const pageName = `acceptance-${r.product}-${r.version}.html`;
+  const pageFile = join(SITE, pageName);
+  if (!existsSync(pageFile)) fail(`missing site/${pageName}; run node scripts/gen-acceptance-pages.mjs`);
+  const page = readFileSync(pageFile, "utf8");
+  for (const needle of [label, r.version, r.commit, r.date, 'href="acceptance.html"']) {
+    if (!page.includes(needle)) fail(`${pageName} 缺少「${needle}」`);
+  }
+  const total = r.cases.length;
+  const passed = r.summary?.passed ?? 0;
+  if (!page.includes(`>${passed}<`) || !page.includes(`>${total}<`)) {
+    fail(`${pageName} does not show its ${passed}/${total} summary`);
+  }
+  if (total < 5) fail(`${pageName} has only ${total} cases`);
+  // A log case (a tarball listing, a handshake transcript) has no screen to
+  // show, so it owes a written result instead. This is the generator's own
+  // rule; a check that demanded a picture here would fail reports the
+  // generator renders happily.
+  for (const c of r.cases) {
+    if (c.status === "skip") continue;
+    if (c.kind === "log") {
+      if (!String(c.detail ?? "").trim()) fail(`${pageName} case ${c.id} has no result to show`);
+      continue;
+    }
+    if (!c.screenshots || c.screenshots.length === 0) fail(`${pageName} case ${c.id} has no screenshot`);
+  }
+  for (const [, src] of page.matchAll(/<img src="(assets\/acceptance\/[^"]+)"/g)) {
+    const p = join(SITE, src);
+    if (!existsSync(p)) fail(`${pageName} references a missing image: ${src}`);
+    const b = readFileSync(p);
+    if (b[0] !== 0xff || b[1] !== 0xd8 || b[b.length - 2] !== 0xff || b[b.length - 1] !== 0xd9) {
+      fail(`${src} is not a complete JPEG`);
+    }
+    if (b.length < 20 * 1024) fail(`${src} is only ${Math.round(b.length / 1024)} KB`);
+  }
+  const serial = page.match(/\b(?=[A-Z0-9]{10,}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{10,}\b/g);
+  if (serial) fail(`${pageName} looks like it contains a device serial: ${serial[0]}`);
+}
+
+// The hub has to be the way in: every report page and the historical record.
+for (const r of reports) {
+  const href = `acceptance-${r.product}-${r.version}.html`;
+  if (!hubHtml.includes(`href="${href}"`)) fail(`acceptance.html does not link ${href}`);
+}
+if (!hubHtml.includes('href="acceptance-0.9.4.html"')) fail("acceptance.html does not link the 0.9.4 record");
+if (!hubHtml.includes("验收报告")) fail("acceptance.html is not the acceptance hub");
 
 // ----------------------------------------------- task 10: the script runs
 // main.js is loaded as a classic script. A top-level `export` is a syntax

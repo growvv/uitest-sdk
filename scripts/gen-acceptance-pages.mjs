@@ -197,10 +197,11 @@ ${caseRows}
       </ul>
 
       <h2 id="rerun">自己复现</h2>
-      <pre class="cli-code"><code>${rerun}</code></pre>
+      <pre class="cli-code">${rerun}</pre>
       <p class="note">重跑会覆盖本页引用的截图。截图进入官网之前必须逐张看过：通知栏、账户信息、聊天与第三方个人资料都不能出现在这里。</p>
     </article>
   </main>
+  <script src="main.js" defer></script>
 </body>
 </html>
 `;
@@ -267,6 +268,7 @@ ${rows}
       <p class="note">0.10.0 起 <code>uitest-sdk</code> 只发库，命令行与 MCP 在 <code>uitest-phone</code>，浏览器界面在 <code>uitest-console</code>，因此它们各有自己的验收页。</p>
     </article>
   </main>
+  <script src="main.js" defer></script>
 </body>
 </html>
 `;

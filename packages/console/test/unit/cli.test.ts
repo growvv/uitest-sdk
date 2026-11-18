@@ -1,8 +1,9 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { consoleOptions, startConsole } from "../../src/cli.js";
+import { consoleOptions, consoleOptionsFrom, startConsole, waitForStop } from "../../src/cli.js";
 import type { ConsoleCliOptions } from "../../src/cli.js";
 import type { Screen } from "uitest-sdk";
 
@@ -54,6 +55,18 @@ describe("consoleOptions", () => {
     expect(opts.open).toBe(false);
     expect(opts.task).toBe("checkout");
   });
+
+  // `--device`, `--state-dir` and `--task` are global flags: `parseArgv` files
+  // them under `options`, not `args`. Reading only `args` made the console
+  // silently ignore the device a person named and open whichever one it found
+  // — which is how a two-device acceptance run ended up pointed at the wrong
+  // phone and failing to find the agent daemon it expected.
+  it("reads the device, state dir and task the parser puts in options", () => {
+    const opts = consoleOptionsFrom(["--device", "SERIAL", "--state-dir", "/tmp/state", "--task", "checkout"]);
+    expect(opts.device).toBe("SERIAL");
+    expect(opts.stateDir).toBe("/tmp/state");
+    expect(opts.task).toBe("checkout");
+  });
 });
 
 const screen: Screen = {
@@ -83,6 +96,48 @@ function options(over: Partial<ConsoleCliOptions> = {}): ConsoleCliOptions {
     ...over,
   };
 }
+
+describe("waitForStop", () => {
+  // A supervisor on Windows cannot deliver SIGTERM: `child.kill()` terminates
+  // the process outright, so the handler that releases the device never runs
+  // and the console's port forward outlives it. Twenty such forwards filled
+  // 8012..8031 and the next run could not open the tunnel at all. Closing the
+  // child's stdin is the signal a supervisor *can* send on every platform.
+  it("stops when the supervisor closes stdin", async () => {
+    const stdin = new EventEmitter() as EventEmitter & { resume(): void };
+    stdin.resume = () => undefined;
+    const signals = new EventEmitter();
+
+    const stopped = waitForStop({ stdin, signals });
+    stdin.emit("end");
+    await expect(stopped).resolves.toBeUndefined();
+  });
+
+  it("still stops on SIGINT from a terminal", async () => {
+    const stdin = new EventEmitter() as EventEmitter & { resume(): void };
+    stdin.resume = () => undefined;
+    const signals = new EventEmitter();
+
+    const stopped = waitForStop({ stdin, signals });
+    signals.emit("SIGINT");
+    await expect(stopped).resolves.toBeUndefined();
+  });
+
+  it("resolves once, whichever comes first", async () => {
+    const stdin = new EventEmitter() as EventEmitter & { resume(): void };
+    stdin.resume = () => undefined;
+    const signals = new EventEmitter();
+
+    let stops = 0;
+    const stopped = waitForStop({ stdin, signals }).then(() => {
+      stops++;
+    });
+    signals.emit("SIGTERM");
+    stdin.emit("end");
+    await stopped;
+    expect(stops).toBe(1);
+  });
+});
 
 describe("startConsole", () => {
   it("opens the session without a lease, so an agent keeps working", async () => {

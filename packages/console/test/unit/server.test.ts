@@ -30,6 +30,11 @@ function deps(dir: string, approvals: Approvals) {
     approvals,
     stateDir: dir,
     tag: "7544d645",
+    // Whether the device is already held by a person. The page's button is a
+    // toggle, and a tab that joins while a hold is in place must start at
+    // "Resume" — otherwise its first click takes the device *again* and the
+    // person can never hand it back.
+    isHeld: async () => false,
     hold: async () => {
       held.push("hold");
       return { path: "p", token: "t", task: "held by a person", tookOverFrom: "agent" };
@@ -150,6 +155,33 @@ describe("console hooks", () => {
     const reply = c.sent[0]!;
     expect(reply.type).toBe("console:activity");
     expect((reply.items as Array<Record<string, unknown>>)[0]).toMatchObject({ command: "observe" });
+  });
+
+  it("tells a tab that joins while a person holds the device", async () => {
+    // The button is one toggle: Hold, then Resume. A tab that opens after a
+    // hold was written starts at `held = false`, so its first click holds the
+    // device again and the person can never give it back. The server has to
+    // say which state the device is in when the tab arrives.
+    const { dir, approvals } = store();
+    const d = { ...deps(dir, approvals), isHeld: async () => true };
+    const hooks = consoleHooks(d);
+    const c = tab();
+
+    hooks.onClient!(c);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(c.sent.some((m) => m.type === "console:held" && m.held === true)).toBe(true);
+  });
+
+  it("tells a tab that joins while the device is free", async () => {
+    const { dir, approvals } = store();
+    const hooks = consoleHooks(deps(dir, approvals));
+    const c = tab();
+
+    hooks.onClient!(c);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(c.sent.some((m) => m.type === "console:held" && m.held === false)).toBe(true);
   });
 
   it("leaves messages it does not own to the viewer", () => {

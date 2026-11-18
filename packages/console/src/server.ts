@@ -31,6 +31,14 @@ export interface ConsoleDeps {
   tag: string;
   hold(): Promise<HoldResult>;
   resume(): Promise<boolean>;
+  /**
+   * Whether a person holds the device right now.
+   *
+   * Read from the lease rather than remembered here: the hold may have been
+   * written by `uitest-phone hold` before this console started, and it may be
+   * released from another shell while the page is open.
+   */
+  isHeld(): Promise<boolean>;
   activity(): Promise<TraceRecord[]>;
 }
 
@@ -80,6 +88,13 @@ export function consoleHooks(deps: ConsoleDeps): ViewerHooks {
       list(client);
       void deps.activity().then(
         (items) => client.send({ type: "console:activity", items }),
+        () => undefined,
+      );
+      // And the lease state: the button is a toggle, so a tab that opens while
+      // a hold is in place must start at "Resume". Without this its first click
+      // holds the device again and the person cannot hand it back.
+      void deps.isHeld().then(
+        (held) => client.send({ type: "console:held", held }),
         () => undefined,
       );
     },

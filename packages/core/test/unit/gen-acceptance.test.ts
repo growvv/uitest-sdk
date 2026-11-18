@@ -71,4 +71,18 @@ describe("acceptance page generator", () => {
     expect(html).toContain("acceptance-0.9.4.html");
     expect(html).toContain("21/21");
   });
+
+  // The site's behaviour lives in main.js, and check-site proves it ran by
+  // looking for the `js-ready` class it sets on <html>. A generated page that
+  // omits the script tag is a page whose nav and copy button never run — and
+  // the site check fails on it, so the generator owes the tag on every page.
+  it("loads the site script on every page it writes", () => {
+    expect(renderReportPage(fixture)).toContain('<script src="main.js" defer></script>');
+    expect(renderHubPage([])).toContain('<script src="main.js" defer></script>');
+  });
+
+  it("writes rerun commands without nesting code elements", () => {
+    const html = renderReportPage(fixture);
+    expect(html).not.toContain("<code><code>");
+  });
 });

@@ -74,6 +74,42 @@ describe("console page", () => {
     expect(CONSOLE_SCRIPT).toContain("textContent");
   });
 
+  it("shows an answered approval as answered, not as still waiting", () => {
+    // After Allow, the row stayed exactly as it was: Allow/Deny buttons, and a
+    // countdown to an expiry that no longer applies. A person reading the page
+    // could not tell their answer had landed.
+    const allowed = renderApprovalRow({
+      id: "a1b2c3d4",
+      tag: "7544d645",
+      command: "tap",
+      bundle: "com.demo",
+      rule: "deletes",
+      status: "allowed",
+      expiresInMs: 42_000,
+    });
+    expect(allowed).toContain("allowed");
+    expect(allowed).not.toContain("data-allow");
+    expect(allowed).not.toContain("expires in");
+
+    const denied = renderApprovalRow({
+      id: "a1b2c3d4",
+      tag: "7544d645",
+      command: "tap",
+      status: "denied",
+      expiresInMs: 42_000,
+    });
+    expect(denied).toContain("denied");
+    expect(denied).not.toContain("data-deny");
+  });
+
+  it("lays its rows out as blocks, not as the viewer's flex rows", () => {
+    // The viewer defines a global `.row { display: flex }` for its node table.
+    // The console's rows are three stacked divs (head, meta, actions); under
+    // flex they sit side by side and the meta text is squeezed to one
+    // character — which is exactly what an acceptance screenshot showed.
+    expect(CONSOLE_HTML).toMatch(/#console-panel \.row\s*\{[^}]*display:\s*block/);
+  });
+
   it("polls the inbox while idle", () => {
     expect(CONSOLE_SCRIPT).toContain("setInterval");
     expect(CONSOLE_SCRIPT).toMatch(/2000|2_000/);

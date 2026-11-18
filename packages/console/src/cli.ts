@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { connect } from "uitest-sdk";
 import type { ConnectOptions } from "uitest-sdk";
 import { parseArgv } from "uitest-sdk/commands";
-import { Approvals, holdDevice, readRecentTrace, resumeDevice } from "uitest-sdk/govern";
+import { Approvals, holdDevice, readHold, readRecentTrace, resumeDevice } from "uitest-sdk/govern";
 import { createViewerSource } from "uitest-sdk/viewer";
 import type { ViewerSource } from "uitest-sdk/viewer";
 import { createConsoleServer, consoleHooks } from "./server.js";
@@ -150,6 +150,12 @@ export async function startConsole(
     tag: session.tag,
     hold: () => holdDevice({ stateDir: opts.stateDir, tag: session.tag }),
     resume: () => resumeDevice({ stateDir: opts.stateDir, tag: session.tag }),
+    // The lease is the truth: a hold may have been written by `uitest-phone
+    // hold` before this page started, and `resume` may run from another shell.
+    isHeld: async () => {
+      const lease = await readHold({ stateDir: opts.stateDir, tag: session.tag });
+      return lease?.hold === true;
+    },
     activity: () => readRecentTrace(opts.stateDir, { limit: 20 }),
   };
 
@@ -186,6 +192,58 @@ export async function startConsole(
   };
 }
 
+/**
+ * The console's options from the command line.
+ *
+ * `parseArgv` files `--device`, `--state-dir` and `--task` under `options`
+ * (they are global flags shared with the phone), and everything else under
+ * `args`. Reading only `args` silently drops the device a person named and
+ * opens whichever device is attached — which is how a two-device acceptance
+ * run ended up pointed at the wrong phone. Merge both, options last: the
+ * parser's normalised view of a global flag is the one to trust.
+ */
+export function consoleOptionsFrom(argv: string[]): ConsoleCliOptions {
+  const parsed = parseArgv(argv);
+  const merged: Record<string, string | boolean | string[]> = { ...parsed.args };
+  // The three global flags the console acts on. The rest of `options`
+  // (read-only, confirm, apps, settle-ms) belong to the phone's session, and
+  // the console must not silently adopt them as if they were its own.
+  for (const key of ["device", "stateDir", "task"] as const) {
+    const value = parsed.options[key];
+    if (value !== undefined) merged[key] = value;
+  }
+  return consoleOptions(merged);
+}
+
+/**
+ * Resolves when the person or their supervisor asks this console to stop.
+ *
+ * SIGINT/SIGTERM cover a terminal. They are not enough for a supervisor:
+ * on Windows `child.kill()` terminates the process outright and no handler
+ * runs, so the device lease and the hdc port forward are never released —
+ * twenty abandoned forwards filled 8012..8031 and the next run could not
+ * open the tunnel. Closing the child's stdin is a signal every platform
+ * delivers, so it is honoured as the same request to stop.
+ */
+export function waitForStop(io: {
+  stdin: { resume(): void; on(event: string, listener: () => void): unknown };
+  signals: { once(event: string, listener: () => void): unknown };
+}): Promise<void> {
+  io.stdin.resume();
+  return new Promise<void>((resolve) => {
+    let stopped = false;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      resolve();
+    };
+    io.signals.once("SIGINT", stop);
+    io.signals.once("SIGTERM", stop);
+    io.stdin.on("end", stop);
+    io.stdin.on("close", stop);
+  });
+}
+
 export async function consoleMain(argv: string[]): Promise<number> {
   const parsed = parseArgv(argv);
   if (parsed.help) {
@@ -212,7 +270,7 @@ export async function consoleMain(argv: string[]): Promise<number> {
 
   let opts: ConsoleCliOptions;
   try {
-    opts = consoleOptions(parsed.args);
+    opts = consoleOptionsFrom(argv);
   } catch (e) {
     process.stderr.write(`error: ${e instanceof Error ? e.message : String(e)}\n`);
     return 2;
@@ -233,16 +291,7 @@ export async function consoleMain(argv: string[]): Promise<number> {
   );
   if (opts.open) openWindow(run.url);
 
-  let stopping = false;
-  await new Promise<void>((resolve) => {
-    const stop = () => {
-      if (stopping) return;
-      stopping = true;
-      resolve();
-    };
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-  });
+  await waitForStop({ stdin: process.stdin, signals: process });
 
   await run.close().catch(() => undefined);
   return 0;

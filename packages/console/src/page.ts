@@ -54,19 +54,27 @@ export function renderApprovalRow(row: ApprovalRow): string {
   const where = [row.bundle || "unknown app", row.task ? `task ${row.task}` : ""]
     .filter(Boolean)
     .join(" · ");
+  // An answered request keeps its row so the person sees their answer land,
+  // but the answers and the countdown go: the buttons would suggest it is
+  // still open, and "expires in 42s" is about a window that no longer matters.
+  const open = row.status === "pending";
+  const tail = open
+    ? ` · expires in ${formatSeconds(row.expiresInMs)}`
+    : "";
   return (
     `<div class="row" data-id="${escapeHtml(row.id)}">` +
     `<div class="head"><code>${escapeHtml(row.id)}</code> ` +
     `<b>${escapeHtml(row.command)}</b> ` +
-    `<span class="rule">${escapeHtml(row.rule ?? "-")}</span></div>` +
-    `<div class="meta">${escapeHtml(where)} · device ${escapeHtml(row.tag)} · expires in ${formatSeconds(
-      row.expiresInMs,
-    )}</div>` +
-    `<div class="actions">` +
-    `<select data-scope aria-label="How long this answer lasts">` +
-    `<option value="once">once</option><option value="task">this task</option>` +
-    `<option value="always">always</option></select>` +
-    `<button data-allow>Allow</button><button data-deny>Deny</button></div>` +
+    `<span class="rule">${escapeHtml(row.rule ?? "-")}</span> ` +
+    `<span class="status">${escapeHtml(row.status)}</span></div>` +
+    `<div class="meta">${escapeHtml(where)} · device ${escapeHtml(row.tag)}${tail}</div>` +
+    (open
+      ? `<div class="actions">` +
+        `<select data-scope aria-label="How long this answer lasts">` +
+        `<option value="once">once</option><option value="task">this task</option>` +
+        `<option value="always">always</option></select>` +
+        `<button data-allow>Allow</button><button data-deny>Deny</button></div>`
+      : "") +
     `</div>`
   );
 }
@@ -94,6 +102,15 @@ const CLIENT_ROWS = [escapeHtml, formatSeconds, renderApprovalRow, renderActivit
   .map((fn) => fn.toString())
   .join("\n");
 
+/**
+ * The page's markup and styles.
+ *
+ * The viewer's stylesheet is loaded on this page too, and it defines a global
+ * `.row { display: flex }` for its node table. The console's rows are three
+ * stacked blocks (head, meta, actions), so they are reset to `display: block`
+ * below — as flex children they sat side by side and the meta line was
+ * squeezed to one character per line, which an acceptance screenshot caught.
+ */
 export const CONSOLE_HTML = `
 <style>
   #console-panel {
@@ -113,11 +130,12 @@ export const CONSOLE_HTML = `
     text-transform: uppercase; color: var(--dim); border-bottom: 1px solid #21262d;
   }
   #console-panel .list { max-height: 200px; overflow: auto; }
-  #console-panel .row { padding: 7px 10px; border-bottom: 1px solid #21262d; }
+  #console-panel .row { display: block; padding: 7px 10px; border-bottom: 1px solid #21262d; }
   #console-panel .row:last-child { border-bottom: 0; }
   #console-panel .head { display: flex; gap: 6px; align-items: baseline; }
   #console-panel .head code { color: var(--accent); font-size: 11px; }
   #console-panel .rule { color: var(--warn); font-size: 11px; }
+  #console-panel .status { color: var(--dim); font-size: 11px; }
   #console-panel .meta { color: var(--dim); font-size: 11px; margin-top: 2px; word-break: break-word; }
   #console-panel .actions { display: flex; gap: 6px; margin-top: 6px; }
   #console-panel .actions select {

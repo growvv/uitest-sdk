@@ -12,7 +12,7 @@
  */
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { chromeKillSteps } from "./live-walk.js";
 
@@ -76,7 +76,12 @@ export async function capturePage({
   if (!chromePath) throw new Error("no Chrome or Edge found; set CHROME_PATH");
   const target = resolve(out);
   const port = 9500 + Math.floor(Math.random() * 400);
-  const profile = join(process.cwd(), ".work-bench", "chrome-screenshot");
+  // One profile per capture. A shared `--user-data-dir` makes the second
+  // launch join the first browser instead of starting its own: its DevTools
+  // port answers with the *other* page, and the kill at the end takes down a
+  // browser this call did not start. That surfaced as intermittent
+  // "page never satisfied" failures on a run that had just worked.
+  const profile = join(process.cwd(), ".work-bench", `chrome-shot-${process.pid}-${port}`);
   const child = spawn(
     chromePath,
     [
@@ -190,5 +195,8 @@ export async function capturePage({
       // Already closed.
     }
     kill();
+    // The profile is scratch for this one capture; leaving it behind fills
+    // .work-bench with a copy of a browser's state per screenshot.
+    await rm(profile, { recursive: true, force: true }).catch(() => undefined);
   }
 }
