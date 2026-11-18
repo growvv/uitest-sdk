@@ -11,6 +11,10 @@ export type {
 export { createViewerSource } from "../viewer/source.js";
 export type { ViewerSourceOptions } from "../viewer/source.js";
 export { PLAYER_HTML, renderPlayerPage } from "../viewer/player.js";
+// The window a product opens around the page. Two products need the same
+// browser order and the same fallback, so it is one implementation here.
+export { appWindowCommand, openWindow } from "../viewer/window.js";
+export type { Browser, OpenWindowOptions, WindowCommand } from "../viewer/window.js";
 export { openInput } from "../input/open.js";
 export type { InputHost } from "../input/open.js";
 export { AgentInputLane } from "../input/lane.js";

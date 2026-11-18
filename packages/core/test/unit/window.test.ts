@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appWindowCommand, openWindow } from "../../src/window.js";
+import { appWindowCommand, openWindow } from "../../src/viewer/window.js";
 
 describe("appWindowCommand", () => {
   // The platform is always named here. Reading it from the host made this test
@@ -7,8 +7,6 @@ describe("appWindowCommand", () => {
   // wrapper called `microsoft-edge` — the assertion measured the machine, not
   // the mapping it was written to pin.
   it("opens Edge as an app window, not a tab", () => {
-    // A tab brings the address bar and the tab strip, which is what makes a
-    // mirror feel like a browser page rather than a device window.
     const cmd = appWindowCommand("edge", "http://127.0.0.1:7042/", "win32");
     expect(cmd.command).toBe("msedge.exe");
     expect(cmd.args).toContain("--app=http://127.0.0.1:7042/");
@@ -26,9 +24,16 @@ describe("appWindowCommand", () => {
     expect(appWindowCommand("chrome", "http://127.0.0.1:7042/", "linux").command).toBe("google-chrome");
   });
 
+  // A phone window wants the device's aspect ratio, so the caller sizes it.
+  // Without this the mirror opens at the console's 1100x900 and the picture is
+  // letterboxed on a 9:20 device.
+  it("takes the window size from the caller", () => {
+    const cmd = appWindowCommand("edge", "http://127.0.0.1:7050/", "win32", "500,900");
+    expect(cmd.args).toContain("--window-size=500,900");
+    expect(cmd.args).not.toContain("--window-size=1100,900");
+  });
+
   it("reports the URL when no window can be opened", () => {
-    // A bench without Edge or Chrome must still be usable: the URL is printed
-    // and the person opens it themselves.
     const printed: string[] = [];
     const result = openWindow("http://127.0.0.1:7042/", {
       platform: "linux",
@@ -38,6 +43,6 @@ describe("appWindowCommand", () => {
       print: (line) => printed.push(line),
     });
     expect(result.opened).toBe(false);
-    expect(printed.join("\n")).toContain("http://127.0.0.1:7042/");
+    expect(printed[0]).toContain("http://127.0.0.1:7042/");
   });
 });

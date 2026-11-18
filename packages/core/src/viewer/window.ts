@@ -1,12 +1,16 @@
 import { spawn } from "node:child_process";
 
 /**
- * Opens the console as a browser *app* window, or prints the URL.
+ * Opens a viewer as a browser *app* window, or prints the URL.
  *
  * A tab brings the address bar, the tab strip and every other tab with it; the
  * mirror then looks like a web page rather than a device window. Edge and
  * Chrome both take `--app=<url>`, which is the cheapest window a product can
  * have without shipping a native shell (spec §6.2 defers that shell).
+ *
+ * It lives in core because two products need the same discovery order and the
+ * same fallback; a copy in each would drift, and the product that drifted
+ * would silently stop opening a window.
  */
 
 export type Browser = "edge" | "chrome";
@@ -16,7 +20,8 @@ export interface WindowCommand {
   args: string[];
 }
 
-const WINDOW_SIZE = "1100,900";
+/** The console's size: a page with a node table beside the picture. */
+const DEFAULT_SIZE = "1100,900";
 
 /**
  * The command line for one browser.
@@ -25,17 +30,22 @@ const WINDOW_SIZE = "1100,900";
  * the macOS and Linux branches name the same binaries, since both browsers
  * install a shell wrapper there.
  */
-export function appWindowCommand(browser: Browser, url: string, platform = process.platform): WindowCommand {
+export function appWindowCommand(
+  browser: Browser,
+  url: string,
+  platform = process.platform,
+  size = DEFAULT_SIZE,
+): WindowCommand {
   const win = platform === "win32";
   if (browser === "edge") {
     return {
       command: win ? "msedge.exe" : "microsoft-edge",
-      args: [`--app=${url}`, `--window-size=${WINDOW_SIZE}`],
+      args: [`--app=${url}`, `--window-size=${size}`],
     };
   }
   return {
     command: win ? "chrome.exe" : "google-chrome",
-    args: [`--app=${url}`, `--window-size=${WINDOW_SIZE}`],
+    args: [`--app=${url}`, `--window-size=${size}`],
   };
 }
 
@@ -43,6 +53,13 @@ export interface OpenWindowOptions {
   /** Which browser to try first. Defaults to Edge, then Chrome. */
   browser?: Browser;
   platform?: NodeJS.Platform;
+  /**
+   * `width,height` for `--window-size`.
+   *
+   * A product that mirrors a phone passes the device's aspect ratio; the
+   * console keeps the default because its page is wider than it is tall.
+   */
+  size?: string;
   spawn?: (command: string, args: string[]) => unknown;
   print?: (line: string) => void;
 }
@@ -71,7 +88,7 @@ export function openWindow(
   const order: Browser[] = opts.browser ? [opts.browser] : ["edge", "chrome"];
 
   for (const browser of order) {
-    const { command, args } = appWindowCommand(browser, url, platform);
+    const { command, args } = appWindowCommand(browser, url, platform, opts.size);
     try {
       spawnFn(command, args);
       return { opened: true, command };

@@ -3,11 +3,10 @@ import { connect } from "uitest-sdk";
 import type { ConnectOptions } from "uitest-sdk";
 import { parseArgv } from "uitest-sdk/commands";
 import { Approvals, holdDevice, readHold, readRecentTrace, resumeDevice } from "uitest-sdk/govern";
-import { createViewerSource } from "uitest-sdk/viewer";
+import { createViewerSource, openWindow } from "uitest-sdk/viewer";
 import type { ViewerSource } from "uitest-sdk/viewer";
 import { createConsoleServer, consoleHooks } from "./server.js";
 import type { ConsoleDeps } from "./server.js";
-import { openWindow } from "./window.js";
 import { VERSION } from "./version.js";
 
 /**
