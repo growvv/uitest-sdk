@@ -18,8 +18,6 @@ export type {
   WaitApi,
 } from "./api.js";
 export { Device } from "./driver/device.js";
-export { keepAwake } from "./keep-awake.js";
-export type { KeepAwakeHandle, SleepControl } from "./keep-awake.js";
 export type { DeviceOptions } from "./driver/device.js";
 export { tagOf } from "./transport/tag.js";
 export { VERSION } from "./version.js";
@@ -47,6 +45,9 @@ export type {
   PinchInput,
 } from "./operations/session.js";
 export type { DragOptions, FlingOptions, RecordingHandle } from "./api.js";
+// A type only: `session.keepAwake()` returns it, so a caller must be able to
+// annotate the handle without reaching into `dist/`.
+export type { KeepAwakeHandle } from "./keep-awake.js";
 export type { ApprovalDecision, ApprovalScope, PendingApproval } from "./governance/approvals.js";
 export type { LeaseInfo } from "./governance/lease.js";
 export type { CastSettings } from "./cast/config.js";

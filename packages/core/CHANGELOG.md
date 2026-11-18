@@ -8,6 +8,25 @@
 
 ## [未发布]
 
+## [0.11.0] — 2026-11-18
+
+第四个产品 `uitest-mirror` 需要的四处能力。全部是新增，没有破坏性变更。
+
+- **`Session.keepAwake(seconds?)`**：覆盖设备的休眠超时（`power-shell timeout -o`），
+  返回的句柄 `restore()` 幂等，`close()` 时调用一次。默认 3600 秒。进程被强杀时
+  覆盖会留在设备上，用 `hdc shell power-shell timeout -r` 复位。
+- **`CastOptions.maxSize`**：按最长边（像素）指定投流尺寸，由 `resolveCastScale`
+  按传输换算——grpc/ws 是 1..5 的整数除数，mjpeg 是小数比例。与 `scale` 同时给是
+  `EBADARG`；超过扩展能缩到的极限也报错并给出可达尺寸，不静默取整。
+- **`ViewerServerOptions.recordOnStart`**：流一进入 `live` 就开始录制，不需要点页面上的
+  录制按钮。带 `--record <file>` 的产品用它；`close()` 会等这个录制落地再停止它。
+- **`uitest-sdk/viewer` 新增 `openWindow` / `appWindowCommand`**：无边框浏览器窗口
+  （`--app=<url>`），没有 Edge/Chrome 时打印 URL。从 `uitest-console` 提升上来，
+  两个产品共用一份。
+- **Recents 键**：`parseKeyName("recents")` → 187（`KEYCODE_APP_SWITCH`），播放器多了
+  一个「任务」按钮。这是本次唯一没有真机实测背书的常量，`uitest-mirror` 的验收用例
+  会在真机上验证它。
+
 ## [0.10.1] — 2026-11-18
 
 全分支评审后的修正版。一处类型收窄：`observe.apps()` 现在只承诺它真的返回的字段。

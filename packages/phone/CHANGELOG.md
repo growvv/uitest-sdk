@@ -3,6 +3,10 @@
 本文件记录 `uitest-phone` 的公开版本。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循语义化版本。
 
+## [0.10.2] — 2026-11-18
+
+- 运行在 `uitest-sdk@0.11.0` 上。本包源码无改动：核心只新增了 API。
+
 ## [0.10.1] — 2026-11-18
 
 - 运行在 `uitest-sdk@0.10.1` 上。

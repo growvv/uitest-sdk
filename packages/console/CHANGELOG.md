@@ -3,6 +3,12 @@
 本文件记录 `uitest-console` 的公开版本。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循语义化版本。
 
+## [0.1.2] — 2026-11-18
+
+- 运行在 `uitest-sdk@0.11.0` 上。
+- 无边框窗口的实现从本包移到 `uitest-sdk/viewer`：`uitest-mirror` 需要同一份浏览器
+  探测与退化逻辑，而产品之间不能互相依赖。`uitest-console` 的行为不变。
+
 ## [0.1.1] — 2026-11-18
 
 - 运行在 `uitest-sdk@0.10.1` 上。
