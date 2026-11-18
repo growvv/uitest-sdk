@@ -43,6 +43,8 @@ import type { CastSettings } from "./cast/config.js";
 import { createCast } from "./cast/create.js";
 import type { CastClient, CastOptions } from "./cast/types.js";
 import { createViewerSource } from "./viewer/source.js";
+import { keepAwake } from "./keep-awake.js";
+import type { KeepAwakeHandle } from "./keep-awake.js";
 import { startViewerServer } from "./viewer/server.js";
 import type { ViewerServer } from "./viewer/server.js";
 
@@ -202,6 +204,12 @@ export class Session {
   readonly cast: CastApi;
   readonly view: ViewApi;
   readonly govern: GovernApi;
+  /**
+   * Keeps the display awake, returning a handle that puts the device's own
+   * timeout back. A mirror that goes dark after thirty seconds looks broken;
+   * changing a person's settings is a side effect, so the caller asks.
+   */
+  readonly keepAwake: (seconds?: number) => Promise<KeepAwakeHandle>;
   private readonly views = new Set<ViewerServer>();
 
   constructor(
@@ -316,6 +324,8 @@ export class Session {
         };
       },
     };
+
+    this.keepAwake = (seconds?: number) => keepAwake(this.device.hypium, seconds);
 
     this.govern = {
       policy: this.core.policy,

@@ -18,6 +18,8 @@ export type {
   WaitApi,
 } from "./api.js";
 export { Device } from "./driver/device.js";
+export { keepAwake } from "./keep-awake.js";
+export type { KeepAwakeHandle, SleepControl } from "./keep-awake.js";
 export type { DeviceOptions } from "./driver/device.js";
 export { tagOf } from "./transport/tag.js";
 export { VERSION } from "./version.js";
