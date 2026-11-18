@@ -27,4 +27,14 @@ describe("console page: a locked phone", () => {
     expect(CONSOLE_SCRIPT).toMatch(/function setLocked\(on\)/);
     expect(CONSOLE_SCRIPT).toMatch(/lockedEl\.className = on \? 'on' : ''/);
   });
+
+  it("reads the lock flag only from the message that carries it", () => {
+    // `hello` is sent when a tab attaches and again on reconnects, and it has
+    // no `locked` field — the flag lives on `nodes`, which follows each layout
+    // poll. Driving the banner from `hello` therefore cleared it every time a
+    // tab reconnected, on a phone that was still locked: the person saw the
+    // notice disappear while the mirror stayed black.
+    expect(CONSOLE_SCRIPT).not.toMatch(/viewer\.on\('hello', function \(msg\) \{ setLocked/);
+    expect(CONSOLE_SCRIPT).toMatch(/viewer\.on\('nodes', function \(msg\) \{ setLocked/);
+  });
 });

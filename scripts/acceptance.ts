@@ -510,7 +510,8 @@ export function isHistoryListInFront(elements: Array<{ label?: string }>): boole
   );
 }
 
-/** First bundleName in the tree that also has parsable bounds. */function findBundle(n: {
+/** First bundleName in the tree that also has parsable bounds. */
+function findBundle(n: {
   attributes: Record<string, string>;
   children?: unknown[];
 }): string | null {

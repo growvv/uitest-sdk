@@ -249,7 +249,9 @@ export const CONSOLE_SCRIPT = `
   viewer.on('console:approvals', function (msg) { renderApprovals(msg.items); });
   viewer.on('console:activity', function (msg) { renderActivity(msg.items); });
   viewer.on('console:held', function (msg) { setHeld(msg.held); });
-  viewer.on('hello', function (msg) { setLocked(!!msg.locked); });
+  // nodes is the only message that carries the flag: hello has no locked
+  // field, so reading it there cleared the notice on every reconnect while the
+  // phone was still locked.
   viewer.on('nodes', function (msg) { setLocked(!!msg.locked); });
   viewer.on('console:error', function (msg) {
     var text = String(msg.message || 'console error');
