@@ -45,4 +45,23 @@ describe("mirror acceptance runner", () => {
     expect(source()).toContain('const PRODUCT = "mirror"');
     expect(source()).toContain("`${PRODUCT}-${VERSION}`");
   });
+
+  /**
+   * The spec's cases are about what a person gets, not about the arguments a
+   * daemon was given. `max-size` used to check only `-scale`, and `no-control`
+   * only that the key row was hidden — neither proved the picture was the
+   * right size, or that an injected gesture was actually refused.
+   */
+  it("measures the decoded frame for max-size", () => {
+    const text = source();
+    expect(text).toMatch(/max-size[\s\S]{0,2500}querySelector\('canvas'\)/);
+    expect(text).toContain("frameWidth");
+    expect(text).toContain("withinBound");
+  });
+
+  it("proves injected input is refused for no-control", () => {
+    const text = source();
+    expect(text).toMatch(/no-control[\s\S]{0,3000}PointerEvent/);
+    expect(text).toContain("left the display unchanged");
+  });
 });

@@ -137,8 +137,16 @@ export interface ViewerServerOptions {
    * How input is arbitrated. Defaults to `takeover` when the source can open a
    * lane, `off` otherwise. `always` accepts gestures from every tab; `off`
    * rejects them and hides the controls.
+   *
+   * `guard` is asked before every gesture *starts* — a down, a pinch, a
+   * wheel, a key, a text — and is how a product that owns the device finds
+   * out that somebody took it: `uitest-mirror` passes the lease check, so a
+   * person running `uitest-phone hold` stops the mirror from driving the
+   * phone they are now holding. Moves and ups are never guarded: they finish
+   * a gesture that was already allowed, and refusing the up would leave the
+   * phone pressed.
    */
-  input?: { mode: ViewerInputMode; open(): Promise<InputSession> };
+  input?: { mode: ViewerInputMode; open(): Promise<InputSession>; guard?(): Promise<void> };
   hooks?: ViewerHooks;
 }
 
@@ -166,7 +174,9 @@ export class ViewerServer {
   private readonly source: ViewerSource;
   private readonly hooks: ViewerHooks | undefined;
   private readonly page: string;
-  private readonly inputSpec: { mode: ViewerInputMode; open(): Promise<InputSession> } | undefined;
+  private readonly inputSpec:
+    | { mode: ViewerInputMode; open(): Promise<InputSession>; guard?(): Promise<void> }
+    | undefined;
   private readonly inputMode: ViewerInputMode;
   private readonly features: Required<ViewerFeatures>;
   /** The address the server bound, for the Origin check. */
@@ -224,6 +234,13 @@ export class ViewerServer {
   private nextClientId = 1;
   private controller: Client | null = null;
   private input: LiveInput | null = null;
+  /** Serialises guarded gestures, so the device sees them in the page's order. */
+  private inputChain: Promise<void> = Promise.resolve();
+  /**
+   * The guard's sentence when the device was taken away, kept so a tab that
+   * reconnects after the takeover still learns why its clicks do nothing.
+   */
+  private revoked: string | null = null;
   private inputSession: InputSession | null = null;
   /** A lane-open already in flight; concurrent take requests share it. */
   private inputOpening: Promise<InputSession> | null = null;
@@ -242,6 +259,15 @@ export class ViewerServer {
    * second one.
    */
   private recording: string | null = null;
+  /**
+   * Why the recording a product asked for on the command line did not start.
+   *
+   * Kept after the failure so a tab that attaches later still learns it: the
+   * broadcast reached nobody if the browser was slow to open, and a mirror
+   * with a lit Record button and no file is exactly what the person must be
+   * told about.
+   */
+  private recordingError: string | null = null;
   /**
    * The stop currently running. `close()` waits on it instead of issuing its
    * own: on a device a second stop is a second `onEnd` and a second pull of
@@ -818,6 +844,54 @@ export class ViewerServer {
     // `always` is a product decision to let any tab drive (a kiosk-style
     // mirror); `takeover` keeps the single-controller arbitration.
     if (this.inputMode === "takeover" && this.controller !== client) return;
+    const action = String(message.action ?? "");
+    // A gesture that starts is guarded; one that finishes is not. Refusing an
+    // `up` would leave the phone pressed, and a `move` without a `down` is
+    // ignored by the device anyway.
+    const startsGesture =
+      action === "down" || action === "pinch" || action === "wheel" || action === "text" || action === "key";
+    const guarded = startsGesture && this.inputSpec?.guard ? this.inputSpec.guard : null;
+    if (!guarded) {
+      this.dispatchInput(input, client, message);
+      return;
+    }
+    // Serialised so the device sees gestures in the order the page sent them;
+    // the guard is one local file read and costs a fraction of a millisecond.
+    this.inputChain = this.inputChain
+      .then(async () => {
+        try {
+          await guarded.call(this.inputSpec);
+        } catch (e) {
+          this.onInputRevoked(e);
+          return;
+        }
+        this.revoked = null;
+        this.dispatchInput(input, client, message);
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * The product's guard says this session no longer owns the device.
+   *
+   * The mirror's guard is the lease: a person who ran `uitest-phone hold`
+   * owns the phone now, and the mirror must stop driving it — the lease was
+   * only ever advisory until every gesture asked.
+   */
+  private onInputRevoked(error: unknown): void {
+    // The first line is the product's own sentence; anything after it is the
+    // operator's recovery hint and can name an internal path.
+    const first = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    const message = (first ?? "the device is no longer yours").trim();
+    this.revoked = message;
+    this.broadcastText({ type: "control", state: "readonly", reason: "revoked", message });
+  }
+
+  private dispatchInput(
+    input: LiveInput,
+    client: Client,
+    message: Record<string, unknown>,
+  ): void {
     const finite = (v: unknown): number | null =>
       typeof v === "number" && Number.isFinite(v) ? v : null;
     switch (String(message.action ?? "")) {
@@ -963,7 +1037,11 @@ export class ViewerServer {
       this.sendText(client, { type: "record", error: "this session cannot record" });
       return;
     }
-    if (this.recording || this.stopping) {
+    // `startingRecording` is part of the guard, not only `recording`: a click
+    // that lands while the startup recording's daemon is still opening would
+    // otherwise start a second one on the same socket, and the extension
+    // refuses the second `onStart` — the first recording is then lost.
+    if (this.recording || this.stopping || this.startingRecording) {
       this.sendText(client, { type: "record", error: "already recording" });
       return;
     }
@@ -1077,10 +1155,10 @@ export class ViewerServer {
     }
   }
 
-  private controlState(): { state: "readonly" | "controlled"; by?: string } {
+  private controlState(): { state: "readonly" | "controlled"; by?: string; reason?: string } {
     return this.controller
       ? { state: "controlled", by: this.controller.id }
-      : { state: "readonly" };
+      : { state: "readonly", ...(this.revoked ? { reason: "revoked" } : {}) };
   }
 
   private hello(clientId?: string): Record<string, unknown> {
@@ -1103,6 +1181,8 @@ export class ViewerServer {
       canPrivacy: this.features.privacy,
       mode: this.inputMode,
       recording: this.recording !== null,
+      ...(this.recordingError ? { recordingError: this.recordingError } : {}),
+      ...(this.revoked ? { revoked: this.revoked } : {}),
     };
   }
 
@@ -1418,9 +1498,11 @@ export class ViewerServer {
    * first attempt may fail because the device was still busy, and the page
    * button starts recordings of its own that this must not duplicate.
    *
-   * A failure is swallowed on purpose — the picture is the product, and a
-   * device that will not record should not also refuse to mirror. The page's
-   * button still works, so the person keeps a way to try again.
+   * A failure must not stop the mirror — the picture is the product — but it
+   * must be reported: `--record` on mjpeg, or on an emulator with no
+   * extension, otherwise leaves a live picture, a lit Record button and no
+   * file, with nobody told why. The error goes to every tab the same way a
+   * failed page click's does.
    */
   private startRequestedRecording(): void {
     if (!this.recordOnStart || this.recording || this.stopping || this.startingRecording) return;
@@ -1437,8 +1519,11 @@ export class ViewerServer {
         }
         this.recording = path;
         this.broadcastText({ type: "record", recording: true, path });
-      } catch {
-        // Nothing to report to: no tab asked for this recording.
+      } catch (e) {
+        // No tab may be attached yet; one that arrives later reads this from
+        // its greeting.
+        this.recordingError = e instanceof Error ? e.message : String(e);
+        this.broadcastText({ type: "record", recording: false, error: this.recordingError });
       }
     })();
     this.startingRecording = run;

@@ -60,4 +60,59 @@ describe("connect", () => {
     expect(dispose).toHaveBeenCalled();
     vi.restoreAllMocks();
   });
+
+  /**
+   * The changelog promised `close()` restores a keep-awake, and it did not:
+   * a caller that asked for one and closed the session left a one-hour
+   * override on the phone with nothing left to undo it.
+   */
+  it("restores a keep-awake it handed out when the session closes", async () => {
+    const restoreSleepTime = vi.fn(async () => undefined);
+    const device = {
+      ...fakeDevice(),
+      hypium: {
+        async setSleepTime() {
+          return undefined;
+        },
+        restoreSleepTime,
+      },
+    };
+    vi.spyOn(Device, "connect").mockResolvedValue(device as never);
+    const session = await connect({
+      stateDir: mkdtempSync(join(tmpdir(), "uitest-api-")),
+      lease: false,
+      noTrace: true,
+    });
+
+    await session.keepAwake(3600);
+    expect(restoreSleepTime).not.toHaveBeenCalled();
+    await session.close();
+    expect(restoreSleepTime).toHaveBeenCalledTimes(1);
+    vi.restoreAllMocks();
+  });
+
+  it("does not restore twice when the caller already did", async () => {
+    const restoreSleepTime = vi.fn(async () => undefined);
+    const device = {
+      ...fakeDevice(),
+      hypium: {
+        async setSleepTime() {
+          return undefined;
+        },
+        restoreSleepTime,
+      },
+    };
+    vi.spyOn(Device, "connect").mockResolvedValue(device as never);
+    const session = await connect({
+      stateDir: mkdtempSync(join(tmpdir(), "uitest-api-")),
+      lease: false,
+      noTrace: true,
+    });
+
+    const handle = await session.keepAwake(3600);
+    await handle.restore();
+    await session.close();
+    expect(restoreSleepTime).toHaveBeenCalledTimes(1);
+    vi.restoreAllMocks();
+  });
 });

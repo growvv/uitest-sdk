@@ -29,16 +29,24 @@ export interface CastHost {
  * coexist on the device because `--extension-name` is a filename lookup.
  */
 export async function createCast(host: CastHost, raw: CastOptions): Promise<CastClient> {
+  // The transport that will actually run, decided before `maxSize` is resolved:
+  // a silent fallback to MJPEG takes a fraction, and resolving against the
+  // requested-but-unavailable transport would hand it an integer divisor
+  // (`--max-size 1024` on an emulator asked the agent for `scale: 3`).
+  const wants = raw.transport ?? "grpc";
+  const transport: CastOptions["transport"] =
+    wants === "grpc" && host.resolveCastExtension() === null ? "mjpeg" : wants;
+
   // One display read, before any daemon exists: `maxSize` is pixels and every
   // transport below wants a different number, so the conversion happens here
   // rather than in each client. A failed read is the caller's error, and
   // leaving it uncaught would start a daemon and then abandon it.
-  let opts = raw;
+  let opts: CastOptions = { ...raw, transport };
   if (raw.maxSize !== undefined) {
     const { width, height } = await host.agent.getDisplaySize();
-    const transport = raw.transport ?? "grpc";
     opts = {
       ...raw,
+      transport,
       scale: resolveCastScale(transport, Math.max(width, height), {
         maxSize: raw.maxSize,
         ...(raw.scale !== undefined ? { scale: raw.scale } : {}),

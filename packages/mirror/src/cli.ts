@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { connect, tagOf } from "uitest-sdk";
 import type { ConnectOptions } from "uitest-sdk";
 import { LeaseHeldError, UitestError } from "uitest-sdk";
-import { createViewerSource, openInput, openWindow, startViewerServer } from "uitest-sdk/viewer";
+import { createViewerSource, openInput, openWindow, renderPlayerPage, startViewerServer } from "uitest-sdk/viewer";
 import type { ViewerServer, ViewerSource } from "uitest-sdk/viewer";
 import { VERSION } from "./version.js";
 
@@ -168,6 +168,13 @@ export interface MirrorRun {
   port: number;
   /** The device's 8-character hash, the only identifier ever printed. */
   tag: string;
+  /**
+   * Resolves when the window the product opened goes away.
+   *
+   * Never resolves when no window opened (a bench without Edge or Chrome), so
+   * a caller waits on this *and* the stop signals rather than instead of them.
+   */
+  windowClosed: Promise<void>;
   close(): Promise<void>;
 }
 
@@ -193,6 +200,9 @@ export async function startMirror(
   });
 
   let awake: { restore(): Promise<void> } | null = null;
+  let server: ViewerServer | null = null;
+  let markWindowClosed: () => void = () => undefined;
+  const windowClosed = new Promise<void>((resolve) => (markWindowClosed = resolve));
   try {
     if (opts.stayAwake) awake = await session.keepAwake(3600);
 
@@ -211,7 +221,7 @@ export async function startMirror(
       ...(opts.record ? { recordPath: opts.record } : {}),
     });
 
-    const server: ViewerServer = await startViewerServer({
+    server = await startViewerServer({
       port: opts.port,
       host: "127.0.0.1",
       // Nothing to mask: no layout is read, so there are no labels to hide.
@@ -230,32 +240,40 @@ export async function startMirror(
         // arbitrate against.
         mode: opts.control ? "always" : "off",
         open: () => openInput(session.device),
+        // The lease, checked before every gesture that starts. A person who
+        // runs `uitest-phone hold` owns the phone from that moment; without
+        // this the mirror would keep sending their clicks to it, which is the
+        // exact interleaving the lease exists to prevent.
+        guard: () => session.core.assertLease(),
       },
       recordOnStart: Boolean(opts.record),
-      page: undefined,
+      page: renderPlayerPage({ title: opts.windowTitle }),
     });
 
     const url = `http://127.0.0.1:${server.port}/`;
     const { width, height } = await session.device.agent.getDisplaySize();
-    window(url, { size: windowSizeFor(width, height) });
+    window(url, { size: windowSizeFor(width, height), onClose: markWindowClosed });
 
+    const started = server;
     let closed = false;
     return {
       url,
-      port: server.port,
+      port: started.port,
       tag: tagOf(session.device.deviceId),
+      windowClosed,
       async close() {
         if (closed) return;
         closed = true;
-        await server.close();
+        await started.close();
         if (awake) await awake.restore().catch(() => undefined);
         await session.close();
       },
     };
   } catch (e) {
-    // A port already in use, or a cast that will not start: leaving the
-    // session open would keep the lease, the daemon and the fport for a window
-    // that never existed.
+    // A port already in use, a cast that will not start, or a busy agent: a
+    // server that was already listening keeps its cast daemon and its fport on
+    // the device, so it is closed before the session that owns them.
+    if (server) await server.close().catch(() => undefined);
     if (awake) await awake.restore().catch(() => undefined);
     await session.close().catch(() => undefined);
     throw e;
@@ -358,10 +376,16 @@ export async function mirrorMain(
   if (!opts.control) write("input is off (--no-control): the picture is read-only");
 
   try {
-    await waitForStop({
-      stdin: deps.stdin ?? process.stdin,
-      signals: deps.signals ?? process,
-    });
+    // Closing the window is how a person says they are done with the phone,
+    // and it is the one stop signal a terminal does not deliver: the browser
+    // is a detached child, so the product is told through `onClose`.
+    await Promise.race([
+      waitForStop({
+        stdin: deps.stdin ?? process.stdin,
+        signals: deps.signals ?? process,
+      }),
+      run.windowClosed,
+    ]);
   } finally {
     await run.close();
   }

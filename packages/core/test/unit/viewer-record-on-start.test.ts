@@ -63,7 +63,9 @@ afterEach(async () => {
   for (const s of running.splice(0)) await s.close().catch(() => undefined);
 });
 
-async function start(opts: { recordOnStart?: boolean; startGate?: Promise<void> } = {}) {
+async function start(
+  opts: { recordOnStart?: boolean; startGate?: Promise<void>; startFails?: Error } = {},
+) {
   const cast = new FakeCast();
   const started: string[] = [];
   const stopped: string[] = [];
@@ -83,6 +85,7 @@ async function start(opts: { recordOnStart?: boolean; startGate?: Promise<void> 
       async startRecording() {
         started.push("start");
         if (opts.startGate) await opts.startGate;
+        if (opts.startFails) throw opts.startFails;
         return "/tmp/x.mp4";
       },
       async stopRecording() {
@@ -106,6 +109,43 @@ async function connect(port: number): Promise<{ socket: Socket; close(): void }>
   );
   socket.on("data", () => undefined);
   return { socket, close: () => socket.destroy() };
+}
+
+/** Waits for the first text frame the server sends that `match` accepts. */
+function readText(
+  socket: Socket,
+  match: (message: Record<string, unknown>) => boolean,
+  ms = 4000,
+): Promise<Record<string, unknown>> {
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
+    let buf: Buffer = Buffer.alloc(0);
+    let upgraded = false;
+    const timer = setTimeout(() => {
+      socket.off("data", onData);
+      reject(new Error("no matching text frame arrived"));
+    }, ms);
+    const onData = (d: Buffer): void => {
+      buf = Buffer.concat([buf, d]);
+      if (!upgraded) {
+        const end = buf.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        buf = buf.subarray(end + 4);
+        upgraded = true;
+      }
+      const { frames, rest } = decodeFrames(buf);
+      buf = rest;
+      for (const f of frames) {
+        if (f.opcode !== 0x1) continue;
+        const message = JSON.parse(f.payload.toString()) as Record<string, unknown>;
+        if (!match(message)) continue;
+        clearTimeout(timer);
+        socket.off("data", onData);
+        resolve(message);
+        return;
+      }
+    };
+    socket.on("data", onData);
+  });
 }
 
 const until = async (fn: () => boolean, ms = 4000): Promise<void> => {
@@ -167,5 +207,25 @@ describe("recordOnStart", () => {
     release();
     await closing;
     expect(h.stopped).toEqual(["stop"]);
+  });
+
+  /**
+   * `--record` can fail for a reason the person can act on — mjpeg, an
+   * emulator without the extension, a device that refuses the second daemon.
+   * Swallowing it left a live picture, a lit Record button and no file, with
+   * nobody told. The reason belongs in the page's own record status.
+   */
+  it("reports a startup recording that failed instead of swallowing it", async () => {
+    const h = await start({
+      recordOnStart: true,
+      startFails: new Error("record mode needs an H.264 extension; mjpeg cannot record"),
+    });
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => h.started.length > 0);
+    // The tab that was already attached learns about it from the broadcast.
+    const text = await readText(c.socket, (m) => m.type === "record" && "error" in m);
+    expect(String(text.error)).toMatch(/H\.264 extension/);
+    c.close();
   });
 });

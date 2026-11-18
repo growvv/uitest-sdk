@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { createServer } from "node:http";
 import { startMirror } from "../../src/cli.js";
 import type { MirrorOptions } from "../../src/cli.js";
+
+/** A port nothing is listening on, for tests that care which one was used. */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 const OPTIONS: MirrorOptions = {
   transport: "grpc",
@@ -20,6 +33,7 @@ const OPTIONS: MirrorOptions = {
 function fakeSession(over: { recordStarted?: string[] } = {}) {
   const casts: unknown[] = [];
   const restored: string[] = [];
+  const closed: string[] = [];
   const device = {
     deviceId: "FAKE1234",
     abi: "arm64" as const,
@@ -67,9 +81,11 @@ function fakeSession(over: { recordStarted?: string[] } = {}) {
         },
       };
     },
-    async close() {},
+    async close() {
+      closed.push("close");
+    },
   };
-  return { session, casts, restored };
+  return { session, casts, restored, sessionClosed: () => closed.length > 0 };
 }
 
 /** The first `hello` a fresh tab receives, which is where the server states its capabilities. */
@@ -144,5 +160,76 @@ describe("startMirror", () => {
     const run = await startMirror({ ...OPTIONS, stayAwake: true }, async () => on.session as never, () => ({ opened: true }));
     await run.close();
     expect(on.restored).toEqual(["restore"]);
+  });
+
+  /**
+   * `--window-title` was parsed, defaulted, documented and unit-tested, and
+   * then never passed to the page: the window kept the built-in "uitest live".
+   */
+  it("serves the page under the title the person asked for", async () => {
+    const fake = fakeSession();
+    const run = await startMirror(
+      { ...OPTIONS, windowTitle: "Pixel 9 · bench" },
+      async () => fake.session as never,
+      () => ({ opened: true }),
+    );
+    const res = await fetch(run.url);
+    const html = await res.text();
+    expect(html).toContain("<title>Pixel 9 · bench</title>");
+    expect(html).not.toContain("<title>uitest live</title>");
+    await run.close();
+  });
+
+  /**
+   * The README says the lease is released when the window closes, and the
+   * whole point of the lease is that a person who thinks they are done with
+   * the phone is done. The window is a detached child, so the product has to
+   * be told when it exits.
+   */
+  it("reports the window's close so the command can stop", async () => {
+    let onClose: (() => void) | undefined;
+    const fake = fakeSession();
+    const run = await startMirror(
+      OPTIONS,
+      async () => fake.session as never,
+      (_url, opts) => {
+        onClose = (opts as { onClose?: () => void }).onClose;
+        return { opened: true };
+      },
+    );
+    expect(onClose).toBeTypeOf("function");
+    let stopped = false;
+    void run.windowClosed.then(() => (stopped = true));
+    onClose!();
+    await run.windowClosed;
+    expect(stopped).toBe(true);
+    await run.close();
+  });
+
+  /**
+   * A failure after the server is listening (a busy agent on the display-size
+   * read) used to close the session and leave the viewer server, its cast
+   * daemon and its fport running for a command that had already failed.
+   */
+  it("closes the viewer server when startup fails after it started", async () => {
+    const fake = fakeSession();
+    const device = fake.session.device as { agent: { getDisplaySize(): Promise<unknown> } };
+    device.agent.getDisplaySize = async () => {
+      throw new Error("agent busy");
+    };
+    // A fixed port makes the leak observable: if the server was left behind,
+    // it still holds the port, and nothing else can bind it.
+    const port = await freePort();
+    await expect(
+      startMirror({ ...OPTIONS, port }, async () => fake.session as never, () => ({ opened: true })),
+    ).rejects.toThrow(/agent busy/);
+    expect(fake.sessionClosed()).toBe(true);
+    // Binding the same port proves the abandoned server is gone.
+    const probe = createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(port, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
   });
 });

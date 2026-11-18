@@ -208,9 +208,15 @@ export class Session {
    * Keeps the display awake, returning a handle that puts the device's own
    * timeout back. A mirror that goes dark after thirty seconds looks broken;
    * changing a person's settings is a side effect, so the caller asks.
+   *
+   * `close()` restores every handle this session handed out that is still
+   * awake: the session is the thing that outlives the caller, and a person who
+   * closes the window should not find their phone's sleep timeout changed.
    */
   readonly keepAwake: (seconds?: number) => Promise<KeepAwakeHandle>;
   private readonly views = new Set<ViewerServer>();
+  /** Handles from `keepAwake` whose restore `close()` still owes. */
+  private readonly awakeHandles = new Set<KeepAwakeHandle>();
 
   constructor(
     readonly device: Device,
@@ -325,7 +331,19 @@ export class Session {
       },
     };
 
-    this.keepAwake = (seconds?: number) => keepAwake(this.device.hypium, seconds);
+    this.keepAwake = async (seconds?: number) => {
+      const handle = await keepAwake(this.device.hypium, seconds);
+      // Wrapped so `close()` can drop the entry once the caller restored it
+      // itself: a second `-r` would undo a timeout set by someone else since.
+      const wrapped: KeepAwakeHandle = {
+        restore: async () => {
+          this.awakeHandles.delete(wrapped);
+          await handle.restore();
+        },
+      };
+      this.awakeHandles.add(wrapped);
+      return wrapped;
+    };
 
     this.govern = {
       policy: this.core.policy,
@@ -364,6 +382,13 @@ export class Session {
     for (const viewer of [...this.views]) {
       this.views.delete(viewer);
       await viewer.close().catch(() => undefined);
+    }
+    // A handle the caller never restored is this session's debt: the device
+    // would otherwise keep the override for its full hour after the window
+    // closed.
+    for (const handle of [...this.awakeHandles]) {
+      this.awakeHandles.delete(handle);
+      await handle.restore().catch(() => undefined);
     }
     await this.core.release();
   }

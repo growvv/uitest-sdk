@@ -36,9 +36,22 @@ export function resolveCastScale(
   }
 
   if (transport === "mjpeg") {
-    // The agent resizes the JPEG it captures; any fraction works, but a
-    // fraction below 1/20 is a thumbnail, not a mirror.
-    return Math.min(1, Math.max(0.05, Math.round((opts.maxSize / longestEdge) * 100) / 100));
+    // The agent resizes the JPEG it captures; any fraction works. It is
+    // rounded *down*, because `maxSize` is an upper bound: 1014/2560 rounds to
+    // 0.40 and yields a 1024 px frame, 10 px larger than asked.
+    const fraction = Math.floor((opts.maxSize / longestEdge) * 100) / 100;
+    if (fraction < 0.05) {
+      // Below the floor the agent would silently clamp, and a 128 px picture
+      // is not the 50 px one asked for. The grpc path refuses in the same
+      // case; saying so is the only honest answer here too.
+      const reachable = Math.round(longestEdge * 0.05);
+      throw new UitestError(
+        `maxSize ${opts.maxSize} is below what the agent can reach: ` +
+          `a 5% capture of ${longestEdge} px is ${reachable} px`,
+        "EBADARG",
+      );
+    }
+    return Math.min(1, fraction);
   }
 
   const divisor = Math.ceil(longestEdge / opts.maxSize);

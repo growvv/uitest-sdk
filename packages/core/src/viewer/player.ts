@@ -20,6 +20,10 @@ const BASE = `<!doctype html>
     --dim: #8b949e; --accent: #2f81f7; --ok: #3fb950; --warn: #d29922; --bad: #f85149;
   }
   * { box-sizing: border-box; }
+  /* hidden is how the server turns a control off, and every author rule that
+     sets display (aside, label.switch) would otherwise beat the UA's own
+     [hidden] rule — leaving a dead panel and a switch that controls nothing. */
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg); color: var(--ink); font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -592,6 +596,13 @@ const BASE = `<!doctype html>
       if (privacySwitchEl && msg.canPrivacy === false) privacySwitchEl.hidden = true;
       takeoverEl.hidden = !msg.canInput || inputMode !== 'takeover';
       setRecording(!!msg.recording);
+      // A recording the product asked for at startup may have failed before
+      // this tab existed; the greeting is the only place it can still reach
+      // the person.
+      if (msg.recordingError) toast('record failed: ' + msg.recordingError);
+      // A guard can have refused input before this tab existed; the greeting
+      // carries the sentence so the person knows why clicking does nothing.
+      if (msg.revoked) toast(msg.revoked);
       // The private greeting names this tab; the broadcast hello does not, so
       // an unnamed hello must not erase the identity we already have.
       if (msg.clientId !== undefined) clientId = msg.clientId;
@@ -702,6 +713,7 @@ const BASE = `<!doctype html>
     else if (msg.state === 'controlled' && !mine && previousId === null) toast('另一个页面正在操作');
     if (msg.reason === 'busy') toast('另一个页面正在操作');
     else if (msg.reason === 'error') toast('输入通道不可用：' + (msg.message || 'error'));
+    else if (msg.reason === 'revoked') toast(msg.message || '设备已被他人接管，输入已停止');
     if (msg.stats && mine && typeof msg.stats.p50 === 'number') {
       // p50/p95 cover touch ops only. Scrolls and pastes are an order of
       // magnitude slower, so folding them in would report a number that

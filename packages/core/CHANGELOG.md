@@ -13,8 +13,9 @@
 第四个产品 `uitest-mirror` 需要的四处能力。全部是新增，没有破坏性变更。
 
 - **`Session.keepAwake(seconds?)`**：覆盖设备的休眠超时（`power-shell timeout -o`），
-  返回的句柄 `restore()` 幂等，`close()` 时调用一次。默认 3600 秒。进程被强杀时
-  覆盖会留在设备上，用 `hdc shell power-shell timeout -r` 复位。
+  返回的句柄 `restore()` 幂等、失败可重试。会话自己记着发出去的句柄：`session.close()`
+  会把还没复位的一个个复位，所以产品只要 `close()` 会话就不必再管它。默认 3600 秒。
+  进程被强杀时覆盖会留在设备上，用 `hdc shell power-shell timeout -r` 复位。
 - **`CastOptions.maxSize`**：按最长边（像素）指定投流尺寸，由 `resolveCastScale`
   按传输换算——grpc/ws 是 1..5 的整数除数，mjpeg 是小数比例。与 `scale` 同时给是
   `EBADARG`；超过扩展能缩到的极限也报错并给出可达尺寸，不静默取整。

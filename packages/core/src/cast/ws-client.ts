@@ -107,6 +107,12 @@ export class WsCastClient implements CastClient {
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
       throw new UitestError(`port must be 1..65535, got ${port}`, "EBADARG");
     }
+    // Same range as the 6.8 client. `CastOptions.scale` is a plain number now
+    // that `maxSize` resolves per transport, so this check is the only thing
+    // between a caller and `-scale 2.5` on the device.
+    if (opts.scale !== undefined && (!Number.isInteger(opts.scale) || opts.scale < 1 || opts.scale > 5)) {
+      throw new UitestError(`scale must be 1..5, got ${opts.scale}`, "EBADARG");
+    }
     // `--extension-name` is a filename lookup in /data/local/tmp, not a path.
     if (!opts.wsExtension) {
       throw new ExtensionMissingError(

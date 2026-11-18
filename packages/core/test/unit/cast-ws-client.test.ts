@@ -146,6 +146,20 @@ const wsExtension = (() => {
 })();
 
 describe("WsCastClient", () => {
+  /**
+   * `CastOptions.scale` is `number` now that `maxSize` resolves per transport,
+   * so the union that used to catch this at compile time is gone. The 6.8
+   * client validates 1..5; the 7.0 one must too, or `scale: 2.5` reaches the
+   * extension's `-scale` argument.
+   */
+  it("rejects a scale outside 1..5 before starting a daemon", async () => {
+    const { hdc, calls } = fakeHdc(1);
+    await expect(
+      WsCastClient.start(hdc, { mode: "stream", port: 5000, wsExtension, scale: 2.5 }),
+    ).rejects.toThrow(UitestError);
+    expect(calls).toEqual([]);
+  });
+
   it("sends start, yields frames with the 4-byte prefix stripped", async () => {
     const annexB = Buffer.concat([
       Buffer.from([0, 0, 0, 1, 0x65]),

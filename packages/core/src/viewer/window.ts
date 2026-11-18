@@ -60,6 +60,15 @@ export interface OpenWindowOptions {
    * console keeps the default because its page is wider than it is tall.
    */
   size?: string;
+  /**
+   * Called when the window the browser opened goes away.
+   *
+   * The child is detached and unref'd, so nothing else observes its exit. A
+   * product that holds the device for the window's lifetime — the mirror does
+   * — has to know: closing the window is how a person says they are done with
+   * the phone.
+   */
+  onClose?: () => void;
   spawn?: (command: string, args: string[]) => unknown;
   print?: (line: string) => void;
 }
@@ -81,6 +90,17 @@ export function openWindow(
     ((command: string, args: string[]) => {
       const child = spawn(command, args, { detached: true, stdio: "ignore" });
       child.on("error", () => undefined);
+      // `exit` and `close` both fire for a normal browser shutdown; `close`
+      // also covers the case where the process is reaped by someone else.
+      // Only one call reaches `onClose`.
+      let told = false;
+      const tell = (): void => {
+        if (told) return;
+        told = true;
+        opts.onClose?.();
+      };
+      child.on("close", tell);
+      child.on("exit", tell);
       child.unref();
       return child;
     });

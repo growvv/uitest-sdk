@@ -37,7 +37,13 @@ audio, no camera, no OTG. Those live in `uitest-phone` and `uitest-console`.
 
 `uitest-mirror` takes the device lease, the same lease an agent task takes. If
 an agent holds the phone, mirror exits and names the holder rather than
-fighting for it. Release it by closing the window.
+fighting for it. Closing the window ends the run and releases the lease, as
+does Ctrl-C or closing the terminal it was started from.
+
+The lease is checked before every gesture that starts a tap, a pinch, a wheel
+or a key. If a person runs `uitest-phone hold` while the mirror is open, the
+next gesture is refused and the page says so — the mirror stops driving a phone
+somebody else has taken.
 
 ## Staying awake
 

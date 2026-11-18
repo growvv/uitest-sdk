@@ -51,7 +51,7 @@ function nav(active) {
   return `  <nav class="nav">
     <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
     <div class="nav-links">
-      <a href="index.html#packages">三个包</a>
+      <a href="index.html#packages">四个包</a>
       <a href="index.html#features">能力</a>
       <a href="index.html#cli">命令行</a>
       <a href="index.html#showcase">实拍</a>
@@ -138,7 +138,7 @@ ${shots}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(name)} ${esc(report.version)} 验收报告 · uitest-sdk</title>
-  <meta name="description" content="${esc(name)} ${esc(report.version)} 的验收记录：${total} 个用例、${esc(report.date)}、提交 ${esc(report.commit)}，每条都带设备或浏览器截图。">
+  <meta name="description" content="${esc(name)} ${esc(report.version)} 的验收记录：${total} 个用例、${esc(report.date)}、提交 ${esc(report.commit)}，画面类用例都带设备或浏览器截图。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -158,7 +158,7 @@ ${nav("acceptance.html")}
       <h1>${esc(name)} ${esc(report.version)} 验收报告</h1>
       <p class="doc-meta"><strong>${esc(name)}</strong> ${esc(report.version)} · ${esc(report.date)} · 提交 <code>${esc(report.commit)}</code></p>
 
-      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/${esc(assetDir(report))}/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的，截图由被测程序自己产出。</p>
+      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/${esc(assetDir(report))}/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的；画面类用例的截图由被测程序自己产出，只验命令行或日志的用例没有截图，报告中逐条标出。</p>
 
       <h2 id="summary">一页结论</h2>
       <div class="doc-table">

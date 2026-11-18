@@ -796,16 +796,34 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
       // The daemon only starts when a tab asks for the stream, and its argv is
       // on the device — not in the product's stdout, where the earlier version
       // looked. Reading `ps` is the only place `-scale` really appears.
+      let frameWidth: number | null = null;
       const shot = await captureOrFail(() =>
-        capturePage({ url: p.url, out: join(SHOTS, `max-size-${tag}.jpg`), waitFor: WAIT_LIVE }),
+        capturePage({
+          url: p.url,
+          out: join(SHOTS, `max-size-${tag}.jpg`),
+          waitFor: WAIT_LIVE,
+          prepare: async (evaluate: (expr: string) => Promise<unknown>) => {
+            // The spec's case is about the picture, not the argument: a
+            // correct `-scale` that produced a full-size frame would pass the
+            // old check. The canvas is sized to the decoded frame.
+            const width = await evaluate(`(() => {
+              const c = document.querySelector('canvas');
+              return c && c.width ? c.width : 0;
+            })()`);
+            frameWidth = typeof width === "number" ? width : null;
+            return [`frame ${String(width)} px wide`];
+          },
+        }),
       );
       const scale = await daemonScale(device, p.pid).catch(() => null);
-      const ok = shot.ok && scale === expected;
+      const withinBound = frameWidth !== null && frameWidth > 0 && frameWidth <= maxSize;
+      const ok = shot.ok && scale === expected && withinBound;
       add(
         "max-size",
         "--max-size 按最长边换算",
         ok ? "pass" : "fail",
-        `longest ${longest} → expected -scale ${expected}, daemon got ${scale ?? "none"}${shot.ok ? "" : " · no frame"}`,
+        `longest ${longest} → expected -scale ${expected}, daemon got ${scale ?? "none"} · ` +
+          `frame ${frameWidth ?? "none"} px (bound ${maxSize})${shot.ok ? "" : " · no frame"}`,
         shot.ok ? [`max-size-${tag}.jpg`] : [],
       );
     } finally {
@@ -822,6 +840,8 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
     );
     try {
       const file = `no-control-${tag}.jpg`;
+      const before = await calculatorState(device);
+      let injected: string | null = null;
       const shot = await captureOrFail(() =>
         capturePage({
           url: p.url,
@@ -831,12 +851,40 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
             // The key row is only rendered when the server said input is on.
             const hidden = await evaluate(`document.getElementById('keys').offsetParent === null`);
             if (hidden !== true) throw new Error("the key row is visible with --no-control");
-            return ["key row hidden"];
+            // The spec's case says "injection is refused", not "the buttons
+            // are hidden": hiding is presentation, and a page could still be
+            // scripted. Dispatch a full tap and a key on the canvas and let
+            // the device say whether anything landed.
+            injected = String(
+              await evaluate(`(() => {
+                const c = document.querySelector('#screen');
+                const r = c.getBoundingClientRect();
+                for (const type of ['pointerdown', 'pointerup']) {
+                  c.dispatchEvent(new PointerEvent(type, { clientX: r.left + r.width * 0.5, clientY: r.top + r.height * 0.5, bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerdown' ? 1 : 0, isPrimary: true }));
+                }
+                window.uitestViewer && window.uitestViewer.send && window.uitestViewer.send({ type: 'input', action: 'key', key: 'enter' });
+                return 'tap+enter dispatched';
+              })()`),
+            );
+            // The device needs the round trip to show it, if it was going to.
+            await new Promise((r) => setTimeout(r, 1200));
+            return [`key row hidden`, injected ?? ""];
           },
         }),
       );
-      if (shot.ok) add("no-control", "--no-control 只读", "pass", "no key row, no input", [file]);
-      else add("no-control", "--no-control 只读", "fail", shot.reason, [], "log");
+      const after = await calculatorState(device).catch(() => null);
+      const unchanged =
+        after !== null && after.expression === before.expression && after.value === before.value;
+      if (!shot.ok) add("no-control", "--no-control 只读", "fail", shot.reason, [], "log");
+      else if (!unchanged) {
+        add(
+          "no-control",
+          "--no-control 只读",
+          "fail",
+          `the device changed despite --no-control · "${after?.expression ?? ""} ${after?.value ?? ""}"`,
+          [file],
+        );
+      } else add("no-control", "--no-control 只读", "pass", `no key row; ${injected} left the display unchanged`, [file]);
     } finally {
       await stopMirror(p);
     }

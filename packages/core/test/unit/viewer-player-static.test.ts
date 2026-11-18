@@ -89,6 +89,17 @@ describe("PLAYER_HTML", () => {
   it("starts with masking on", () => {
     expect(PLAYER_HTML).toMatch(/id="privacy"[^>]*checked/);
   });
+
+  /**
+   * `hidden` is the only mechanism the server has to turn a control off, and
+   * the UA rule it relies on loses to any author `display` declaration. Both
+   * `aside` and `label.switch` set `display: flex`, so a mirror with
+   * `inspect: false` still showed a dead 340 px panel and a privacy switch
+   * that controlled nothing — visible in its own published screenshots.
+   */
+  it("lets `hidden` win over the layout rules", () => {
+    expect(PLAYER_HTML).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
+  });
 });
 
 describe("PLAYER_HTML: capture and record buttons", () => {
@@ -117,5 +128,12 @@ describe("PLAYER_HTML: capture and record buttons", () => {
     expect(PLAYER_HTML).toContain("function setRecording");
     expect(PLAYER_HTML).toContain("'Stop'");
     expect(PLAYER_HTML).toContain("msg.type === 'saved'");
+  });
+
+  it("shows a startup recording failure that arrived before the tab did", () => {
+    // `--record` can fail on a transport that cannot record. The broadcast
+    // reaches nobody if the browser opened slowly, so the greeting carries the
+    // reason too.
+    expect(PLAYER_HTML).toContain("msg.recordingError");
   });
 });

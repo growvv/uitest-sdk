@@ -201,6 +201,8 @@ interface Harness {
   openInputs(): number;
   /** Lets a `createCast` held by `holdCast` finish. */
   releaseCast(): void;
+  /** Lets a `startRecording` held by `holdStart` finish. */
+  releaseStart(): void;
   /** How many times the source was asked for a cast. */
   castOpens(): number;
 }
@@ -239,6 +241,12 @@ async function start(
     holdCast?: boolean;
     /** Makes the first N `createCast` calls reject, then succeed. */
     castFailures?: number;
+    /** Start recording at startup, as `--record` does. */
+    recordOnStart?: boolean;
+    /** Keeps the startup `startRecording` pending until `releaseStart` is called. */
+    holdStart?: boolean;
+    /** A guard the product supplies; rejects to mean "the device is not yours". */
+    guard?: () => Promise<void>;
   } = {},
 ): Promise<Harness> {
   const cast = new FakeCast();
@@ -253,6 +261,8 @@ async function start(
   let recording = false;
   let releaseStop: (() => void) | null = null;
   let stopGate = over.holdStop ? new Promise<void>((r) => (releaseStop = r)) : null;
+  let releaseStart: (() => void) | null = null;
+  const startGate = over.holdStart ? new Promise<void>((r) => (releaseStart = r)) : null;
   const redactions: boolean[] = [];
   const lanes: FakeInputLane[] = [];
   let openInputs = 0;
@@ -269,6 +279,7 @@ async function start(
       ? {
           input: {
             mode: over.inputMode,
+            ...(over.guard ? { guard: over.guard } : {}),
             open() {
               openInputs++;
               const lane = new FakeInputLane();
@@ -283,6 +294,7 @@ async function start(
           },
         }
       : {}),
+    ...(over.recordOnStart ? { recordOnStart: true } : {}),
     source: {
       async createCast() {
         castOpens++;
@@ -308,6 +320,9 @@ async function start(
       },
       async startRecording() {
         recordings++;
+        // The startup recording can be in flight while a tab clicks Record;
+        // the gate makes that window wide enough to test.
+        if (startGate) await startGate;
         recording = true;
         return "/tmp/rec.mp4";
       },
@@ -350,6 +365,7 @@ async function start(
     recordings: () => recordings,
     recordStops: () => recordStops,
     releaseStop: () => releaseStop?.(),
+    releaseStart: () => releaseStart?.(),
     lanes: () => lanes,
     openInputs: () => openInputs,
     releaseCast: () => releaseCast?.(),
@@ -986,6 +1002,30 @@ describe("ViewerServer: capture and record", () => {
     // to collect the file.
     expect(h.recordStops()).toBe(1);
   });
+
+  /**
+   * `--record` starts a recording at startup. A tab whose browser was slow to
+   * open can click Record in the window before that start resolves: the click
+   * passed the `this.recording` check (still null) and started a second daemon
+   * on the same socket, which takes the first one's place.
+   */
+  it("refuses a page click while the startup recording is still opening", async () => {
+    const h = await start({ recordOnStart: true, holdStart: true });
+    const c = await connect(h.port);
+    try {
+      await until(() => c.texts.some((t) => t.type === "hello"));
+      await until(() => h.recordings() === 1);
+
+      c.send({ type: "record", action: "start" });
+      await until(() => c.texts.some((t) => t.type === "record" && t.error));
+      expect(h.recordings()).toBe(1);
+    } finally {
+      // `close()` waits for the startup recording; an unreleased gate would
+      // hang the teardown rather than report the failure.
+      h.releaseStart();
+      c.close();
+    }
+  });
 });
 
 describe("ViewerServer: takeover", () => {
@@ -1367,6 +1407,81 @@ describe("ViewerServer: features, hooks and page", () => {
     c.send({ type: "input", action: "down", x: 10, y: 20 });
     await until(() => h.lanes()[0]?.ops("touchDown").length === 1);
     c.send({ type: "input", action: "up", x: 10, y: 20 });
+    c.close();
+  });
+
+  /**
+   * The lease is what makes a mirror safe to open beside an agent, and it was
+   * advisory: the server never asked. A person running `uitest-phone hold`
+   * took the phone and the mirror kept sending their clicks to it.
+   */
+  it("stops sending gestures once the product's guard says the device is gone", async () => {
+    let allowed = true;
+    const h = await start({
+      inputMode: "always",
+      guard: async () => {
+        if (!allowed) throw new Error('lease_held · this device already runs task "mirror"\nremove the lock');
+      },
+    });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+
+    c.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => h.lanes()[0]?.ops("touchDown").length === 1);
+
+    allowed = false;
+    c.send({ type: "input", action: "down", x: 30, y: 40 });
+    await until(() => c.texts.some((t) => t.type === "control" && t.reason === "revoked"));
+    expect(h.lanes()[0]!.ops("touchDown")).toEqual([[10, 20]]);
+    // Only the product's first line is shown: the rest is an operator hint
+    // that names the lock's absolute path.
+    expect(c.texts.find((t) => t.type === "control" && t.reason === "revoked")?.message).toBe(
+      'lease_held · this device already runs task "mirror"',
+    );
+    c.close();
+  });
+
+  it("still finishes a gesture it already started when the guard refuses the next one", async () => {
+    // An `up` that the guard refused would leave the phone pressed: the
+    // pointer lift is the end of an allowed gesture, not a new one.
+    let allowed = true;
+    const h = await start({
+      inputMode: "always",
+      guard: async () => {
+        if (!allowed) throw new Error("lease_held");
+      },
+    });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => h.lanes()[0]?.ops("touchDown").length === 1);
+
+    allowed = false;
+    c.send({ type: "input", action: "move", x: 11, y: 21 });
+    c.send({ type: "input", action: "up", x: 11, y: 21 });
+    await until(() => h.lanes()[0]!.ops("touchUp").length === 1);
+    expect(h.lanes()[0]!.ops("touchUp")).toEqual([[11, 21]]);
+    c.close();
+  });
+
+  it("tells a tab that arrives later why its input is refused", async () => {
+    const h = await start({
+      inputMode: "always",
+      guard: async () => {
+        throw new Error("lease_held · a person is using the phone");
+      },
+    });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "input", action: "down", x: 10, y: 20 });
+    await until(() => c.texts.some((t) => t.type === "control" && t.reason === "revoked"));
+
+    const late = await connect(h.port);
+    await until(() => late.texts.some((t) => t.type === "hello"));
+    const hello = late.texts.find((t) => t.type === "hello")!;
+    expect(hello.revoked).toBe("lease_held · a person is using the phone");
+    expect(hello.control).toMatchObject({ state: "readonly", reason: "revoked" });
+    late.close();
     c.close();
   });
 

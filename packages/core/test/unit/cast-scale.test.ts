@@ -32,4 +32,21 @@ describe("resolveCastScale", () => {
     expect(resolveCastScale("grpc", 2720, { scale: 2 })).toBe(2);
     expect(resolveCastScale("mjpeg", 2720, { scale: 0.25 })).toBe(0.25);
   });
+
+  /**
+   * `maxSize` is an upper bound, and the mjpeg fraction is rounded to two
+   * decimals — 1014/2560 rounds up to 0.40, which is a 1024 px frame, larger
+   * than the 1014 the person asked for. The grpc path already refuses what it
+   * cannot reach; this one must not quietly overshoot.
+   */
+  it("mjpeg: rounds down, so the frame never exceeds maxSize", () => {
+    expect(resolveCastScale("mjpeg", 2560, { maxSize: 1014 })).toBe(0.39);
+    expect(resolveCastScale("mjpeg", 2560, { maxSize: 1024 })).toBe(0.4);
+  });
+
+  it("mjpeg: refuses a size below the smallest fraction instead of clamping", () => {
+    // 0.05 is the floor; 50 px on a 2560 display would need 0.019. A clamped
+    // 128 px picture is not what was asked for, so say so.
+    expect(() => resolveCastScale("mjpeg", 2560, { maxSize: 50 })).toThrow(/EBADARG|0\.05|128/);
+  });
 });

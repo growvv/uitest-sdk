@@ -30,6 +30,10 @@ export interface KeepAwakeHandle {
  * person closing the window and the process being asked to stop — and a second
  * `-r` would undo a timeout someone else set in the meantime.
  *
+ * The guard is set only after the restore succeeds: a transient failure (a
+ * busy agent, a phone that slept mid-call) must stay retryable, or the handle
+ * reports success by omission while the device keeps the override.
+ *
  * It is best effort by nature: a process that is killed outright never runs
  * the restore, so the device keeps the override. The product's README names
  * `hdc shell power-shell timeout -r` for that case.
@@ -40,8 +44,8 @@ export async function keepAwake(sleep: SleepControl, seconds = 3600): Promise<Ke
   return {
     async restore() {
       if (restored) return;
-      restored = true;
       await sleep.restoreSleepTime();
+      restored = true;
     },
   };
 }
