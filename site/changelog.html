@@ -57,7 +57,8 @@
           <span class="release-tag">三个产品各自的修正</span>
         </div>
         <p>全分支评审之后的修正版：<code>uitest-sdk</code> 0.10.1、<code>uitest-phone</code> 0.10.1、
-<code>uitest-console</code> 0.1.1。没有破坏性变更，也不新增功能——改的都是「说发生了，其实没发生」。</p>
+<code>uitest-console</code> 0.1.1。不新增功能——改的都是「说发生了，其实没发生」。一处类型收窄：
+<code>observe.apps()</code> 现在只承诺它真的返回的字段（<code>ability</code> 从来没被填过）。</p>
 
         <h3>审批：人说的才算</h3>
         <ul>
@@ -81,12 +82,21 @@
         <ul>
           <li>设备已被人持有时打开的标签页直接显示 Resume，轮询时重新读租约；两个标签页共享同一个租约不再各说各话。</li>
           <li>退出时若设备仍被人持有，打印设备标签和 <code>uitest-phone resume</code>。</li>
+          <li>冲突提示不会再被刷新冲掉：它写在审批列表之外，服务端先发列表、后发原因。
+            此前列表在同一拍把它覆盖，人点 Deny 只看到那一行又回来了。</li>
+          <li>锁屏时页面明说「手机锁着，解锁后才能看到画面」，而不是给一块没有解释的黑屏；
+            这个提示只读真正携带该字段的 <code>nodes</code> 消息，重连不会把它清掉。</li>
         </ul>
 
         <h3>库与文档</h3>
         <ul>
-          <li>公开类型补齐：文档签名里出现的类型都能从包里导入；两个测试编译文档里的每一行 <code>import</code>。</li>
+          <li>公开类型补齐：文档签名里出现的类型都能从包里导入；测试会把文档里的示例整段编译，
+            而不只是逐行检查 <code>import</code>——两步创建 <code>Session</code> 的那段示例此前根本编译不过。</li>
           <li>验收报告只在代码真的被改过时才标 <code>+dirty</code>——此前一次新版本的首次运行会把自己的输出目录当成改动。</li>
+          <li>审批请求写不进状态目录时抛 <code>ApprovalWriteError</code>（<code>EAPPROVALWRITE</code>），
+            而不是返回一个没人能答的 id。它是 <code>UitestError</code> 的子类，命令行与 MCP 都能归类。</li>
+          <li>示例与生成页面里的错误不再留着：快速上手会先打开计算器再点「7」，并检查状态才打勾；
+            生成的 API 页补上了它用到却没导入的 <code>Gesture</code>。</li>
         </ul>
       </section>
 
