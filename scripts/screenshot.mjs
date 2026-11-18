@@ -189,14 +189,21 @@ export async function capturePage({
       // A timeout is the failure that most needs a picture: the predicate is
       // the assertion ("a frame is on the canvas"), so what the page did show
       // — a black canvas, a "reconnecting" overlay — is the evidence. Save it
-      // under the name the report already uses and say which file it is; a
-      // thrown expression alone cost a separate probe to explain.
-      const failed = target.replace(/\.jpg$/i, "-timeout.jpg");
+      // and name it; a thrown expression alone cost a separate probe to explain.
+      //
+      // It goes to the git-ignored scratch directory, never beside `target`.
+      // Every other capture lands in a published directory after passing the
+      // lock-screen and notification-shade guards; this one is taken with no
+      // guard, because the page that failed is exactly the one worth showing.
+      // On the console's 0.1.1 run the phone had locked itself, and writing
+      // this file beside the report put a lock screen on the website.
+      const failed = join(
+        process.cwd(),
+        ".work-bench",
+        `capture-timeout-${process.pid}-${port}.jpg`,
+      );
       try {
-        const shot = await send("Page.captureScreenshot", {
-          format: "jpeg",
-          quality: 80,
-        });
+        const shot = await send("Page.captureScreenshot", { format: "jpeg", quality: 80 });
         if (shot.result?.data) await writeFile(failed, Buffer.from(shot.result.data, "base64"));
       } catch {
         // The page is unresponsive too; the reason still stands on its own.

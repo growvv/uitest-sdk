@@ -149,6 +149,11 @@ export const CONSOLE_HTML = `
     color: var(--bad); font-weight: 600; font-size: 12px;
   }
   #held-banner.on { display: block; }
+  #locked-banner {
+    display: none; padding: 7px 10px; background: rgba(210,153,34,.18);
+    color: #d29922; font-weight: 600; font-size: 12px;
+  }
+  #locked-banner.on { display: block; }
   #hold.on { border-color: var(--bad); color: var(--bad); }
   @media (max-width: 900px) {
     #console-panel { display: none; }
@@ -159,6 +164,7 @@ export const CONSOLE_HTML = `
     <button id="hold" title="Take the phone; agent commands stop with lease_held">Hold</button>
   </header>
   <div id="held-banner">You have the phone · agents are paused</div>
+  <div id="locked-banner">The phone is locked · unlock it to see the screen</div>
   <section id="inbox">
     <h3>Approvals waiting for you</h3>
     <div id="approvals-list" class="list"><div class="empty">none</div></div>
@@ -182,7 +188,15 @@ export const CONSOLE_SCRIPT = `
   var activityEl = document.getElementById('activity-list');
   var holdEl = document.getElementById('hold');
   var heldEl = document.getElementById('held-banner');
+  var lockedEl = document.getElementById('locked-banner');
   var held = false;
+
+  // A locked phone is the one state where a black mirror is the truth rather
+  // than a fault: the screen is off, so there is nothing to stream. Saying so
+  // is the difference between "unlock your phone" and "the console is broken".
+  function setLocked(on) {
+    lockedEl.className = on ? 'on' : '';
+  }
 
   function ask() {
     viewer.send({ type: 'console:approvals:list' });
@@ -235,6 +249,8 @@ export const CONSOLE_SCRIPT = `
   viewer.on('console:approvals', function (msg) { renderApprovals(msg.items); });
   viewer.on('console:activity', function (msg) { renderActivity(msg.items); });
   viewer.on('console:held', function (msg) { setHeld(msg.held); });
+  viewer.on('hello', function (msg) { setLocked(!!msg.locked); });
+  viewer.on('nodes', function (msg) { setLocked(!!msg.locked); });
   viewer.on('console:error', function (msg) {
     var text = String(msg.message || 'console error');
     approvalsEl.insertAdjacentHTML('afterbegin', '<div class="empty">' + escapeHtml(text) + '</div>');
