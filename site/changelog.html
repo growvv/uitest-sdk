@@ -77,7 +77,10 @@
             <code>--record</code> 因此从第一帧录到关窗。</li>
           <li>无边框窗口（<code>openWindow</code> / <code>appWindowCommand</code>）从 <code>uitest-console</code> 提升进
             <code>uitest-sdk/viewer</code>：两个产品需要同一份浏览器探测与退化逻辑，而产品之间不能互相依赖。</li>
-          <li>播放器多了一个 <strong>Recents</strong> 键（<code>KEYCODE_APP_SWITCH</code>，187）。</li>
+          <li>播放器多了一个 <strong>Recents</strong> 键。HarmonyOS 没有这个键值——
+            AOSP 的 187、<code>KEYCODE_VIRTUAL_MULTITASK</code>（2210）、
+            <code>KEYCODE_TASKMANAGER</code>（2717）在真机上都不响应；系统自己的路径是
+            <strong>从底边向上滑并按住 3.5 秒</strong>，这个按钮发的就是那条手势。</li>
         </ul>
 
         <h3>版本</h3>

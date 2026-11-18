@@ -23,9 +23,11 @@
 - **`uitest-sdk/viewer` 新增 `openWindow` / `appWindowCommand`**：无边框浏览器窗口
   （`--app=<url>`），没有 Edge/Chrome 时打印 URL。从 `uitest-console` 提升上来，
   两个产品共用一份。
-- **Recents 键**：`parseKeyName("recents")` → 187（`KEYCODE_APP_SWITCH`），播放器多了
-  一个「任务」按钮。这是本次唯一没有真机实测背书的常量，`uitest-mirror` 的验收用例
-  会在真机上验证它。
+- **Recents 键**：播放器多了一个「任务」按钮，`LiveInput.key("recents")` 发送它。
+  HarmonyOS 没有「最近任务」的键值——`oh_key_code.h` 里没有 `APP_SWITCH`，AOSP 的
+  187 以及 `KEYCODE_VIRTUAL_MULTITASK`（2210）、`KEYCODE_TASKMANAGER`（2717）在真机上
+  都无反应。系统自己的路径是**从底边向上滑并按住 3.5 s**，这里发的就是这条手势。
+  `parseKeyName("recents")` 因此仍然报未知键，而不是静默什么都不做。
 
 ## [0.10.1] — 2026-11-18
 
