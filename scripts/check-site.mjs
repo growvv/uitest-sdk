@@ -564,6 +564,14 @@ if (!docsHtml.includes(`uitest-sdk <strong>${VERSION}</strong>`)) {
 }
 
 for (const needle of [
+  // 0.10.1: every product in the split has its own patch release, and the
+  // changelog is the only page that says what changed in them. The fixes are
+  // ones a person notices (a deny that did nothing, a screenshot path with no
+  // file behind it), so the page has to name them rather than say "bug fixes".
+  "0.10.1",
+  "三个产品各自的修正",
+  "uitest-console</code> 0.1.1",
+  "重放会继续",
   // 0.10.0: the split. The changelog is where a reader upgrading from 0.9.4
   // looks, so the migration table has to be on the page.
   "0.10.0",

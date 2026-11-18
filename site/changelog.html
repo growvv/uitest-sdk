@@ -26,6 +26,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-10-1">0.10.1 · 三个产品各自的修正</a>
       <a href="#v0-10-0">0.10.0 · 库与产品拆分</a>
       <a href="#v0-9-4">0.9.4 · 两台真机验收修出来的东西</a>
       <a href="#v0-9-3">0.9.3 · 投屏页只接受自己的来源</a>
@@ -48,6 +49,46 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-10-1">
+        <div class="release-head">
+          <h2>0.10.1</h2>
+          <span class="release-date">2026-11-18</span>
+          <span class="release-tag">三个产品各自的修正</span>
+        </div>
+        <p>全分支评审之后的修正版：<code>uitest-sdk</code> 0.10.1、<code>uitest-phone</code> 0.10.1、
+<code>uitest-console</code> 0.1.1。没有破坏性变更，也不新增功能——改的都是「说发生了，其实没发生」。</p>
+
+        <h3>审批：人说的才算</h3>
+        <ul>
+          <li><strong>授权范围由人决定。</strong><code>approvals allow</code> 不带 <code>--scope</code> 就是「这一次」。
+            此前 agent 重放时加 <code>--approval-scope always</code>，能把一句普通的「同意」变成覆盖该状态目录下
+            所有任务的长期授权。</li>
+          <li><strong>输掉的拒绝不再假装成功。</strong>审批已经有相反答案时返回 <code>conflict</code>，命令行以非零退出
+            并说明「已被允许，重放会继续」；控制台同样提示。此前它打印 <code>denied</code>，人就不再看，而 agent 照样执行。</li>
+        </ul>
+
+        <h3>投屏与截图</h3>
+        <ul>
+          <li><strong>关闭查看器不再漏掉正在打开的投屏。</strong><code>close()</code> 只释放它已经拿到的 cast；
+            一个在关闭途中才返回的 cast 无人释放，留下设备端 daemon 和一条 <code>fport</code>，进程也退不出去。
+            实测每次验收每台设备漏一条 <code>localabstract:uitest_live_*</code>。</li>
+          <li><strong>截图按钮不再给一个不存在的文件路径。</strong>锁屏时设备不写文件，页面此前仍返回路径；
+            现在显示 session 给出的原因。</li>
+        </ul>
+
+        <h3>控制台</h3>
+        <ul>
+          <li>设备已被人持有时打开的标签页直接显示 Resume，轮询时重新读租约；两个标签页共享同一个租约不再各说各话。</li>
+          <li>退出时若设备仍被人持有，打印设备标签和 <code>uitest-phone resume</code>。</li>
+        </ul>
+
+        <h3>库与文档</h3>
+        <ul>
+          <li>公开类型补齐：文档签名里出现的类型都能从包里导入；两个测试编译文档里的每一行 <code>import</code>。</li>
+          <li>验收报告只在代码真的被改过时才标 <code>+dirty</code>——此前一次新版本的首次运行会把自己的输出目录当成改动。</li>
+        </ul>
+      </section>
 
       <section class="release" id="v0-10-0">
         <div class="release-head">
