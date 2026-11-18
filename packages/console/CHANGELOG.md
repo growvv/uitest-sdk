@@ -3,6 +3,11 @@
 本文件记录 `uitest-console` 的公开版本。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循语义化版本。
 
+## [0.1.1] — 2026-11-18
+
+- 运行在 `uitest-sdk@0.10.1` 上。
+- Deny 输给已有的 Allow 时页面显示冲突原因，而不是静默刷新。
+
 ## [0.1.0] — 2026-11-18
 
 第一个版本：`uitest-sdk` 0.9.4 里的 `live` 页面成为独立的人机产品。

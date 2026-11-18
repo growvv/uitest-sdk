@@ -3,6 +3,12 @@
 本文件记录 `uitest-phone` 的公开版本。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循语义化版本。
 
+## [0.10.1] — 2026-11-18
+
+- 运行在 `uitest-sdk@0.10.1` 上。
+- `approvals deny` 在审批已被允许时报 `approval_conflict` 并以非零退出，
+  不再打印 `denied` 让人以为拒绝生效了。
+
 ## [0.10.0] — 2026-11-18
 
 `uitest-sdk` 0.9.4 的 CLI / MCP / skill 部分成为独立产品，运行在

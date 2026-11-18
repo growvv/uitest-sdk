@@ -1,6 +1,6 @@
 {
   "name": "uitest-console",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local web console for a HarmonyOS device: mirror, inspect, takeover and the approval inbox",
   "license": "MIT",
   "repository": {
@@ -41,6 +41,6 @@
     "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "uitest-sdk": "~0.10.0"
+    "uitest-sdk": "~0.10.1"
   }
 }

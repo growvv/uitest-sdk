@@ -14,7 +14,7 @@
  * tags.
  */
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +25,11 @@ import { assertCapturable, assertShadeClosed } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "console";
-const VERSION = "0.1.0";
+const VERSION = (
+  JSON.parse(readFileSync(join(ROOT, "packages", "console", "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 const OUT = process.env.UITEST_ACCEPTANCE_DIR ?? join(ROOT, "docs", "acceptance", `${PRODUCT}-${VERSION}`);
 const SHOTS = join(OUT, "screenshots");
 const LOGS = join(OUT, "logs");

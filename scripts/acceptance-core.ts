@@ -14,7 +14,7 @@
  * logs. Devices appear only as 8-character tags.
  */
 import { execFileSync, execSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { statSync, readFileSync } from "node:fs";
 import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join, relative, resolve } from "node:path";
@@ -26,7 +26,11 @@ import { capturePage } from "./screenshot.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "core";
-const VERSION = "0.10.0";
+const VERSION = (
+  JSON.parse(readFileSync(join(ROOT, "packages", "core", "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 const OUT = process.env.UITEST_ACCEPTANCE_DIR ?? join(ROOT, "docs", "acceptance", `${PRODUCT}-${VERSION}`);
 const SHOTS = join(OUT, "screenshots");
 const LOGS = join(OUT, "logs");

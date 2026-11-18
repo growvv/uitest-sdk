@@ -44,7 +44,7 @@
 
     <article class="doc-body">
       <h1>使用文档</h1>
-      <p class="doc-meta">uitest-sdk <strong>0.10.0</strong> · Node.js ≥ 20 · MIT</p>
+      <p class="doc-meta">uitest-sdk <strong>0.10.1</strong> · Node.js ≥ 20 · MIT</p>
       <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。本页讲的是库 <code>uitest-sdk</code>；命令行、MCP 与 Skill 是产品 <code>uitest-phone</code>，浏览器里的镜像、接管与审批收件箱是产品 <code>uitest-console</code>，两者都只用这里的公开 API。</p>
 
       <h2 id="install">1. 安装与前提</h2>
@@ -552,7 +552,7 @@ try {
   await Promise.all(devices.map((d) =&gt; d.dispose()));
 }</code></pre>
 
-      <p class="doc-meta">文档对应 uitest-sdk 0.10.0（2026-11-18）。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告；两台设备的完整命令、输出与截图在<a href="acceptance.html">验收报告</a>。</p>
+      <p class="doc-meta">文档对应 uitest-sdk 0.10.1（2026-11-18）。库与产品拆分发生在 0.10.0：这一页讲库，命令行与 MCP 在 <code>uitest-phone</code>，浏览器界面在 <code>uitest-console</code>。数字与限制来自真机验收与 <a href="changelog.html">更新日志</a> 中引用的报告；两台设备的完整命令、输出与截图在<a href="acceptance.html">验收报告</a>。</p>
     </article>
   </main>
 

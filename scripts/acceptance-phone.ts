@@ -27,7 +27,11 @@ import { assertCapturable, assertShadeClosed } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "phone";
-const VERSION = "0.10.0";
+const VERSION = (
+  JSON.parse(readFileSync(join(ROOT, "packages", "phone", "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 const OUT = process.env.UITEST_ACCEPTANCE_DIR ?? join(ROOT, "docs", "acceptance", `${PRODUCT}-${VERSION}`);
 const SHOTS = join(OUT, "screenshots");
 const LOGS = join(OUT, "logs");

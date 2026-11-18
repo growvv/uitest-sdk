@@ -8,6 +8,20 @@
 
 ## [未发布]
 
+## [0.10.1] — 2026-11-18
+
+全分支评审后的修正版。没有破坏性变更。
+
+- **审批的授权范围由人决定**：`approvals allow` 不带 `--scope` 就是「这一次」。
+  此前 agent 重放时加 `--approval-scope always` 能把一句普通的「同意」变成覆盖
+  该状态目录下所有任务的长期授权。
+- **失败的拒绝不再假装成功**：审批已经有相反答案时返回 `conflict`，CLI 以非零
+  退出并说明「已被允许，重放会继续」，console 同样提示。
+- 公开类型补齐：`WindowResult`、`InspectResult`、`DragOptions`、`Point`、`Rect`、
+  `H264Chunk`、`SessionAgent` / `SessionDevice` 等签名里出现的类型都能从包里导入。
+- 文档与示例修正：quickstart 的 `tap` 改用真实目标；README、API 参考与站点示例的
+  导入路径指向实际存在的入口。
+
 ## [0.10.0] — 2026-11-18
 
 核心库与产品的拆分版本：`uitest-sdk` 现在是纯库（连接、观察、动作、投屏、查看器、治理），
