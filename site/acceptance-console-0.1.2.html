@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uitest-console 0.1.2 验收报告 · uitest-sdk</title>
+  <meta name="description" content="uitest-console 0.1.2 的验收记录：10 个用例、2026-11-18、提交 4d2efff，每条都带设备或浏览器截图。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#packages">三个包</a>
+      <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
+      <a href="index.html#showcase">实拍</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">文档</a>
+      <a href="acceptance.html" aria-current="page">验收</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="目录">
+      <a href="#summary">一页结论</a>
+      <a href="#devices">设备</a>
+      <a href="#cases">用例与截图</a>
+      <a href="#issues">问题</a>
+      <a href="#rerun">自己复现</a>
+      <a href="acceptance.html">全部产品的验收</a>
+    </aside>
+
+    <article class="doc-body">
+      <h1>uitest-console 0.1.2 验收报告</h1>
+      <p class="doc-meta"><strong>uitest-console</strong> 0.1.2 · 2026-11-18 · 提交 <code>4d2efff</code></p>
+
+      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/console-0.1.2/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的，截图由被测程序自己产出。</p>
+
+      <h2 id="summary">一页结论</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>用例</th><th>通过</th><th>失败</th><th>跳过</th></tr></thead>
+          <tbody>
+            <tr><td>10</td><td>10</td><td>0</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="devices">设备</h2>
+      <p class="note">设备只以序列号哈希后的 8 位标签出现，原序列号不进入仓库，也不进入本页。</p>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>标签</th><th>型号</th><th>分辨率</th></tr></thead>
+          <tbody>
+            <tr><td><code>7544d645</code></td><td>MLR-AL10</td><td>1600x2560</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="cases">用例与截图</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>#</th><th>用例</th><th>结果</th><th>截图</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>package</code></td>
+              <td>npm 包安装与版本<br><span class="cell-detail">uitest-console-0.1.2.tgz · uitest-console 0.1.2 (uitest-sdk 0.11.0)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-mirror</code></td>
+              <td>镜像：真实浏览器里的一帧<br><span class="cell-detail">64344 · 0 notes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-mirror-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-mirror-7544d645.jpg" alt="镜像：真实浏览器里的一帧" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-inspect</code></td>
+              <td>节点表：元素行<br><span class="cell-detail">9 node rows</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-inspect-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-inspect-7544d645.jpg" alt="节点表：元素行" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-inbox-pending</code></td>
+              <td>收件箱：Agent 的请求出现在页面上<br><span class="cell-detail">1 行 · id d3f4d6e9d01d</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-inbox-pending-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-inbox-pending-7544d645.jpg" alt="收件箱：Agent 的请求出现在页面上" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-inbox-allow</code></td>
+              <td>收件箱：在页面上点允许后 Agent 放行<br><span class="cell-detail">replay exit 0 (expect 0) · page row: d3f4d6e9d01d tap deletes allowedcom.huawei.hmos.calculator · task tap · device</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-inbox-allowed-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-inbox-allowed-7544d645.jpg" alt="收件箱：在页面上点允许后 Agent 放行" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-hold</code></td>
+              <td>Hold：页面拿到设备，Agent 停在 lease_held<br><span class="cell-detail">hold button → Resume · agent observe exit 2 (expect 2)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-held-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-held-7544d645.jpg" alt="Hold：页面拿到设备，Agent 停在 lease_held" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-resume</code></td>
+              <td>Resume：交回后 Agent 继续<br><span class="cell-detail">button on join → Resume, after click → Resume · agent observe exit 0 (expect 0)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-resumed-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-resumed-7544d645.jpg" alt="Resume：交回后 Agent 继续" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-privacy</code></td>
+              <td>隐私开关：页面自己的开关<br><span class="cell-detail">privacy on-&gt;off-&gt;on</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-privacy-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-privacy-7544d645.jpg" alt="隐私开关：页面自己的开关" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-selfcontained</code></td>
+              <td>页面不引用外部资源<br><span class="cell-detail">0 local resources</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/console-0.1.2/console-selfcontained-7544d645.jpg"><img src="assets/acceptance/console-0.1.2/console-selfcontained-7544d645.jpg" alt="页面不引用外部资源" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>console-origin</code></td>
+              <td>来源校验沿用库的实现<br><span class="cell-detail">own origin=101 · another site=403 · null origin=403 · DNS rebinding=403</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="issues">问题</h2>
+      <ul>
+            <li>无</li>
+      </ul>
+
+      <h2 id="rerun">自己复现</h2>
+      <pre class="cli-code"><code>unset HDC_SERVER_PORT</code><br><code>npx tsx scripts/acceptance-console.ts --targets &lt;id&gt;[,&lt;id&gt;]</code><br><code>node scripts/gen-acceptance-pages.mjs</code></pre>
+      <p class="note">重跑会覆盖本页引用的截图。截图进入官网之前必须逐张看过：通知栏、账户信息、聊天与第三方个人资料都不能出现在这里。</p>
+    </article>
+  </main>
+  <script src="main.js" defer></script>
+</body>
+</html>
