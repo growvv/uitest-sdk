@@ -33,7 +33,16 @@ export interface CastOptions {
   wsExtension?: string;
   frameRate?: 15 | 30 | 60 | 120;
   /** Integer shrink factor. 2 -> half width/height. Values outside 1..5 are rejected. */
-  scale?: 1 | 2 | 3 | 4 | 5;
+  scale?: number;
+  /**
+   * Upper bound on the longest edge, in pixels, resolved per transport.
+   *
+   * `scale` means different things to the two transports — an integer divisor
+   * for the H.264 extensions, a fraction for MJPEG — so a person who thinks in
+   * pixels names a size and lets `resolveCastScale` compute the right one.
+   * Setting this beside `scale` is an error rather than a precedence rule.
+   */
+  maxSize?: number;
   /**
    * Record mode only: where to pull the finished MP4 on `dispose()`. The
    * device-side path is hardcoded in the extension (`/data/local/tmp/mytest.mp4`)

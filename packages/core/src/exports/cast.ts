@@ -1,5 +1,6 @@
 /** `uitest-sdk/cast` — screen streaming and recording, without a viewer. */
 export { createCast } from "../cast/create.js";
+export { resolveCastScale } from "../cast/scale.js";
 export type { CastHost } from "../cast/create.js";
 export type { CastClient, CastOptions, JpegFrame } from "../cast/types.js";
 // The frame a `stream()` yields: a consumer writing its own sink names it.

@@ -2,6 +2,7 @@ import { H264CastClient } from "./client.js";
 import { WsCastClient } from "./ws-client.js";
 import { MjpegCastClient } from "./mjpeg.js";
 import { CASTING_EXTENSION } from "./resolve.js";
+import { resolveCastScale } from "./scale.js";
 import type { AgentClient } from "../driver/agent/client.js";
 import type { HdcRunner } from "../transport/hdc.js";
 import { ExtensionMissingError } from "../transport/errors.js";
@@ -27,7 +28,23 @@ export interface CastHost {
  * anything else uses the bundled 6.8 gRPC build. The two extension builds can
  * coexist on the device because `--extension-name` is a filename lookup.
  */
-export async function createCast(host: CastHost, opts: CastOptions): Promise<CastClient> {
+export async function createCast(host: CastHost, raw: CastOptions): Promise<CastClient> {
+  // One display read, before any daemon exists: `maxSize` is pixels and every
+  // transport below wants a different number, so the conversion happens here
+  // rather than in each client. A failed read is the caller's error, and
+  // leaving it uncaught would start a daemon and then abandon it.
+  let opts = raw;
+  if (raw.maxSize !== undefined) {
+    const { width, height } = await host.agent.getDisplaySize();
+    const transport = raw.transport ?? "grpc";
+    opts = {
+      ...raw,
+      scale: resolveCastScale(transport, Math.max(width, height), {
+        maxSize: raw.maxSize,
+        ...(raw.scale !== undefined ? { scale: raw.scale } : {}),
+      }),
+    };
+  }
   if (opts.transport === "mjpeg") {
     // MJPEG is a stream wrapper with no recorder behind it. Handing back a
     // client that silently records nothing is the fallback this SDK forbids.
