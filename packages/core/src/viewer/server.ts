@@ -125,6 +125,15 @@ export interface ViewerServerOptions {
   /** The page to serve. Defaults to the built-in player. */
   page?: string;
   /**
+   * Start recording as soon as the stream goes live, without a page click.
+   *
+   * A product with a `--record <file>` flag has already been told the file's
+   * name, so a person who opens the window and closes it an hour later expects
+   * a file. Making them also press the page's record button would be a second
+   * instruction for one decision.
+   */
+  recordOnStart?: boolean;
+  /**
    * How input is arbitrated. Defaults to `takeover` when the source can open a
    * lane, `off` otherwise. `always` accepts gestures from every tab; `off`
    * rejects them and hides the controls.
@@ -198,6 +207,9 @@ export class ViewerServer {
    * prevent.
    */
   private castOpening: Promise<void> | null = null;
+  /** A recording this server started because `recordOnStart` asked. */
+  private startingRecording: Promise<void> | null = null;
+  private readonly recordOnStart: boolean;
   private reading = false;
   private reread = false;
   private lastReadAt = 0;
@@ -249,6 +261,7 @@ export class ViewerServer {
     this.source = opts.source;
     this.hooks = opts.hooks;
     this.page = opts.page ?? PLAYER_HTML;
+    this.recordOnStart = opts.recordOnStart === true;
     this.inputSpec = opts.input;
     this.inputMode = opts.input?.mode ?? (opts.source.openInput ? "takeover" : "off");
     const features = opts.features ?? {};
@@ -357,6 +370,12 @@ export class ViewerServer {
 
     for (const client of [...this.clients]) this.closeClient(client, 1001);
     this.clients.clear();
+
+    // A recording this server started may still be starting. Wait for it, or
+    // the stop below finds nothing and the device keeps the encoder busy with
+    // nobody left to collect the file.
+    const starting = this.startingRecording;
+    if (starting) await starting.catch(() => undefined);
 
     // A recording left running would keep the device's encoder busy with
     // nobody left to collect the file. Stop it before the cast goes away —
@@ -1376,6 +1395,41 @@ export class ViewerServer {
     } catch {
       this.live.force(next, reason);
     }
+    if (next === "live") this.recordOnLive();
+  }
+
+  /**
+   * Starts the recording a product asked for on the command line.
+   *
+   * It waits for `live` rather than starting at construction: the record
+   * daemon runs beside the stream and needs the stream's display to exist.
+   * A failure is swallowed on purpose — the picture is the product, and a
+   * device that will not record should not also refuse to mirror. The page's
+   * button still works, so the person keeps a way to try again.
+   */
+  private recordOnLive(): void {
+    if (!this.recordOnStart || this.recording || this.stopping || this.startingRecording) return;
+    const start = this.source.startRecording;
+    if (!start) return;
+    const run = (async () => {
+      try {
+        const path = await start.call(this.source);
+        // `close()` may have run while this was in flight: it looked for a
+        // recording, found none, and stopped nothing. The stop is ours.
+        if (this.closing) {
+          await this.source.stopRecording?.call(this.source).catch(() => undefined);
+          return;
+        }
+        this.recording = path;
+        this.broadcastText({ type: "record", recording: true, path });
+      } catch {
+        // Nothing to report to: no tab asked for this recording.
+      }
+    })();
+    this.startingRecording = run;
+    void run.finally(() => {
+      if (this.startingRecording === run) this.startingRecording = null;
+    });
   }
 
   private settle(next: LiveStatus, reason?: string): void {
