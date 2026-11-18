@@ -51,6 +51,16 @@ import type { ViewerServer } from "./viewer/server.js";
 /** Everything needed to open a device and a session in one call. */
 export interface ConnectOptions extends DeviceOptions, SessionOptions {}
 
+/**
+ * Device-side ports for a ws viewer, and the gap between two views.
+ *
+ * The extension's default port (5000) is shared by every client that does not
+ * name one, and the record daemon takes `port + 1`. A stride of 2 keeps each
+ * view's stream and recorder inside its own pair.
+ */
+const WS_VIEW_BASE_PORT = 5000;
+const WS_VIEW_PORT_STRIDE = 2;
+
 /** Connects to the attached device, or the one `deviceId` names. */
 export async function connectDevice(opts: DeviceOptions = {}): Promise<Device> {
   return Device.connect(opts);
@@ -296,9 +306,20 @@ export class Session {
         // process would share `uitest_live_<pid>` and take turns stealing each
         // other's socket. The sequence makes it unique per view.
         const seq = this.viewSeq++;
+        const cast = await this.castDefaults();
         const source = createViewerSource(this.core, this.device, {
           stateDir: this.stateDir,
-          cast: await this.castDefaults(),
+          // The ws transport has no socket name, only a device-side TCP port,
+          // so the suffix isolates nothing there: two views would both ask for
+          // the default 5000, and the second `ownDaemon("-p 5000")` matches the
+          // first view's process — disposing one kills the other's stream.
+          // Each view therefore gets a port of its own, two apart: the record
+          // daemon runs beside the stream at `port + 1`, so one-apart views
+          // would collide with each other's recorder.
+          cast:
+            cast.transport === "ws" && cast.port === undefined
+              ? { ...cast, port: WS_VIEW_BASE_PORT + seq * WS_VIEW_PORT_STRIDE }
+              : cast,
           socketSuffix: `${process.pid}_${seq}`,
           ...(opts.layout !== undefined ? { layout: opts.layout } : {}),
         });

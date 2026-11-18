@@ -17,6 +17,11 @@ export interface ViewerSourceOptions {
   /**
    * Distinguishes this viewer's daemons from another process's on the same
    * device. Defaults to the pid, which is unique on this host.
+   *
+   * It names the gRPC sockets only. The ws transport has no socket name — it
+   * listens on a TCP port — so a caller that opens more than one viewer per
+   * process must also give each one its own `cast.port`; `session.view.open()`
+   * does.
    */
   socketSuffix?: string;
   /** Serve layout and node boxes. Default true. */
