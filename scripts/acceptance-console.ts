@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { connect, tagOf } from "uitest-sdk";
 import { AppManager } from "uitest-sdk/drivers";
 import { capturePage } from "./screenshot.mjs";
-import { assertCapturable, assertShadeClosed, gitHead } from "./acceptance.js";
+import { assertCapturable, assertShadeClosed, captureOrFail, gitHead } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "console";
@@ -311,24 +311,53 @@ async function consoleCases(device: string): Promise<{ cases: Case[]; tag: strin
   try {
     await ctx.log(`console ${url}`);
 
+    /**
+     * One case, one picture, and a capture that failed is this case's failure.
+     *
+     * The report is worth more with the failure written down than with a stack
+     * trace replacing every case after it: a single flaky frame used to end the
+     * whole run before any report existed.
+     */
+    const shot = async (
+      id: string,
+      title: string,
+      file: string,
+      opts: { waitFor: string; prepare?: (evaluate: (e: string) => Promise<unknown>) => Promise<string[]> },
+      detail: (notes: string[]) => string,
+    ): Promise<string[] | null> => {
+      const r = await captureOrFail(() =>
+        capturePage({ url, out: join(SHOTS, file), waitFor: opts.waitFor, ...(opts.prepare ? { prepare: opts.prepare } : {}) }),
+      );
+      if (!r.ok) {
+        add(id, title, "fail", `screenshot failed: ${r.reason}`, []);
+        return null;
+      }
+      add(id, title, "pass", detail(r.notes), [file]);
+      return r.notes;
+    };
+
     // --- mirror ------------------------------------------------------------
     const mirrorShot = `console-mirror-${tag}.jpg`;
-    const mirror = await capturePage({
-      url,
-      out: join(SHOTS, mirrorShot),
-      waitFor: FRAME_READY,
-    });
-    add("console-mirror", "镜像：真实浏览器里的一帧", "pass", `${new URL(url).port} · ${mirror.notes.length} notes`, [mirrorShot]);
+    await shot(
+      "console-mirror",
+      "镜像：真实浏览器里的一帧",
+      mirrorShot,
+      { waitFor: FRAME_READY },
+      (notes) => `${new URL(url).port} · ${notes.length} notes`,
+    );
 
     // --- node table --------------------------------------------------------
     const inspectShot = `console-inspect-${tag}.jpg`;
-    const inspect = await capturePage({
-      url,
-      out: join(SHOTS, inspectShot),
-      waitFor: PAGE_READY,
-      prepare: async (evaluate) => [`${String(await evaluate('document.querySelectorAll("#list .row").length'))} node rows`],
-    });
-    add("console-inspect", "节点表：元素行", "pass", inspect.notes.join(", "), [inspectShot]);
+    await shot(
+      "console-inspect",
+      "节点表：元素行",
+      inspectShot,
+      {
+        waitFor: PAGE_READY,
+        prepare: async (evaluate) => [`${String(await evaluate('document.querySelectorAll("#list .row").length'))} node rows`],
+      },
+      (notes) => notes.join(", "),
+    );
 
     // --- the inbox, against a real agent request ---------------------------
     // The calculator history's delete key is what the policy flags, so the
@@ -337,165 +366,190 @@ async function consoleCases(device: string): Promise<{ cases: Case[]; tag: strin
     await ctx.log(`agent ask → exit ${ask.code}, id ${String(ask.data?.["approvalId"] ?? "none")}`);
     const approvalId = typeof ask.data?.["approvalId"] === "string" ? ask.data["approvalId"] : null;
     const pendingShot = `console-inbox-pending-${tag}.jpg`;
-    let pendingRows = "0";
-    if (approvalId) {
-      await capturePage({
-        url,
-        out: join(SHOTS, pendingShot),
-        // The approval row appears as soon as the page polls; the video frame
-        // it sits beside may still be on its way, and a black canvas under a
-        // case about the inbox is a picture of nothing.
-        waitFor: `${FRAME_READY} && document.querySelectorAll("#approvals-list [data-id]").length > 0`,
-        prepare: async (evaluate) => {
-          pendingRows = String(await evaluate('document.querySelectorAll("#approvals-list [data-id]").length'));
-          return [`${pendingRows} pending`];
+    if (!approvalId) {
+      add(
+        "console-inbox-pending",
+        "收件箱：Agent 的请求出现在页面上",
+        "fail",
+        `agent ask exit ${ask.code}: ${ask.out.trim().split("\n")[0]}`,
+        [],
+      );
+    } else {
+      // The row is what this case is about, so the row is what it waits for.
+      // Requiring a decoded video frame as well made the case fail whenever the
+      // cast happened to be reconnecting — a fact about the stream, reported as
+      // a fact about the inbox.
+      let rows = "0";
+      const notes = await shot(
+        "console-inbox-pending",
+        "收件箱：Agent 的请求出现在页面上",
+        pendingShot,
+        {
+          waitFor: `document.querySelectorAll("#approvals-list [data-id]").length > 0`,
+          prepare: async (evaluate) => {
+            rows = String(await evaluate('document.querySelectorAll("#approvals-list [data-id]").length'));
+            return [`${rows} pending`];
+          },
         },
-      });
+        () => `${rows} 行 · id ${approvalId}`,
+      );
+      if (notes && Number(rows) === 0) {
+        // A picture was taken but it shows no row: the case did not hold.
+        cases[cases.length - 1]!.status = "fail";
+        cases[cases.length - 1]!.detail = `0 rows · id ${approvalId}`;
+      }
     }
-    add(
-      "console-inbox-pending",
-      "收件箱：Agent 的请求出现在页面上",
-      approvalId && Number(pendingRows) > 0 ? "pass" : "fail",
-      approvalId ? `${pendingRows} 行 · id ${approvalId}` : `agent ask exit ${ask.code}: ${ask.out.trim().split("\n")[0]}`,
-      approvalId && Number(pendingRows) > 0 ? [pendingShot] : [],
-    );
 
     // Allow it from the page, then let the agent replay: settled means the
     // decision the person made in the browser is the one the gate honoured.
-    let allowed = false;
-    let answeredRow = "";
-    if (approvalId) {
-      const allowedShot = `console-inbox-allowed-${tag}.jpg`;
-      await capturePage({
-        url,
-        out: join(SHOTS, allowedShot),
-        waitFor: `${FRAME_READY} && document.querySelector('#approvals-list [data-id="${approvalId}"] [data-allow]')`,
-        prepare: async (evaluate) => {
-          await evaluate(`document.querySelector('#approvals-list [data-id="${approvalId}"] [data-allow]').click()`);
-          // The row has to show the answer, or the page is claiming nothing:
-          // an inbox that looks identical after Allow is an inbox a person
-          // cannot read. The buttons go and the status becomes "allowed".
-          await waitUntil(
-            evaluate,
-            `(function () {
-              var row = document.querySelector('#approvals-list [data-id="${approvalId}"]');
-              return !!row && !row.querySelector("[data-allow]") && /allowed/.test(row.textContent);
-            })()`,
-            "the row to show its answer",
-          );
-          answeredRow = String(
-            await evaluate(`document.querySelector('#approvals-list [data-id="${approvalId}"]').textContent`),
-          ).trim();
-          return [`allow clicked · row → ${answeredRow}`];
-        },
-      });
-      const replay = phone(
-        ["tap", "--text", "history record delete", "--approval-id", approvalId, "--json"],
-        stateDir,
-        device,
-      );
-      allowed = replay.code === 0;
-      await ctx.log(`replay after the page's allow → exit ${replay.code}`);
-      add(
-        "console-inbox-allow",
-        "收件箱：在页面上点允许后 Agent 放行",
-        allowed ? "pass" : "fail",
-        `replay exit ${replay.code} (expect 0) · page row: ${answeredRow.slice(0, 80)}`,
-        [allowedShot],
-      );
-    } else {
+    if (!approvalId) {
       add("console-inbox-allow", "收件箱：在页面上点允许后 Agent 放行", "fail", "no approval id to answer", []);
+    } else {
+      const allowedShot = `console-inbox-allowed-${tag}.jpg`;
+      let answeredRow = "";
+      const captured = await captureOrFail(() =>
+        capturePage({
+          url,
+          out: join(SHOTS, allowedShot),
+          waitFor: `document.querySelector('#approvals-list [data-id="${approvalId}"] [data-allow]')`,
+          prepare: async (evaluate) => {
+            await evaluate(`document.querySelector('#approvals-list [data-id="${approvalId}"] [data-allow]').click()`);
+            // The row has to show the answer, or the page is claiming nothing:
+            // an inbox that looks identical after Allow is an inbox a person
+            // cannot read. The buttons go and the status becomes "allowed".
+            await waitUntil(
+              evaluate,
+              `(function () {
+                var row = document.querySelector('#approvals-list [data-id="${approvalId}"]');
+                return !!row && !row.querySelector("[data-allow]") && /allowed/.test(row.textContent);
+              })()`,
+              "the row to show its answer",
+            );
+            answeredRow = String(
+              await evaluate(`document.querySelector('#approvals-list [data-id="${approvalId}"]').textContent`),
+            ).trim();
+            return [`allow clicked · row → ${answeredRow}`];
+          },
+        }),
+      );
+      if (!captured.ok) {
+        add(
+          "console-inbox-allow",
+          "收件箱：在页面上点允许后 Agent 放行",
+          "fail",
+          `screenshot failed: ${captured.reason}`,
+          [],
+        );
+      } else {
+        const replay = phone(
+          ["tap", "--text", "history record delete", "--approval-id", approvalId, "--json"],
+          stateDir,
+          device,
+        );
+        await ctx.log(`replay after the page's allow → exit ${replay.code}`);
+        add(
+          "console-inbox-allow",
+          "收件箱：在页面上点允许后 Agent 放行",
+          replay.code === 0 ? "pass" : "fail",
+          `replay exit ${replay.code} (expect 0) · page row: ${answeredRow.slice(0, 80)}`,
+          [allowedShot],
+        );
+      }
     }
 
     // --- Hold / Resume -----------------------------------------------------
     // The device must be free before this case means anything: waiting for the
     // button to read "Hold" is the check that no hold survived from earlier.
     const heldShot = `console-held-${tag}.jpg`;
-    const held = await capturePage({
-      url,
-      out: join(SHOTS, heldShot),
-      waitFor: `${FRAME_READY} && document.getElementById("hold").textContent === "Hold"`,
-      prepare: async (evaluate) => {
-        await evaluate(CLICK_HOLD);
-        // The label changes only when the server's acknowledgement comes back.
-        // A shot taken before it would show "Hold" under a case named "held".
-        await waitUntil(evaluate, `document.getElementById("hold").textContent === "Resume"`, "the held banner");
-        return [`hold button → ${String(await evaluate(HOLD_LABEL))}`];
-      },
-    });
-    const blocked = phone(["observe", "--json"], stateDir, device);
-    add(
+    const heldNotes = await shot(
       "console-hold",
       "Hold：页面拿到设备，Agent 停在 lease_held",
-      blocked.code === 2 ? "pass" : "fail",
-      `${held.notes.join(", ")} · agent observe exit ${blocked.code} (expect 2)`,
-      [heldShot],
+      heldShot,
+      {
+        waitFor: `${FRAME_READY} && document.getElementById("hold").textContent === "Hold"`,
+        prepare: async (evaluate) => {
+          await evaluate(CLICK_HOLD);
+          // The label changes only when the server's acknowledgement comes
+          // back. A shot taken before it would show "Hold" under a case named
+          // "held".
+          await waitUntil(evaluate, `document.getElementById("hold").textContent === "Resume"`, "the held banner");
+          return [`hold button → ${String(await evaluate(HOLD_LABEL))}`];
+        },
+      },
+      (notes) => notes.join(", "),
     );
+    if (heldNotes) {
+      const blocked = phone(["observe", "--json"], stateDir, device);
+      const last = cases[cases.length - 1]!;
+      last.status = blocked.code === 2 ? "pass" : "fail";
+      last.detail = `${heldNotes.join(", ")} · agent observe exit ${blocked.code} (expect 2)`;
+    }
 
     // A fresh tab on a held device must already read "Resume": the button is a
     // toggle, and a tab that opens at "Hold" would take the phone again instead
     // of handing it back. Waiting for the label is the case's real assertion —
     // clicking whatever the button says is how the earlier run missed this.
     const resumedShot = `console-resumed-${tag}.jpg`;
-    const resumed = await capturePage({
-      url,
-      out: join(SHOTS, resumedShot),
-      waitFor: `${FRAME_READY} && document.getElementById("hold").textContent === "Resume"`,
-      prepare: async (evaluate) => {
-        const before = String(await evaluate(`document.getElementById("hold").textContent`));
-        const text = String(await evaluate(CLICK_HOLD));
-        await sleep(800);
-        return [`button on join → ${before}`, `after click → ${text}`];
-      },
-    });
-    const after = phone(["observe", "--json"], stateDir, device);
-    add(
+    const resumedNotes = await shot(
       "console-resume",
       "Resume：交回后 Agent 继续",
-      after.code === 0 ? "pass" : "fail",
-      `${resumed.notes.join(", ")} · agent observe exit ${after.code} (expect 0)`,
-      [resumedShot],
+      resumedShot,
+      {
+        waitFor: `${FRAME_READY} && document.getElementById("hold").textContent === "Resume"`,
+        prepare: async (evaluate) => {
+          const before = String(await evaluate(`document.getElementById("hold").textContent`));
+          const text = String(await evaluate(CLICK_HOLD));
+          await sleep(800);
+          return [`button on join → ${before}`, `after click → ${text}`];
+        },
+      },
+      (notes) => notes.join(", "),
     );
+    if (resumedNotes) {
+      const after = phone(["observe", "--json"], stateDir, device);
+      const last = cases[cases.length - 1]!;
+      last.status = after.code === 0 ? "pass" : "fail";
+      last.detail = `${resumedNotes.join(", ")} · agent observe exit ${after.code} (expect 0)`;
+    }
 
     // --- privacy switch ----------------------------------------------------
-    const privacyShot = `console-privacy-${tag}.jpg`;
-    const privacy = await capturePage({
-      url,
-      out: join(SHOTS, privacyShot),
-      waitFor: PAGE_READY,
-      prepare: async (evaluate) => {
-        await evaluate(`(function(){
-          var el = document.getElementById("privacy");
-          el.checked = false; el.dispatchEvent(new Event("change"));
-          if (el.checked) throw new Error("the privacy switch did not turn off");
-          el.checked = true; el.dispatchEvent(new Event("change"));
-          return el.checked;
-        })()`);
-        return ["privacy on->off->on"];
+    await shot(
+      "console-privacy",
+      "隐私开关：页面自己的开关",
+      `console-privacy-${tag}.jpg`,
+      {
+        waitFor: PAGE_READY,
+        prepare: async (evaluate) => {
+          await evaluate(`(function(){
+            var el = document.getElementById("privacy");
+            el.checked = false; el.dispatchEvent(new Event("change"));
+            if (el.checked) throw new Error("the privacy switch did not turn off");
+            el.checked = true; el.dispatchEvent(new Event("change"));
+            return el.checked;
+          })()`);
+          return ["privacy on->off->on"];
+        },
       },
-    });
-    add("console-privacy", "隐私开关：页面自己的开关", "pass", privacy.notes.join(", "), [privacyShot]);
+      (notes) => notes.join(", "),
+    );
 
     // --- the page is self-contained ----------------------------------------
-    const external = await capturePage({
-      url,
-      out: join(SHOTS, `console-selfcontained-${tag}.jpg`),
-      waitFor: PAGE_READY,
-      prepare: async (evaluate) => {
-        const urls = (await evaluate(
-          `Array.from(document.querySelectorAll("script[src],link[href],img[src]")).map(function(e){return e.src||e.href;})`,
-        )) as string[];
-        const outside = (urls ?? []).filter((u) => !u.startsWith(`http://127.0.0.1:${port}/`) && !u.startsWith("data:"));
-        if (outside.length > 0) throw new Error(`page loads from outside: ${outside.join(", ")}`);
-        return [`${(urls ?? []).length} local resources`];
-      },
-    });
-    add(
+    await shot(
       "console-selfcontained",
       "页面不引用外部资源",
-      "pass",
-      external.notes.join(", "),
-      [`console-selfcontained-${tag}.jpg`],
+      `console-selfcontained-${tag}.jpg`,
+      {
+        waitFor: PAGE_READY,
+        prepare: async (evaluate) => {
+          const urls = (await evaluate(
+            `Array.from(document.querySelectorAll("script[src],link[href],img[src]")).map(function(e){return e.src||e.href;})`,
+          )) as string[];
+          const outside = (urls ?? []).filter((u) => !u.startsWith(`http://127.0.0.1:${port}/`) && !u.startsWith("data:"));
+          if (outside.length > 0) throw new Error(`page loads from outside: ${outside.join(", ")}`);
+          return [`${(urls ?? []).length} local resources`];
+        },
+      },
+      (notes) => notes.join(", "),
     );
 
     // --- the Origin check is core's, and it still holds --------------------

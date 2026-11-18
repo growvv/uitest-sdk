@@ -466,8 +466,27 @@ export async function pressPowerKey(
   await assertCapturable(dev);
 }
 
-/** First bundleName in the tree that also has parsable bounds. */
-function findBundle(n: {
+/**
+ * Runs a browser capture, turning a failure into a result instead of a throw.
+ *
+ * A case is a claim about one thing, so a screenshot that could not be taken
+ * is a fact about that case and belongs in the report as a failure. Letting it
+ * throw ends the run before any report exists: one flaky frame on one device
+ * loses the cases that already passed, and the operator gets a stack trace
+ * instead of a list of what did and did not work.
+ */
+export async function captureOrFail(
+  capture: () => Promise<{ notes?: string[] }>,
+): Promise<{ ok: true; notes: string[] } | { ok: false; reason: string }> {
+  try {
+    const r = await capture();
+    return { ok: true, notes: r.notes ?? [] };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** First bundleName in the tree that also has parsable bounds. */function findBundle(n: {
   attributes: Record<string, string>;
   children?: unknown[];
 }): string | null {
