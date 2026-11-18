@@ -65,7 +65,14 @@ export function createViewerSource(
   const capture = async (): Promise<string> => {
     const out = join(stateDir, "shots", `live-${Date.now()}.jpg`);
     await mkdir(dirname(out), { recursive: true });
-    await session.observe({ out });
+    const result = await session.observe({ out });
+    // A locked phone writes no file, and a `saved` reply naming a path that
+    // does not exist sends the person looking for it. Fail with the reason the
+    // session gave; the tab shows it and no file is promised.
+    if (result.status !== "settled") {
+      const why = "reason" in result ? result.reason : result.status;
+      throw new Error(`${result.status}: the screenshot was not saved · ${why}`);
+    }
     return out;
   };
 

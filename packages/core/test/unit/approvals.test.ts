@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Approvals, Grants } from "../../src/governance/approvals.js";
@@ -11,6 +11,21 @@ function store(opts: { ttlMs?: number; now?: () => number } = {}): Approvals {
 }
 
 describe("approval decisions", () => {
+  // An id whose request could not be written is an id nobody can answer: the
+  // person's channel lists files. Handing it to the agent would print "waiting
+  // for a person" for something no person can see, and the agent would wait
+  // out the whole TTL. The write failure must surface instead.
+  it("throws when the request cannot be written, rather than returning an unusable id", () => {
+    const root = mkdtempSync(join(tmpdir(), "uitest-appr-"));
+    const file = join(root, "not-a-dir");
+    // A regular file where the approvals directory should be: mkdir and write
+    // both fail, which is what a read-only or full state dir looks like.
+    writeFileSync(file, "");
+    const a = new Approvals({ dir: join(file, "approvals") });
+
+    expect(() => a.request(step, "deletes")).toThrow();
+  });
+
   it("cannot be consumed by the agent alone", () => {
     const a = store();
     const pending = a.request(step, "deletes", { bundle: "com.demo", task: "t" });

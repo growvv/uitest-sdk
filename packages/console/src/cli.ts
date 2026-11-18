@@ -107,7 +107,14 @@ export interface ConsoleRun {
   port: number;
   /** The device's 8-character hash, the only identifier ever printed. */
   tag: string;
-  /** Stops the page, releases a hold this console took, and lets the device go. */
+  /**
+   * Stops the page and lets the device go.
+   *
+   * A hold is not released: the person may have taken the phone to use it and
+   * closing this window is not the same as handing it back. The caller says how
+   * to release it (`uitest-phone resume`), because a hold nobody can see is a
+   * device every agent refuses to touch.
+   */
   close(): Promise<void>;
 }
 
@@ -294,6 +301,13 @@ export async function consoleMain(argv: string[]): Promise<number> {
   await waitForStop({ stdin: process.stdin, signals: process });
 
   await run.close().catch(() => undefined);
+  // A hold survives the window on purpose — it means "a person is using the
+  // phone". Closing the console does not undo that, so say what does, or the
+  // device stays refused to every agent with nothing on screen explaining why.
+  const lease = await readHold({ stateDir: opts.stateDir, tag: run.tag }).catch(() => null);
+  if (lease?.hold === true) {
+    process.stdout.write(`device ${run.tag} is still held · release it with: uitest-phone resume\n`);
+  }
   return 0;
 }
 

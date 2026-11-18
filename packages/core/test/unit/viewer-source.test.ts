@@ -67,6 +67,17 @@ describe("createViewerSource", () => {
     expect(f.observe).toHaveBeenCalledWith({ out: path });
   });
 
+  // A locked phone writes no file. Returning the path anyway makes the tab
+  // reply `saved: <path>` and sends the person looking for a screenshot that
+  // was never taken.
+  it("refuses a screenshot the session did not save", async () => {
+    const f = fakes();
+    f.observe.mockResolvedValueOnce({ status: "device_locked", text: "unlock the phone" });
+    const source = createViewerSource(f.session as never, f.device as never, { stateDir: "state" });
+
+    await expect(source.capture!()).rejects.toThrow(/device_locked/);
+  });
+
   it("reports the display size without reading the layout", async () => {
     const f = fakes();
     const source = createViewerSource(f.session as never, f.device as never, { stateDir: "state" });

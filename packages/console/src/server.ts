@@ -103,6 +103,15 @@ export function consoleHooks(deps: ConsoleDeps): ViewerHooks {
         case "console:approvals:list":
           list(client);
           return true;
+        // The poll asks for the lease too. Without this a second tab keeps
+        // showing "Hold" after another tab resumed, and its next click holds
+        // the device again instead of handing it back.
+        case "console:held:list":
+          void deps.isHeld().then(
+            (held) => client.send({ type: "console:held", held }),
+            () => undefined,
+          );
+          return true;
         case "console:approvals:decide": {
           const id = String(message.id ?? "");
           const decision = message.decision === "allow" ? "allow" : "deny";

@@ -151,7 +151,17 @@ export class Approvals {
       ...(context.bundle ? { bundle: context.bundle } : {}),
       ...(context.task ? { task: context.task } : {}),
     };
-    this.writeJson(join(this.dir, `${id}.json`), entry);
+    // An id that never reached the disk cannot be answered: the person's
+    // channel is the directory. Returning it would tell the agent to wait for
+    // an approval nobody can see, so the write failure is the answer.
+    try {
+      mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+      writeFileSync(join(this.dir, `${id}.json`), JSON.stringify(entry), { flag: "wx", mode: 0o600 });
+    } catch (e) {
+      throw new Error(
+        `the approval request could not be written to ${this.dir}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
     return { ...entry, status: "pending" };
   }
 
@@ -330,15 +340,6 @@ export class Approvals {
     return { kind: "denied", reason: "already decided" };
   }
 
-  private writeJson(path: string, value: unknown): void {
-    try {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-      writeFileSync(path, JSON.stringify(value), { flag: "wx", mode: 0o600 });
-    } catch {
-      // An id that could not be written is an id nobody can use; the step has
-      // already been gated, so failing here would only hide the pending answer.
-    }
-  }
 }
 
 function readDirSafe(dir: string): string[] {

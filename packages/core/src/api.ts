@@ -22,7 +22,6 @@ import type { Screen } from "./driver/agent/screen.js";
 import type { ActionResult } from "./driver/agent/result.js";
 import type { On } from "./driver/agent/selector.js";
 import type { Point } from "./driver/agent/gestures.js";
-import type { AppInfo } from "./transport/apps.js";
 import type { Policy } from "./governance/policy.js";
 import type {
   ApprovalDecision,
@@ -78,7 +77,8 @@ export interface ObserveApi {
   layout(opts?: { out?: string }): Promise<Screen>;
   screenshot(opts?: { out?: string }): Promise<{ path: string; result: ActionResult }>;
   window(filter?: WindowFilter, opts?: WindowOptions): Promise<WindowResult>;
-  apps(): Promise<AppInfo[]>;
+  /** Installed bundles. The ability is resolved at launch, so it is not here. */
+  apps(): Promise<Array<{ bundle: string }>>;
   inspect(opts?: { out?: string; html?: string }): Promise<InspectResult>;
 }
 
@@ -224,7 +224,10 @@ export class Session {
           return { path, result };
         },
         window: (filter?: WindowFilter, opts?: WindowOptions) => this.core.window(filter, opts),
-        apps: async (): Promise<AppInfo[]> =>
+        // `list()` returns bundle names only — the ability is resolved at launch
+        // time, not enumerated. `AppInfo` therefore carries no `ability` here,
+        // and the type says so rather than promising a field that is never set.
+        apps: async (): Promise<Array<{ bundle: string }>> =>
           this.core.apps ? (await this.core.apps.list()).map((bundle) => ({ bundle })) : [],
         inspect: async (opts: { out?: string; html?: string } = {}): Promise<InspectResult> => {
           const out = opts.out ?? join(this.stateDir, "shots", `inspect-${Date.now()}.jpg`);

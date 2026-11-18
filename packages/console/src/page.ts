@@ -246,8 +246,12 @@ export const CONSOLE_SCRIPT = `
   setInterval(function () {
     ask();
     viewer.send({ type: 'console:activity' });
+    // The lease is shared with the CLI and with other tabs, so it is re-read
+    // on the same tick: a hold taken or released elsewhere must show up here.
+    viewer.send({ type: 'console:held:list' });
   }, 2000);
   ask();
   viewer.send({ type: 'console:activity' });
+  viewer.send({ type: 'console:held:list' });
 })();
 `;

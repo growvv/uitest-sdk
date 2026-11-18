@@ -204,6 +204,25 @@ describe("console hooks", () => {
     expect(c.sent.some((m) => m.type === "console:held" && m.held === false)).toBe(true);
   });
 
+  it("re-reads the lease when the page polls", async () => {
+    // Two tabs share one lease. A tab that only learned the state on join
+    // keeps showing "Hold" after the other tab resumed, and its next click
+    // takes the device again instead of handing it back.
+    const { dir, approvals } = store();
+    let held = false;
+    const hooks = consoleHooks({ ...deps(dir, approvals), isHeld: async () => held });
+    const c = tab();
+
+    hooks.onMessage!(c, { type: "console:held:list" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(c.sent.at(-1)).toMatchObject({ type: "console:held", held: false });
+
+    held = true;
+    hooks.onMessage!(c, { type: "console:held:list" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(c.sent.at(-1)).toMatchObject({ type: "console:held", held: true });
+  });
+
   it("leaves messages it does not own to the viewer", () => {
     const { dir, approvals } = store();
     const hooks = consoleHooks(deps(dir, approvals));
