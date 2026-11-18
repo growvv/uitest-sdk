@@ -1503,7 +1503,7 @@ npm pack --workspace uitest-console --pack-destination .work-bench
 
 ```bash
 TMP_NPMRC=$(mktemp)
-printf '//registry.npmjs.org/:_authToken=%s\n' '$NPM_TOKEN' > "$TMP_NPMRC"
+printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN"
 npm publish --workspace uitest-sdk --userconfig "$TMP_NPMRC"
 npm publish --workspace uitest-phone --userconfig "$TMP_NPMRC"
 npm publish --workspace uitest-console --userconfig "$TMP_NPMRC"
