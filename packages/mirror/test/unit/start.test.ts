@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createServer } from "node:http";
+import { createConnection } from "node:net";
+import { buildHandshake, decodeFrames } from "uitest-sdk/cast";
 import { startMirror } from "../../src/cli.js";
 import type { MirrorOptions } from "../../src/cli.js";
 
@@ -88,19 +90,50 @@ function fakeSession(over: { recordStarted?: string[] } = {}) {
   return { session, casts, restored, sessionClosed: () => closed.length > 0 };
 }
 
-/** The first `hello` a fresh tab receives, which is where the server states its capabilities. */
+/**
+ * The first `hello` a fresh tab receives, which is where the server states its
+ * capabilities.
+ *
+ * A raw socket rather than the `WebSocket` global: that global only exists from
+ * Node 21, and this package supports Node 20 — the same suite that passed here
+ * on 26 failed in CI on 20 with `WebSocket is not defined`. Core exports the
+ * handshake and the frame decoder for exactly this.
+ */
 async function firstHello(port: number): Promise<Record<string, unknown>> {
+  const socket = createConnection({ host: "127.0.0.1", port });
   return new Promise<Record<string, unknown>>((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/live`);
-    ws.onmessage = (ev) => {
-      if (typeof ev.data !== "string") return;
-      const msg = JSON.parse(ev.data) as Record<string, unknown>;
-      if (msg.type === "hello") {
-        ws.close();
-        resolve(msg);
+    let buf: Buffer = Buffer.alloc(0);
+    let upgraded = false;
+    socket.once("error", reject);
+    socket.once("close", () => reject(new Error("socket closed before hello")));
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      if (!upgraded) {
+        const end = buf.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        const head = buf.subarray(0, end).toString("latin1");
+        if (!head.startsWith("HTTP/1.1 101")) {
+          reject(new Error(`upgrade refused: ${head.split("\r\n")[0]}`));
+          socket.destroy();
+          return;
+        }
+        upgraded = true;
+        buf = buf.subarray(end + 4);
       }
-    };
-    ws.onerror = () => reject(new Error("socket failed"));
+      const { frames, rest } = decodeFrames(buf);
+      buf = rest;
+      for (const frame of frames) {
+        if (frame.opcode !== 0x1) continue;
+        const msg = JSON.parse(frame.payload.toString("utf8")) as Record<string, unknown>;
+        if (msg.type !== "hello") continue;
+        socket.destroy();
+        resolve(msg);
+        return;
+      }
+    });
+    socket.once("connect", () => {
+      socket.write(buildHandshake(`127.0.0.1:${port}`).replace("GET / HTTP/1.1", "GET /live HTTP/1.1"));
+    });
   });
 }
 
