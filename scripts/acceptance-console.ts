@@ -154,6 +154,13 @@ async function stage(device: string): Promise<void> {
     const apps = new AppManager(session.device.hdc);
     const onListWithRows = isHistoryListInFront;
 
+    // Already staged: leave the phone alone. `stage` runs before every capture,
+    // and launching the calculator restarts it — a visible surface change right
+    // before a screenshot whose predicate is "a live frame is on the canvas".
+    // On the 0.1.1 run that left the mirror at `STARTING` and the capture
+    // timed out on a phone whose screen had been correct all along.
+    if (onListWithRows((await session.observe.layout()).elements)) return;
+
     for (let i = 0; i < 5; i++) {
       await apps.launch("calculator").catch(() => undefined);
       await sleep(1200);
@@ -540,6 +547,15 @@ async function consoleCases(device: string): Promise<{ cases: Case[]; tag: strin
       const last = cases[cases.length - 1]!;
       last.status = after.code === 0 ? "pass" : "fail";
       last.detail = `${resumedNotes.join(", ")} · agent observe exit ${after.code} (expect 0)`;
+    } else {
+      // The screenshot timed out, but the claim this case makes is about the
+      // agent, not the picture. Run it anyway and say both: a person reading
+      // the report needs to know whether Resume handed the phone back, and the
+      // missing screenshot is already recorded as the failure.
+      const after = phone(["observe", "--json"], stateDir, device);
+      const last = cases[cases.length - 1]!;
+      last.detail = `screenshot timed out · agent observe exit ${after.code} (expect 0)`;
+      last.status = "fail";
     }
 
     // --- privacy switch ----------------------------------------------------
