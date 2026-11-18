@@ -44,16 +44,17 @@
 
     <article class="doc-body">
       <h1>使用文档</h1>
-      <p class="doc-meta">uitest-sdk <strong>0.10.1</strong> · Node.js ≥ 20 · MIT</p>
-      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。本页讲的是库 <code>uitest-sdk</code>；命令行、MCP 与 Skill 是产品 <code>uitest-phone</code>，浏览器里的镜像、接管与审批收件箱是产品 <code>uitest-console</code>，两者都只用这里的公开 API。</p>
+      <p class="doc-meta">uitest-sdk <strong>0.11.0</strong> · Node.js ≥ 20 · MIT</p>
+      <p>把鸿蒙 <code>uitest</code> 的设备侧扩展封装成 TypeScript API：一条 TCP 长连接（<code>agent.so</code>）负责点击、滑动、截图与 UI 树；另一条 gRPC 通道（<code>libscreen_casting.z.so</code>）负责 H.264 投流与 MP4 录制。本页讲的是库 <code>uitest-sdk</code>；命令行、MCP 与 Skill 是产品 <code>uitest-phone</code>，浏览器里的镜像、接管与审批收件箱是产品 <code>uitest-console</code>，鸿蒙版 scrcpy 是产品 <code>uitest-mirror</code>，三者都只用这里的公开 API。</p>
 
       <h2 id="install">1. 安装与前提</h2>
       <pre><code>npm install uitest-sdk            # 库
 npm i -g uitest-phone             # 命令行 + MCP + Skill
 npm i -g uitest-console           # 浏览器投屏与审批收件箱
+npm i -g uitest-mirror            # 鸿蒙版 scrcpy：一条命令开窗口
 npx uitest-phone doctor           # 确认设备与所需能力都在</code></pre>
-      <p>三个包各自发版：本页只讲库的 API；命令行、MCP 与 Skill 属于 <code>uitest-phone</code>，
-浏览器里的镜像、接管与收件箱属于 <code>uitest-console</code>。</p>
+      <p>四个包各自发版：本页只讲库的 API；命令行、MCP 与 Skill 属于 <code>uitest-phone</code>，
+浏览器里的镜像、接管与收件箱属于 <code>uitest-console</code>，设备窗口属于 <code>uitest-mirror</code>。</p>
       <ul>
         <li><strong>Node.js ≥ 20</strong>，ESM（<code>import</code>）。</li>
         <li><strong>hdc</strong>：DevEco Studio 自带的 <code>hdc</code> 在 <code>PATH</code> 上，或设置 <code>HDC_PATH</code>，或传 <code>Device.connect({ hdcPath })</code>。</li>
@@ -63,7 +64,7 @@ npx uitest-phone doctor           # 确认设备与所需能力都在</code></pr
       </ul>
       <p class="note">扩展必须由华为签名才能在真机加载（XPM 校验拒绝未签名 <code>.so</code>）。本包内置的是实测可用的签名版本。</p>
 
-      <h2 id="packages">2. 三个包</h2>
+      <h2 id="packages">2. 四个包</h2>
       <div class="doc-table">
         <table>
           <thead><tr><th>包</th><th>是什么</th><th>装法</th></tr></thead>
@@ -71,10 +72,11 @@ npx uitest-phone doctor           # 确认设备与所需能力都在</code></pr
             <tr><td><code>uitest-sdk</code></td><td>库：连接、观察、动作、投流、viewer、治理。没有可执行文件</td><td><code>npm install uitest-sdk</code></td></tr>
             <tr><td><code>uitest-phone</code></td><td>无界面的设备 Agent：21 条命令的 CLI、stdio MCP、Agent Skill、审批与接管</td><td><code>npm i -g uitest-phone</code></td></tr>
             <tr><td><code>uitest-console</code></td><td>人的界面：浏览器镜像、接管、审批收件箱、活动记录</td><td><code>npm i -g uitest-console</code></td></tr>
+            <tr><td><code>uitest-mirror</code></td><td>鸿蒙版 scrcpy：一条命令打开设备窗口，键鼠直连，可录制</td><td><code>npm i -g uitest-mirror</code></td></tr>
           </tbody>
         </table>
       </div>
-      <p>依赖只有一个方向：两个产品 → 库，产品之间互不依赖。库不认识任何产品，产品也没有深路径 import。</p>
+      <p>依赖只有一个方向：三个产品 → 库，产品之间互不依赖。库不认识任何产品，产品也没有深路径 import。</p>
 
       <h2 id="quickstart">3. 快速开始</h2>
       <pre><code>import { connect } from "uitest-sdk";

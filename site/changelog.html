@@ -26,6 +26,7 @@
 
   <main class="doc-main">
     <aside class="doc-toc" aria-label="版本">
+      <a href="#v0-11-0">0.11.0 · 第四个产品：鸿蒙版 scrcpy</a>
       <a href="#v0-10-1">0.10.1 · 三个产品各自的修正</a>
       <a href="#v0-10-0">0.10.0 · 库与产品拆分</a>
       <a href="#v0-9-4">0.9.4 · 两台真机验收修出来的东西</a>
@@ -49,6 +50,40 @@
     <article class="doc-body">
       <h1>更新日志</h1>
       <p class="doc-meta">每个公开版本的主要迭代。完整 API 见 <a href="docs.html">使用文档</a>。</p>
+
+      <section class="release" id="v0-11-0">
+        <div class="release-head">
+          <h2>0.11.0</h2>
+          <span class="release-date">2026-11-18</span>
+          <span class="release-tag">第四个产品：鸿蒙版 scrcpy</span>
+        </div>
+        <p>新增产品 <code>uitest-mirror</code> 0.1.0，并把三个已有包一起发版：
+<code>uitest-sdk</code> 0.11.0、<code>uitest-phone</code> 0.10.2、<code>uitest-console</code> 0.1.2。
+库只新增 API，没有破坏性变更；<code>uitest-phone</code> 源码没有改动。</p>
+
+        <h3><code>uitest-mirror</code>：一条命令，一个设备窗口</h3>
+        <p>对标 scrcpy：<code>uitest-mirror</code> 打开一个无边框窗口，鼠标点击、拖拽、滚轮与键盘直接落到手机。
+参数沿用 scrcpy 的名字——<code>--serial</code>、<code>--max-fps</code>、<code>--max-size</code>、<code>--bit-rate</code>、
+<code>--record</code>、<code>--no-control</code>、<code>--stay-awake</code>。它持租约：Agent 正拿着手机时它退出并指名持有者，
+不跟人抢设备。范围外的东西也很明确——没有 MCP、没有 Skill、没有审批、没有节点表。</p>
+
+        <h3>库为它新增的四件事</h3>
+        <ul>
+          <li><code>Session.keepAwake(seconds?)</code>：覆盖设备休眠超时，<code>restore()</code> 幂等；
+            进程被强杀时用 <code>hdc shell power-shell timeout -r</code> 复位。</li>
+          <li><code>CastOptions.maxSize</code>：按最长边（像素）指定尺寸，由 <code>resolveCastScale</code> 按传输换算——
+            两个 H.264 传输是 1..5 的整数除数，MJPEG 是小数比例。超过扩展能缩到的极限直接报错并给出可达尺寸。</li>
+          <li><code>ViewerServerOptions.recordOnStart</code>：流一进入 live 就开始录制，不需要点页面按钮。
+            <code>--record</code> 因此从第一帧录到关窗。</li>
+          <li>无边框窗口（<code>openWindow</code> / <code>appWindowCommand</code>）从 <code>uitest-console</code> 提升进
+            <code>uitest-sdk/viewer</code>：两个产品需要同一份浏览器探测与退化逻辑，而产品之间不能互相依赖。</li>
+          <li>播放器多了一个 <strong>Recents</strong> 键（<code>KEYCODE_APP_SWITCH</code>，187）。</li>
+        </ul>
+
+        <h3>版本</h3>
+        <p><code>uitest-console</code> 0.1.2 与 <code>uitest-phone</code> 0.10.2 都只是跟随
+<code>uitest-sdk@0.11.0</code>；控制台的窗口实现移到了库里，行为不变。</p>
+      </section>
 
       <section class="release" id="v0-10-1">
         <div class="release-head">

@@ -34,7 +34,7 @@
         <p class="hero-kicker">HarmonyOS uitest 扩展 · Node.js SDK</p>
         <h1>用一条长连接，<br>控制鸿蒙设备</h1>
         <p class="hero-tagline">UI automation, screenshots and H.264 casting for HarmonyOS — from Node.js.</p>
-        <p class="hero-sub">把设备侧的 <code>agent.so</code> 与 <code>libscreen_casting.z.so</code> 封装成类型化 API：点击、滑动、截图、H.264 投流与 MP4 录制，走的是扩展自己的长连接，不是 hdc 的慢路径。库之上是两个产品——给 Agent 的命令行，和给人的浏览器界面。</p>
+        <p class="hero-sub">把设备侧的 <code>agent.so</code> 与 <code>libscreen_casting.z.so</code> 封装成类型化 API：点击、滑动、截图、H.264 投流与 MP4 录制，走的是扩展自己的长连接，不是 hdc 的慢路径。库之上是三个产品——给 Agent 的命令行、给人的浏览器界面，和一个鸿蒙版 scrcpy。</p>
         <div class="install">
           <code>npm install uitest-sdk</code>
           <button id="copy-install" type="button">复制</button>
@@ -50,7 +50,7 @@
     </section>
 
     <section id="packages" class="section packages reveal">
-      <h2>一个库，两个产品</h2>
+      <h2>一个库，三个产品</h2>
       <p class="section-lede">投屏、inspect、输入和治理都在库里；产品只组合它们，各自安装、各自发版。给 Agent 的那个没有界面，给人的那个只有浏览器页面。</p>
       <div class="bench-grid">
         <article class="bench-card">
@@ -80,8 +80,17 @@
           </ul>
           <p class="cli-note"><code>npm i -g uitest-console</code></p>
         </article>
+        <article class="bench-card">
+          <h3><code>uitest-mirror</code> · 鸿蒙版 scrcpy</h3>
+          <ul>
+            <li>一条命令打开设备窗口：鼠标点击、拖拽、滚轮，键盘直接打到手机。</li>
+            <li><code>--record</code> 从第一帧录到关窗；<code>--max-size</code> 按最长边换算成传输自己的缩放。</li>
+            <li>持租约：Agent 正拿着手机时它退出并指名持有者，不跟人抢设备。</li>
+          </ul>
+          <p class="cli-note"><code>npm i -g uitest-mirror</code></p>
+        </article>
       </div>
-      <p class="table-note">依赖只有一个方向：两个产品 → 库。产品之间互不依赖，库里没有产品代码；CI 的 <code>scripts/check-layers.mjs</code> 会拦住任何一次反向引用。</p>
+      <p class="table-note">依赖只有一个方向：三个产品 → 库。产品之间互不依赖，库里没有产品代码；CI 的 <code>scripts/check-layers.mjs</code> 会拦住任何一次反向引用。</p>
     </section>
     <section id="terminal" class="section terminal reveal">
       <h2 id="quickstart">快速开始</h2>

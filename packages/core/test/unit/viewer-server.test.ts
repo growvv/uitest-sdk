@@ -237,6 +237,8 @@ async function start(
      * test can close the server while a cast is still being opened.
      */
     holdCast?: boolean;
+    /** Makes the first N `createCast` calls reject, then succeed. */
+    castFailures?: number;
   } = {},
 ): Promise<Harness> {
   const cast = new FakeCast();
@@ -285,6 +287,9 @@ async function start(
       async createCast() {
         castOpens++;
         if (castGate) await castGate;
+        if (over.castFailures !== undefined && castOpens <= over.castFailures) {
+          throw new Error("daemon did not start");
+        }
         return cast;
       },
       ...(over.displayOnly
@@ -1136,11 +1141,45 @@ describe("ViewerServer: takeover", () => {
     expect(lane.ops("touchDown")).toEqual([[10, 20]]);
     expect(lane.ops("touchMove")).toEqual([[11, 21]]);
     expect(lane.ops("touchUp")).toEqual([[11, 21]]);
+    // HarmonyOS has no key code for recents; the page's button sends the
+    // system's bottom-edge hold, so the lane sees a pointer path instead of a
+    // key. Pinned in `live-input.test.ts`; here the point is that the server
+    // accepts the name at all — it used to drop it on the floor.
     expect(lane.ops("key")).toEqual([[2]]);
     expect(lane.ops("text")).toEqual([[5, 6, "abc", "typing"]]);
     expect(lane.ops("pinch")).toEqual([]); // first pinch is the baseline
     expect(lane.ops("scroll")).toEqual([[10, 20, true, 1]]);
   });
+
+  it("forwards the recents name instead of dropping it", async () => {
+    // The server's key whitelist did not name `recents`, so the page's button
+    // sent a message the server silently discarded. The lane now receives the
+    // gesture that opens the recent-tasks view.
+    const h = await start({ displayOnly: { width: 400, height: 800 } });
+    const a = await connect(h.port);
+    a.send({ type: "control", action: "take" });
+    await until(() => a.texts.some((t) => t.type === "control" && t.state === "controlled"));
+    a.send({ type: "input", action: "key", key: "recents" });
+    const lane = h.lanes()[0]!;
+    await until(() => lane.ops("touchDown").length === 1);
+    expect(lane.ops("touchDown")).toEqual([[200, 796]]);
+    expect(lane.ops("key")).toEqual([]);
+  });
+
+  // A daemon that will not start used to leave the server stuck at
+  // `starting` for ever: the catch block disposed the cast and called
+  // `onCastLost`, but both were guarded on `cast` — and a `createCast` that
+  // threw never produced one. The retry that makes the next attempt possible
+  // was skipped with it, so the page sat on "starting…" until a person
+  // reloaded. The mirror's acceptance run hit this on a real phone.
+  it("retries when the cast daemon fails to start", async () => {
+    const h = await start({ castFailures: 1 });
+    const a = await connect(h.port);
+    await until(() => h.castOpens() === 2, 10_000);
+    h.cast.push(keyframe());
+    await until(() => a.texts.some((t) => t.type === "state" && t.state === "live"), 10_000);
+    a.close();
+  }, 20_000);
 
   it("ignores input from a tab that does not control", async () => {
     const h = await start();

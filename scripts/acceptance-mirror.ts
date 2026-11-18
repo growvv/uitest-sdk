@@ -105,6 +105,8 @@ interface MirrorProcess {
   child: ChildProcess;
   url: string;
   port: number;
+  /** The product's own pid: its daemons are named `uitest_live_<pid>`. */
+  pid: number | undefined;
   log(): string;
 }
 
@@ -124,10 +126,14 @@ async function startMirror(
     stdio: ["pipe", "pipe", "pipe"],
   });
   let out = "";
+  const flush = () => {
+    void writeFile(logPath, out, { flag: "w" }).catch(() => undefined);
+  };
   const url = await new Promise<string>((res, rej) => {
     const timer = setTimeout(() => rej(new Error(`mirror never printed its URL: ${out}`)), 90_000);
     const onData = (d: Buffer) => {
       out += d.toString();
+      flush();
       const m = /(http:\/\/127\.0\.0\.1:\d+\/)/.exec(out);
       if (m) {
         clearTimeout(timer);
@@ -139,10 +145,7 @@ async function startMirror(
     child.on("exit", (code) => rej(new Error(`mirror exited ${code}: ${out}`)));
   });
   const port = Number(new URL(url).port);
-  const flush = async () => writeFile(logPath, out, { flag: "w" }).catch(() => undefined);
-  child.stdout!.on("data", flush);
-  child.stderr!.on("data", flush);
-  return { child, url, port, log: () => out };
+  return { child, url, port, pid: child.pid, log: () => out };
 }
 
 /**
@@ -174,26 +177,289 @@ async function displayOf(device: string): Promise<{ width: number; height: numbe
   }
 }
 
-/** Puts the calculator's keypad in front, so a click has somewhere to land. */
+/**
+ * Puts the calculator's keypad in front and proves it got there.
+ *
+ * The launch used to be fire-and-forget. On a phone left asleep, `launch` is a
+ * no-op on the lock screen, and every later case then drove a page whose
+ * picture was the lock screen — the leather-case notice that covered this
+ * phone made the click case fail with "the device did not register the click"
+ * when the click was fine and the screen underneath was wrong.
+ *
+ * A run spends several minutes driving a browser, and a real phone does what
+ * it likes in that time: it sleeps, it drifts back to the launcher, a system
+ * sheet appears. So this is called before *every* case that needs the keypad,
+ * not once at the start, and it retries rather than trusting one launch.
+ */
 async function stage(device: string): Promise<void> {
   const session = await connect({ deviceId: device, stateDir: join(WORK, "stage"), task: "stage", lease: false });
   try {
-    await assertCapturable(session.device.hypium);
-    await assertShadeClosed(session.device.hypium);
     const apps = (await import("uitest-sdk/drivers")).AppManager;
-    await new apps(session.device.hdc).launch("calculator").catch(() => undefined);
-    await sleep(1500);
+    const manager = new apps(session.device.hdc);
+    const keypadUp = (screen: { elements: Array<{ role: string; node: { attributes: Record<string, string> } }> }): boolean =>
+      screen.elements.some((e) => e.role === "button" && /^keyCode_\d+$/.test(e.node.attributes.id ?? ""));
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await assertCapturable(session.device.hypium);
+      await assertShadeClosed(session.device.hypium);
+      await manager.launch("calculator").catch(() => undefined);
+      await sleep(2000);
+
+      // A system notice (the leather-case sheet on this phone) can sit on top
+      // of the app and swallow every touch. Dismissing it is not "fixing the
+      // test": without it the run would report a broken mirror while the
+      // mirror works.
+      for (let i = 0; i < 3; i++) {
+        const screen = await session.observe.layout();
+        const dismiss = screen.elements.find((e) => e.label === "知道了");
+        if (!dismiss) break;
+        await session.core.tap({ ref: dismiss.ref });
+        await sleep(1200);
+      }
+
+      // Launching an app that is already open resumes it where it was, which
+      // for the scroll case is its history screen. Every interactive case
+      // needs the keypad, so leave the history screen if it is showing.
+      let screen = await session.observe.layout();
+      const historyBack = screen.elements.find((e) => e.label === "history back icon");
+      if (historyBack) {
+        await session.core.tap({ ref: historyBack.ref });
+        await sleep(1500);
+        screen = await session.observe.layout();
+      }
+      if (keypadUp(screen)) return;
+    }
+    const screen = await session.observe.layout();
+    throw new Error(
+      `the calculator's keypad is not in front (bundle ${screen.bundle}, ${screen.elements.length} elements); unlock the phone and run again`,
+    );
   } finally {
     await session.close();
   }
 }
 
-/** Reads the digit the calculator shows, or null when it shows none. */
-async function shownDigits(device: string): Promise<string> {
+/**
+ * What the calculator currently shows.
+ *
+ * The display is the screen's focused input; its label is the expression, and
+ * a finished sum also renders a `text` element with the value. Both are read
+ * because a case may assert on either ("7" is in the expression, "123" may be
+ * the value). Reading every label joined by spaces was too loose: the keypad's
+ * own "7" button is a label too, so "does the device show 7" was true before
+ * any click landed.
+ */
+async function calculatorState(
+  device: string,
+): Promise<{ expression: string; value: string; bundle: string; labels: string[]; field: boolean }> {
   const session = await connect({ deviceId: device, stateDir: join(WORK, "read"), task: "read", lease: false });
   try {
     const screen = await session.observe.layout();
-    return screen.elements.map((e) => e.label ?? "").join(" ");
+    const field = screen.elements.find((e) => e.input);
+    const value = screen.elements.find((e) => e.role === "text");
+    return {
+      expression: field?.label ?? "",
+      value: value?.label ?? "",
+      bundle: screen.bundle,
+      labels: screen.elements.map((e) => e.label ?? ""),
+      // Whether the keypad was even up. An empty expression on the launcher
+      // reads the same as an empty one on a cleared keypad, and a case that
+      // treats those alike reports a mirror defect for a phone that drifted.
+      field: field !== undefined,
+    };
+  } finally {
+    await session.close();
+  }
+}
+
+/** Clears the calculator's display, so a case starts from a known screen. */
+async function clearCalculator(device: string): Promise<void> {
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "clear"), task: "clear", lease: false });
+  try {
+    // "AC" is `keyCode_16`: its label is rendered by a symbol child, so the id
+    // is the only stable handle. Tapped twice because the first press may
+    // clear an entry while a second clears the whole expression.
+    for (let i = 0; i < 2; i++) {
+      const screen = await session.observe.layout();
+      const ac = screen.elements.find((e) => e.node.attributes.id === "keyCode_16");
+      if (!ac) return;
+      await session.core.tap({ ref: ac.ref });
+      await sleep(400);
+    }
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * Opens the calculator's history list with enough rows to scroll.
+ *
+ * The history screen is a `list` whose rows are the person's own past sums —
+ * a list that fits does not move under a wheel, so a scroll case on a fresh
+ * phone would be a claim about nothing. Eight finished sums are seeded from
+ * the keypad; the screen is then opened and its list confirmed scrollable.
+ */
+async function seedHistory(device: string): Promise<void> {
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "seed"), task: "seed", lease: false });
+  try {
+    const { AppManager } = await import("uitest-sdk/drivers");
+    await new AppManager(session.device.hdc).launch("calculator").catch(() => undefined);
+    await sleep(2000);
+
+    // Leave the history screen if a previous case opened it.
+    let screen = await session.observe.layout();
+    const back = screen.elements.find((e) => e.label === "history back icon");
+    if (back) {
+      await session.core.tap({ ref: back.ref });
+      await sleep(1200);
+    }
+
+    // Eight sums: a digit then equals. The equals key is `keyCode_18`, whose
+    // label is a symbol, so the id is the only stable handle.
+    for (let i = 1; i <= 8; i++) {
+      for (const id of [`keyCode_${i % 10}`, "keyCode_18"]) {
+        const now = await session.observe.layout();
+        const key = now.elements.find((e) => e.node.attributes.id === id);
+        if (!key) continue;
+        await session.core.tap({ ref: key.ref });
+        await sleep(280);
+      }
+    }
+
+    screen = await session.observe.layout();
+    const go = screen.elements.find((e) => e.label === "history record go");
+    if (!go) throw new Error("the calculator has no history button on this build");
+    await session.core.tap({ ref: go.ref });
+    await sleep(1500);
+
+    const list = (await session.observe.layout()).elements.find((e) => e.role === "list");
+    if (!list?.scrollable) throw new Error("the history list is not scrollable, so a wheel has nothing to move");
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * The `-scale` the casting daemon of *this* mirror was started with.
+ *
+ * The daemon lives on the device and its argv is the only place `-scale`
+ * appears — the product's stdout never prints it. The socket name carries the
+ * mirror's own pid (`uitest_live_<pid>`), so this reads that daemon and not a
+ * leftover from an earlier run or another tool.
+ */
+async function daemonScale(device: string, pid: number | undefined): Promise<number | null> {
+  if (pid === undefined) return null;
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "probe"), task: "probe", lease: false });
+  try {
+    const out = await session.device.hdc.shell("ps -ef");
+    const line = out.split(/\r?\n/).find((l) => l.includes(`uitest_live_${pid} `) || l.includes(`uitest_live_${pid}\r`));
+    const m = /-scale (\d+)/.exec(line ?? "");
+    return m ? Number(m[1]) : null;
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * The device's screen-off timeout, and the override on it.
+ *
+ * `power-shell timeout` only prints usage, so the values come from the power
+ * manager's dump, which reports both on one line:
+ * `ScreenOffTime: Timeout=600000ms  OverrideTimeout=3600000ms`. `Timeout` is
+ * the person's setting; `OverrideTimeout` is what `-o` installed and `-r`
+ * removes. Reading only the first field made `--stay-awake` look broken when
+ * it was working — the setting is deliberately left alone.
+ */
+async function screenTimeout(device: string): Promise<{ timeout: number | null; override: number | null }> {
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "probe"), task: "probe", lease: false });
+  try {
+    const out = await session.device.hdc.shell("hidumper -s PowerManagerService -a -a");
+    const line = out.split(/\r?\n/).find((l) => l.includes("ScreenOffTime:")) ?? "";
+    const num = (re: RegExp): number | null => {
+      const m = re.exec(line);
+      return m ? Number(m[1]) : null;
+    };
+    return {
+      timeout: num(/Timeout=(\d+)ms/),
+      override: num(/OverrideTimeout=(\d+)ms/),
+    };
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * Where a keypad button sits, as a fraction of the display.
+ *
+ * The page's pointer handler converts browser coordinates against the display,
+ * so a fraction of the display is the one form that survives a different
+ * resolution. Read from the device rather than hard-coded: the keypad is laid
+ * out differently on each phone, and a fixed ratio silently misses.
+ */
+async function keyFraction(device: string, id: string): Promise<{ fx: number; fy: number }> {
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "read"), task: "read", lease: false });
+  try {
+    const screen = await session.observe.layout();
+    const key = screen.elements.find((e) => e.node.attributes.id === id);
+    if (!key) throw new Error(`the calculator has no ${id} button on this screen`);
+    return {
+      fx: Math.round((key.center.x / screen.display.width) * 1000) / 1000,
+      fy: Math.round((key.center.y / screen.display.height) * 1000) / 1000,
+    };
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * Keeps the phone's screen on for the length of one device's cases.
+ *
+ * The mirror has `--stay-awake` for the same reason, but the runner needs it
+ * too: its own layout reads and browser captures take minutes, and a phone
+ * that dims half way through reports every later case as a mirror defect. The
+ * restore is guarded because the run's `finally` and an early failure can both
+ * reach it.
+ */
+async function holdScreenAwake(device: string): Promise<{ restore(): Promise<void> }> {
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "probe"), task: "probe", lease: false });
+  try {
+    await session.device.hypium.setSleepTime(3600);
+  } finally {
+    await session.close();
+  }
+  let restored = false;
+  return {
+    async restore() {
+      if (restored) return;
+      restored = true;
+      const s = await connect({ deviceId: device, stateDir: join(WORK, "probe"), task: "probe", lease: false });
+      try {
+        await s.device.hypium.restoreSleepTime();
+      } catch {
+        // A phone that went away mid-run keeps the override; the README names
+        // `hdc shell power-shell timeout -r` for that case.
+      } finally {
+        await s.close();
+      }
+    },
+  };
+}
+
+/** Puts one of the two apps this run stages in front, and waits for it. */
+async function launchApp(device: string, app: "calculator" | "settings"): Promise<void> {
+  const session = await connect({ deviceId: device, stateDir: join(WORK, "launch"), task: "launch", lease: false });
+  try {
+    await assertCapturable(session.device.hypium);
+    const { AppManager } = await import("uitest-sdk/drivers");
+    await new AppManager(session.device.hdc).launch(app).catch(() => undefined);
+    await sleep(2200);
+    // A system sheet over the app swallows the key this case is about.
+    for (let i = 0; i < 3; i++) {
+      const screen = await session.observe.layout();
+      const dismiss = screen.elements.find((e) => e.label === "知道了");
+      if (!dismiss) break;
+      await session.core.tap({ ref: dismiss.ref });
+      await sleep(1200);
+    }
   } finally {
     await session.close();
   }
@@ -246,6 +512,13 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
 
   // ---- click: a mouse click reaches the phone ----------------------------
   {
+    await stage(device);
+    await clearCalculator(device);
+    const before = await calculatorState(device);
+    // The "7" key's position, read from the device instead of hard-coded: the
+    // keypad's fractions differ between phones, and a fixed 15%,56.7% was
+    // measured on one device and would silently miss on another.
+    const sevenAt = await keyFraction(device, "keyCode_7");
     const p = await startMirror(["--serial", device, "--state-dir", stateDir], join(LOGS, `click-${tag}.log`));
     try {
       const file = `click-${tag}.jpg`;
@@ -255,25 +528,39 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
           out: join(SHOTS, file),
           waitFor: WAIT_LIVE,
           prepare: async (evaluate: (expr: string) => Promise<unknown>) => {
-            // The keypad's "7" sits in the left column, a third of the way
-            // down. Clicking by fraction keeps this case independent of the
-            // device's resolution.
-            await evaluate(`(() => {
-              const c = document.querySelector('#frame');
+            // The listeners are on the canvas (`#screen`); `#frame` is only
+            // the box around it, so a pointer event sent there never reached
+            // the page's handler.
+            const clicked = await evaluate(`(() => {
+              const c = document.querySelector('#screen');
               const r = c.getBoundingClientRect();
-              c.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + r.width * 0.25, clientY: r.top + r.height * 0.62, bubbles: true, pointerId: 1 }));
-              c.dispatchEvent(new PointerEvent('pointerup', { clientX: r.left + r.width * 0.25, clientY: r.top + r.height * 0.62, bubbles: true, pointerId: 1 }));
+              const x = r.left + r.width * ${sevenAt.fx};
+              const y = r.top + r.height * ${sevenAt.fy};
+              for (const type of ['pointerdown', 'pointerup']) {
+                c.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerdown' ? 1 : 0, isPrimary: true }));
+              }
+              return { w: Math.round(r.width), h: Math.round(r.height) };
             })()`);
-            await new Promise((r) => setTimeout(r, 1200));
-            return ["clicked 25%,62%"];
+            await new Promise((r) => setTimeout(r, 1500));
+            return [`canvas ${JSON.stringify(clicked)}`, `clicked ${sevenAt.fx},${sevenAt.fy}`];
           },
         }),
       );
-      const after = await shownDigits(device).catch(() => "");
-      const landed = /\b7\b/.test(after);
+      const after = await calculatorState(device).catch(() => null);
+      // The keypad's own "7" button is a label on the screen, so a check for
+      // "7" anywhere in the layout passed before any click landed. The
+      // expression is the only place a click can show up.
+      const landed = after !== null && after.expression !== before.expression && after.expression.includes("7");
       if (!shot.ok) add("click", "鼠标点击落到设备", "fail", `screenshot failed: ${shot.reason}`, [], "log");
-      else if (landed) add("click", "鼠标点击落到设备", "pass", "the device shows 7", [file]);
-      else add("click", "鼠标点击落到设备", "fail", `the device did not register the click · ${after.slice(0, 80)}`, [file]);
+      else if (landed) add("click", "鼠标点击落到设备", "pass", `display "${before.expression}" → "${after!.expression}"`, [file]);
+      else
+        add(
+          "click",
+          "鼠标点击落到设备",
+          "fail",
+          `the display did not change to 7 · "${before.expression}" → "${after?.expression ?? "(no read)"}"`,
+          [file],
+        );
     } finally {
       await stopMirror(p);
     }
@@ -281,6 +568,9 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
 
   // ---- keyboard: typed text reaches the phone ----------------------------
   {
+    await stage(device);
+    await clearCalculator(device);
+    const before = await calculatorState(device);
     const p = await startMirror(["--serial", device, "--state-dir", stateDir], join(LOGS, `keyboard-${tag}.log`));
     try {
       const file = `keyboard-${tag}.jpg`;
@@ -290,50 +580,79 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
           out: join(SHOTS, file),
           waitFor: WAIT_LIVE,
           prepare: async (evaluate: (expr: string) => Promise<unknown>) => {
-            await evaluate(`(() => {
-              const el = document.getElementById('text');
+            // The page's text field is `#text-input`; `#text` does not exist,
+            // and the earlier run failed here with a null `.focus()`.
+            const ok = await evaluate(`(() => {
+              const el = document.getElementById('text-input');
+              if (!el) return 'no #text-input';
               el.focus();
               el.value = '123';
               el.dispatchEvent(new Event('input', { bubbles: true }));
+              return 'typed';
             })()`);
-            await new Promise((r) => setTimeout(r, 1800));
-            return ["typed 123"];
+            // The page flushes text 300 ms after the last keystroke, and the
+            // device then types character by character (~179 ms each).
+            await new Promise((r) => setTimeout(r, 2500));
+            return [String(ok), "typed 123"];
           },
         }),
       );
-      const after = await shownDigits(device).catch(() => "");
-      const landed = after.includes("123");
+      const after = await calculatorState(device).catch(() => null);
+      const shown = `${after?.expression ?? ""} ${after?.value ?? ""}`;
+      const landed = after !== null && shown !== `${before.expression} ${before.value}` && shown.includes("123");
       if (!shot.ok) add("keyboard", "键盘输入落到设备", "fail", `screenshot failed: ${shot.reason}`, [], "log");
-      else if (landed) add("keyboard", "键盘输入落到设备", "pass", "the device shows 123", [file]);
-      else add("keyboard", "键盘输入落到设备", "fail", `the device did not receive the text · ${after.slice(0, 80)}`, [file]);
+      else if (landed) add("keyboard", "键盘输入落到设备", "pass", `display now "${after!.expression || after!.value}"`, [file]);
+      else if (after !== null && !after.field) {
+        // No text field means the keypad was not on screen at all — the phone
+        // drifted during the capture. That is a fact about the run, not about
+        // the mirror, and it must not be reported as "text did not arrive".
+        add("keyboard", "键盘输入落到设备", "fail", `the phone left the calculator (${after.bundle}) during the capture`, [file]);
+      } else add("keyboard", "键盘输入落到设备", "fail", `the device did not receive the text · "${shown.trim().slice(0, 60)}"`, [file]);
     } finally {
       await stopMirror(p);
     }
   }
 
-  // ---- scroll: the wheel moves a list ------------------------------------
+  // ---- scroll: the wheel moves the history list --------------------------
   {
+    await stage(device);
+    // A list that fits on the screen does not scroll, so this case needs one
+    // that overflows. Four finished sums are enough rows for the list to move.
+    await seedHistory(device);
+    const before = await calculatorState(device);
     const p = await startMirror(["--serial", device, "--state-dir", stateDir], join(LOGS, `scroll-${tag}.log`));
     try {
-      const file = `scroll-${tag}.jpg`;
+      // The history list holds the person's own past sums, and this repository
+      // is public, so the case is proven by the layout and no picture of their
+      // arithmetic is kept. A page screenshot of the mirror's own chrome would
+      // prove nothing about the wheel.
       const shot = await captureOrFail(() =>
         capturePage({
           url: p.url,
-          out: join(SHOTS, file),
+          out: join(WORK, `scroll-${tag}.jpg`),
           waitFor: WAIT_LIVE,
           prepare: async (evaluate: (expr: string) => Promise<unknown>) => {
+            // The wheel listener is on the canvas, and a page that is not the
+            // controller ignores it, so this also proves input is on.
             await evaluate(`(() => {
-              const c = document.querySelector('#frame');
+              const c = document.querySelector('#screen');
               const r = c.getBoundingClientRect();
               c.dispatchEvent(new WheelEvent('wheel', { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, deltaY: 300, bubbles: true, cancelable: true }));
             })()`);
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 2000));
             return ["wheel 300"];
           },
         }),
       );
-      if (shot.ok) add("scroll", "滚轮驱动设备滚动", "pass", "wheel delivered", [file]);
-      else add("scroll", "滚轮驱动设备滚动", "fail", `screenshot failed: ${shot.reason}`, [], "log");
+      await rm(join(WORK, `scroll-${tag}.jpg`), { force: true });
+      // A scroll is a claim about the device, not about the page: the history
+      // list must have moved. Comparing the layout is what makes that a real
+      // assertion — the earlier version took a screenshot and passed.
+      const after = await calculatorState(device).catch(() => null);
+      const moved = after !== null && after.labels.join("|") !== before.labels.join("|");
+      if (!shot.ok) add("scroll", "滚轮驱动设备滚动", "fail", `screenshot failed: ${shot.reason}`, [], "log");
+      else if (moved) add("scroll", "滚轮驱动设备滚动", "pass", "the history list moved (layout comparison; the list holds the person's own sums, so no picture is kept)", [], "log");
+      else add("scroll", "滚轮驱动设备滚动", "fail", "the wheel did not move the device's list", [], "log");
     } finally {
       await stopMirror(p);
     }
@@ -341,68 +660,130 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
 
   // ---- keys: Back, Home and Recents --------------------------------------
   {
+    await stage(device);
     const p = await startMirror(["--serial", device, "--state-dir", stateDir], join(LOGS, `keys-${tag}.log`));
     const shots: string[] = [];
+    const missed: string[] = [];
     try {
-      for (const [name, file] of [
-        ["back", `key-back-${tag}.jpg`],
-        ["home", `key-home-${tag}.jpg`],
-        ["recents", `key-recents-${tag}.jpg`],
+      // Each key gets a screen where it has a visible effect, and the case
+      // asserts the device moved rather than that a screenshot was taken. The
+      // earlier version passed on three files and never looked at the phone.
+      //
+      // The recents view is a gallery of whatever the person had open — a
+      // feed, a chat, their settings — and this repository is public. Its
+      // proof is the layout, and its picture is written to scratch space and
+      // deleted: a `kind: "screen"` case with no file is better than a
+      // published picture of somebody's afternoon.
+      for (const [name, keepShot, prep] of [
+        ["home", true, "calculator"],
+        ["back", true, "settings"],
+        ["recents", false, "calculator"],
       ] as const) {
+        const file = `key-${name}-${tag}.jpg`;
+        // The recents picture must exist for `prepare` to run at all, so it is
+        // captured into the scratch directory and never enters the report.
+        const out = keepShot ? join(SHOTS, file) : join(WORK, `recents-${tag}.jpg`);
+        await launchApp(device, prep);
+        const before = await calculatorState(device);
         const shot = await captureOrFail(() =>
           capturePage({
             url: p.url,
-            out: join(SHOTS, file),
+            out,
             waitFor: WAIT_LIVE,
             prepare: async (evaluate: (expr: string) => Promise<unknown>) => {
               // The button is the page's own path to the key, so this also
               // proves the control exists and is wired.
-              await evaluate(`document.getElementById('key-${name}').click()`);
-              await new Promise((r) => setTimeout(r, 1200));
+              const found = await evaluate(`(() => {
+                const el = document.getElementById('key-${name}');
+                if (!el) return false;
+                el.click();
+                return true;
+              })()`);
+              if (found !== true) throw new Error(`the page has no #key-${name} button`);
+              // Recents is a 3.5 s bottom-edge hold; the others are one key.
+              await new Promise((r) => setTimeout(r, name === "recents" ? 5000 : 2000));
               return [name];
             },
           }),
         );
-        if (shot.ok) shots.push(file);
+        if (!keepShot) await rm(out, { force: true });
+        const after = await calculatorState(device).catch(() => null);
+        const changed = after !== null && (after.bundle !== before.bundle || after.labels.join("|") !== before.labels.join("|"));
+        if (!shot.ok) missed.push(`${name}: screenshot failed (${shot.reason})`);
+        else if (!changed) missed.push(`${name}: the device did not change (${before.bundle})`);
+        else if (keepShot) shots.push(file);
       }
-      // Recents is the one key with no prior measurement behind it. A device
-      // that does not answer it is a finding, not a pass with a missing file.
-      if (shots.length !== 3) {
-        add("keys", "Back / Home / Recents 三个键", "fail", `captured ${shots.length}/3 key screenshots`, shots);
+      if (missed.length > 0) {
+        add("keys", "Back / Home / Recents 三个键", "fail", missed.join(" · "), shots);
       } else {
-        add("keys", "Back / Home / Recents 三个键", "pass", "three keys sent", shots);
+        add(
+          "keys",
+          "Back / Home / Recents 三个键",
+          "pass",
+          "three keys changed the device · recents proven by layout only (its screen shows other apps, so no picture is kept)",
+          shots,
+        );
       }
     } finally {
       await stopMirror(p);
     }
   }
 
-  // ---- record: --record writes an MP4 ------------------------------------
+  // ---- record: --record writes an MP4, and --stay-awake holds the screen --
   {
+    // The keys case leaves the phone on the launcher; a picture of the
+    // person's home screen is not evidence about the mirror.
+    await stage(device);
     const file = join(WORK, `rec-${tag}.mp4`);
     await rm(file, { force: true });
     const p = await startMirror(
-      ["--serial", device, "--state-dir", stateDir, "--record", file],
+      ["--serial", device, "--state-dir", stateDir, "--record", file, "--stay-awake"],
       join(LOGS, `record-${tag}.log`),
     );
+    let live = false;
+    let awake: { timeout: number | null; override: number | null } | null = null;
     try {
+      // record mode is a second device-side daemon, and a run that only
+      // records would not show the picture survives.
+      const shot = await captureOrFail(() =>
+        capturePage({ url: p.url, out: join(SHOTS, `record-live-${tag}.jpg`), waitFor: WAIT_LIVE }),
+      );
+      live = shot.ok;
+      // `--stay-awake` installs an override for the length of the run; the
+      // person's own timeout is deliberately left alone.
+      awake = await screenTimeout(device).catch(() => null);
       await sleep(6000);
     } finally {
       await stopMirror(p);
     }
+    const timeoutAfter = await screenTimeout(device).catch(() => null);
     const size = existsSync(file) ? statSync(file).size : 0;
     // An MP4 starts with an ftyp box at offset 4; a file that does not is a
     // container the extension failed to close, not a recording.
     const head = existsSync(file) ? readFileSync(file).subarray(4, 8).toString("latin1") : "";
-    if (size > 10_000 && head === "ftyp") {
-      add("record", "录制产出可解析的 MP4", "pass", `${size} B · ftyp ok`, [], "log");
-    } else {
-      add("record", "录制产出可解析的 MP4", "fail", `${size} B · head ${JSON.stringify(head)}`, [], "log");
-    }
+    const recorded = size > 10_000 && head === "ftyp";
+    const stayedAwake = awake?.override !== null && awake?.override !== undefined && awake.override >= 3_600_000;
+    // The override must be undone: a mirror that leaves a person's phone awake
+    // for an hour has changed something they never asked about.
+    const restored = timeoutAfter?.override === null || timeoutAfter?.override === undefined;
+    const detail = [
+      recorded ? `${size} B · ftyp ok` : `${size} B · head ${JSON.stringify(head)}`,
+      live ? "picture live" : "no live picture",
+      stayedAwake ? `stay-awake override ${awake!.override} ms` : `stay-awake NOT set (override ${awake?.override ?? "unreadable"})`,
+      restored ? "override removed" : `override left at ${timeoutAfter?.override} ms`,
+    ].join(" · ");
+    add(
+      "record",
+      "录制产出 MP4，--stay-awake 生效并复原",
+      recorded && stayedAwake && restored ? "pass" : "fail",
+      detail,
+      live ? [`record-live-${tag}.jpg`] : [],
+    );
   }
 
-  // ---- max-size: the divisor matches the table ---------------------------
+  // ---- max-size: the divisor reaches the device's daemon -----------------
   {
+    await stage(device);
     const { width, height } = await displayOf(device);
     const longest = Math.max(width, height);
     const maxSize = 1024;
@@ -412,26 +793,29 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
       join(LOGS, `max-size-${tag}.log`),
     );
     try {
-      await sleep(4000);
+      // The daemon only starts when a tab asks for the stream, and its argv is
+      // on the device — not in the product's stdout, where the earlier version
+      // looked. Reading `ps` is the only place `-scale` really appears.
+      const shot = await captureOrFail(() =>
+        capturePage({ url: p.url, out: join(SHOTS, `max-size-${tag}.jpg`), waitFor: WAIT_LIVE }),
+      );
+      const scale = await daemonScale(device, p.pid).catch(() => null);
+      const ok = shot.ok && scale === expected;
+      add(
+        "max-size",
+        "--max-size 按最长边换算",
+        ok ? "pass" : "fail",
+        `longest ${longest} → expected -scale ${expected}, daemon got ${scale ?? "none"}${shot.ok ? "" : " · no frame"}`,
+        shot.ok ? [`max-size-${tag}.jpg`] : [],
+      );
     } finally {
       await stopMirror(p);
     }
-    const log = p.log();
-    const m = /-scale (\d+)/.exec(log);
-    const actual = m ? Number(m[1]) : null;
-    const ok = actual === expected;
-    add(
-      "max-size",
-      "--max-size 按最长边换算",
-      ok ? "pass" : "fail",
-      `longest ${longest} → expected -scale ${expected}, daemon got ${actual ?? "none"}`,
-      [],
-      "log",
-    );
   }
 
   // ---- no-control: the page is read-only ---------------------------------
   {
+    await stage(device);
     const p = await startMirror(
       ["--serial", device, "--state-dir", stateDir, "--no-control"],
       join(LOGS, `no-control-${tag}.log`),
@@ -604,7 +988,18 @@ async function run(targets: string[]): Promise<number> {
     process.stdout.write(`=== ${info.tag} ===\n`);
     const stateDir = join(WORK, "state", info.tag);
     await mkdir(stateDir, { recursive: true });
-    const r = await mirrorCases(device, stateDir);
+    // A run spends minutes driving a browser, and a phone that sleeps in the
+    // middle of it lands on the lock screen or the launcher — every later
+    // case then fails for a reason that is not about the mirror. The runner
+    // holds the screen itself, and puts the person's timeout back afterwards;
+    // `--stay-awake` is proven separately by the record case.
+    const awake = await holdScreenAwake(device);
+    let r: { cases: Case[]; tag: string };
+    try {
+      r = await mirrorCases(device, stateDir);
+    } finally {
+      await awake.restore();
+    }
     for (const c of r.cases) {
       cases.push(c);
       process.stdout.write(`  ${c.status === "pass" ? "PASS" : "FAIL"} ${c.id} ${c.detail}\n`);

@@ -304,6 +304,11 @@ export class ViewerServer {
     } else if (self.inputMode === "takeover") {
       void self.ensureInput().catch(() => undefined);
     }
+    // `--record` names a file on the command line, so the file must exist when
+    // the person closes the window — whether or not a browser ever attached.
+    // The record daemon is a second daemon beside the stream, not a consumer
+    // of it: it needs no decoded frame, so there is nothing to wait for.
+    self.startRequestedRecording();
     // Ask for the display size up front: the greeting carries it, and a tab
     // that connects before the first layout read must still convert clicks
     // against the display rather than the decoded frame. A failure here is
@@ -857,8 +862,11 @@ export class ViewerServer {
         return;
       }
       case "key": {
+        // The set the page can send is `LiveKey`, and a name outside it has
+        // no code to forward. Listing them here once meant Recents was
+        // accepted by the page and dropped here.
         const key = String(message.key ?? "");
-        if (key === "back" || key === "home" || key === "enter" || key === "delete") {
+        if (key === "back" || key === "home" || key === "recents" || key === "enter" || key === "delete") {
           input.key(key);
         }
         return;
@@ -1242,9 +1250,14 @@ export class ViewerServer {
         this.onCastLost("the cast stream ended");
       }
     } catch (err) {
-      if (!this.closing && cast && this.cast === cast) {
+      // A `createCast` that threw never produced a client, so guarding this on
+      // `cast` skipped the retry too — the page then sat on "starting…" until
+      // a person reloaded, while the phone was fine. A failed start is exactly
+      // the case the backoff exists for: the device may be busy with another
+      // daemon for a moment, and the next attempt succeeds.
+      if (!this.closing && this.cast === cast) {
         this.cast = null;
-        this.castDisposal = cast.dispose().catch(() => undefined);
+        if (cast) this.castDisposal = cast.dispose().catch(() => undefined);
         this.onCastLost(err instanceof Error ? err.message : String(err));
       }
     } finally {
@@ -1395,19 +1408,21 @@ export class ViewerServer {
     } catch {
       this.live.force(next, reason);
     }
-    if (next === "live") this.recordOnLive();
+    if (next === "live") this.startRequestedRecording();
   }
 
   /**
    * Starts the recording a product asked for on the command line.
    *
-   * It waits for `live` rather than starting at construction: the record
-   * daemon runs beside the stream and needs the stream's display to exist.
+   * Called once at startup and again on every transition to `live`: the
+   * first attempt may fail because the device was still busy, and the page
+   * button starts recordings of its own that this must not duplicate.
+   *
    * A failure is swallowed on purpose — the picture is the product, and a
    * device that will not record should not also refuse to mirror. The page's
    * button still works, so the person keeps a way to try again.
    */
-  private recordOnLive(): void {
+  private startRequestedRecording(): void {
     if (!this.recordOnStart || this.recording || this.stopping || this.startingRecording) return;
     const start = this.source.startRecording;
     if (!start) return;

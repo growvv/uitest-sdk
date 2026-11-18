@@ -122,6 +122,16 @@ const until = async (fn: () => boolean, ms = 4000): Promise<void> => {
  * start one, which meant a mirror could run for an hour and write nothing.
  */
 describe("recordOnStart", () => {
+  // The record daemon runs beside the stream, not on it: it needs no decoded
+  // frame and no tab. Waiting for `live` meant `--record` wrote nothing when
+  // the browser failed to open, or when nobody was looking — a mirror left
+  // running for an hour produced no file.
+  it("starts recording at startup, before any tab connects", async () => {
+    const h = await start({ recordOnStart: true });
+    await until(() => h.started.length > 0);
+    expect(h.started).toEqual(["start"]);
+  });
+
   it("starts recording when the stream goes live", async () => {
     const h = await start({ recordOnStart: true });
     const c = await connect(h.port);

@@ -564,6 +564,15 @@ if (!docsHtml.includes(`uitest-sdk <strong>${VERSION}</strong>`)) {
 }
 
 for (const needle of [
+  // 0.11.0: the fourth product. The changelog has to name it, its install
+  // line, and the two core capabilities it needed, because a reader on 0.10.1
+  // cannot tell from "new features" whether their code changes.
+  "0.11.0",
+  "uitest-mirror",
+  "uitest-console</code> 0.1.2",
+  "uitest-phone</code> 0.10.2",
+  "keepAwake",
+  "maxSize",
   // 0.10.1: every product in the split has its own patch release, and the
   // changelog is the only page that says what changed in them. The fixes are
   // ones a person notices (a deny that did nothing, a screenshot path with no

@@ -67,9 +67,11 @@ console 删除 `src/window.ts` 与 `test/unit/window.test.ts`，改从 `uitest-s
 
 ### 4.2 `recents` 键
 
-`packages/core/src/viewer/input.ts` 的 `KEY_CODES` 增加 `recents: 187`；`packages/core/src/driver/agent/selector.ts` 的 `KEYS` 增加 `recents: 187`（`oh_key_code.h` 的 `KEYCODE_APP_SWITCH`）。播放器的键位区增加第四个按钮，消息仍是 `{ action: "key", key: "recents" }`。
-
-**这是本设计里唯一没有仓库内实测证据的常量。** 验收用例 5 第一条就测它；设备不响应就把该用例标 `fail`、从 v0.1.0 的 help 移除 `Recents`，不猜、不静默保留一个什么都不做的键。
+> **验收实测修正（0.1.0）：本节原方案不可行。** 原稿写的是 `KEY_CODES` 与 `KEYS` 各加 `recents: 187`，并声称它来自 `oh_key_code.h` 的 `KEYCODE_APP_SWITCH`。真机上 187（AOSP 的 `APP_SWITCH`）无任何反应，`oh_key_code.h` 里也没有 `APP_SWITCH`；`KEYCODE_VIRTUAL_MULTITASK`（2210）和 `KEYCODE_TASKMANAGER`（2717）同样无反应。HarmonyOS 的最近任务不是按键，而是**从底边向上滑并按住**：实测 3.5 s 停留 4/4 打开最近任务，2 s 则每次都回桌面。
+>
+> 落地方式：`LiveInput.key("recents")` 发送这条手势（`RECENTS_HOLD_MS = 3500`，14 步）；`selector.ts` 的 `KEYS` **不**加 `recents`，`key recents` 因此会报未知键，而不是静默什么都不做。播放器的第四个按钮保留，消息仍是 `{ action: "key", key: "recents" }`。
+>
+> 原稿的「设备不响应就从 help 移除」因此没有触发——设备响应的是手势，不是按键。
 
 ### 4.3 `Session.keepAwake(seconds?)`
 

@@ -1,0 +1,132 @@
+{
+  "product": "mirror",
+  "version": "0.1.0",
+  "date": "2026-11-18",
+  "commit": "bb783c2+dirty",
+  "devices": [
+    {
+      "tag": "7544d645",
+      "model": "MLR-AL10",
+      "resolution": "1600x2560"
+    }
+  ],
+  "cases": [
+    {
+      "id": "package",
+      "title": "npm 包安装与版本",
+      "device": "host",
+      "status": "pass",
+      "detail": "uitest-mirror-0.1.0.tgz · uitest-mirror 0.1.0 (uitest-sdk 0.11.0)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "window",
+      "title": "窗口打开，画面有帧",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "live at http://127.0.0.1:62032/",
+      "screenshots": [
+        "window-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5505
+    },
+    {
+      "id": "click",
+      "title": "鼠标点击落到设备",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "display \"global exp\" → \"7\"",
+      "screenshots": [
+        "click-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "keyboard",
+      "title": "键盘输入落到设备",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "display now \"123\"",
+      "screenshots": [
+        "keyboard-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "scroll",
+      "title": "滚轮驱动设备滚动",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "the history list moved (layout comparison; the list holds the person's own sums, so no picture is kept)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "keys",
+      "title": "Back / Home / Recents 三个键",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "three keys changed the device · recents proven by layout only (its screen shows other apps, so no picture is kept)",
+      "screenshots": [
+        "key-home-7544d645.jpg",
+        "key-back-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "record",
+      "title": "录制产出 MP4，--stay-awake 生效并复原",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "224658 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed",
+      "screenshots": [
+        "record-live-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "max-size",
+      "title": "--max-size 按最长边换算",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "longest 2560 → expected -scale 3, daemon got 3",
+      "screenshots": [
+        "max-size-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "no-control",
+      "title": "--no-control 只读",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "no key row, no input",
+      "screenshots": [
+        "no-control-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "lease",
+      "title": "租约冲突时第二个实例退出并指名持有者",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "exit 1 · lease_held · this device already runs task \"mirror\" / If that task is gone, remove E:\\CodeE\\vibe51\\uitest_agent\\.work-bench\\accept-mirror\\state\\7544d645\\leases\\",
+      "screenshots": [],
+      "kind": "log"
+    }
+  ],
+  "summary": {
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rerun": [
+    "unset HDC_SERVER_PORT",
+    "npx tsx scripts/acceptance-mirror.ts --targets <id>[,<id>]",
+    "node scripts/gen-acceptance-pages.mjs"
+  ],
+  "issues": []
+}

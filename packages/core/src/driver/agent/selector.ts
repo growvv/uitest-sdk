@@ -330,7 +330,6 @@ function indexOutsideQuotes(text: string, needle: string): number {
 const KEYS: Record<string, number> = {
   home: 1,
   back: 2,
-  recents: 187,
   search: 9,
   media_play_pause: 10,
   media_stop: 11,

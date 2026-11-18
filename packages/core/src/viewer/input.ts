@@ -43,6 +43,8 @@ export interface LiveInputOptions {
   now?: () => number;
   /** How long a held pointer may go without movement before it is lifted. Default 10_000. */
   holdMs?: number;
+  /** Delay inside a multi-step op; injected so tests need no real clock. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 interface Point {
@@ -50,9 +52,18 @@ interface Point {
   y: number;
 }
 
-/** HarmonyOS key codes for the system keys the page exposes. */
-const KEY_CODES = { back: 2, home: 1, recents: 187, enter: 2054, delete: 2055 } as const;
-export type LiveKey = keyof typeof KEY_CODES;
+/**
+ * Key codes for the system keys that have one.
+ *
+ * Recents is not here: HarmonyOS has no key code for the recent-tasks view.
+ * `187` is AOSP's `APP_SWITCH`, `oh_key_code.h` has no `APP_SWITCH` at all,
+ * and the phone ignores 187 along with `KEYCODE_VIRTUAL_MULTITASK` (2210) and
+ * `KEYCODE_TASKMANAGER` (2717) — measured on a real device, none of the three
+ * changed the screen. The system's own route is a gesture, and `key()` sends
+ * that instead.
+ */
+const KEY_CODES = { back: 2, home: 1, enter: 2054, delete: 2055 } as const;
+export type LiveKey = keyof typeof KEY_CODES | "recents";
 
 type TextMode = "typing" | "paste";
 
@@ -63,10 +74,19 @@ type Op =
   | { kind: "key"; code: number }
   | { kind: "text"; x: number; y: number; text: string; mode: TextMode }
   | { kind: "pinch"; cx: number; cy: number; from: number; to: number; ms: number }
-  | { kind: "scroll"; x: number; y: number; down: boolean; steps: number };
+  | { kind: "scroll"; x: number; y: number; down: boolean; steps: number }
+  | { kind: "recents"; from: Point; to: Point };
 
 const MAX_TIMINGS = 200;
 const CANCEL_LIFT_MS = 500;
+/**
+ * How long the recents gesture stays down while it travels up the screen.
+ *
+ * The system reads a slow bottom-edge swipe as "show recents" and a quick one
+ * as "go home". 3.5 s was measured to open recents 4 times out of 4 on a real
+ * phone, where 2 s went home every time.
+ */
+const RECENTS_HOLD_MS = 3500;
 /**
  * Upper bound for a pinch half when no display size is known (`--no-layout`).
  *
@@ -97,6 +117,7 @@ export class LiveInput {
   private readonly onError: ((error: Error) => void) | undefined;
   private readonly now: () => number;
   private readonly holdMs: number;
+  private readonly sleep: (ms: number) => Promise<void>;
 
   private current: InputState = "idle";
   private queue: Op[] = [];
@@ -129,6 +150,7 @@ export class LiveInput {
     this.onError = opts.onError;
     this.now = opts.now ?? (() => Date.now());
     this.holdMs = opts.holdMs ?? 10_000;
+    this.sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   }
 
   down(x: number, y: number): void {
@@ -210,7 +232,34 @@ export class LiveInput {
 
   key(name: LiveKey): void {
     if (this.dead) return;
+    if (name === "recents") {
+      this.recents();
+      return;
+    }
     this.push({ kind: "key", code: KEY_CODES[name] });
+  }
+
+  /**
+   * The recent-tasks view, as the gesture the system reads.
+   *
+   * A finger down on the bottom edge, held while it travels most of the way up
+   * the screen. The hold is what separates it from a plain swipe-up (which
+   * goes home): measured on a real phone, a 3.5 s travel opens the recents
+   * view 4 times out of 4, while a 2 s one goes home every time.
+   *
+   * It is queued as one ordered op so it cannot interleave with a drag that
+   * the person is making in the same lane.
+   */
+  private recents(): void {
+    const b = this.bounds?.() ?? null;
+    // No display size means no bottom edge to start from. A guess would start
+    // the gesture somewhere in the middle of the screen, which the device
+    // reads as a scroll.
+    if (!b) return;
+    const x = Math.round(b.width / 2);
+    const from = { x, y: b.height - 4 };
+    const to = { x, y: Math.round(b.height * 0.6) };
+    this.push({ kind: "recents", from, to });
   }
 
   /**
@@ -367,6 +416,37 @@ export class LiveInput {
         this.wheelBusy = false;
         if (this.pendingWheel !== 0) this.flushWheel();
         return;
+      case "recents":
+        await this.sendRecents(op.from, op.to);
+        return;
+    }
+  }
+
+  /**
+   * The bottom-edge hold, as one pointer path.
+   *
+   * The steps are spaced over the hold rather than over a short swipe: the
+   * system decides "recents" or "home" from how long the finger stays down
+   * while it travels. The lift happens in a `finally` so a lane failure cannot
+   * leave the phone holding a finger at the bottom edge.
+   */
+  private async sendRecents(from: Point, to: Point): Promise<void> {
+    const steps = 14;
+    const perStep = Math.round(RECENTS_HOLD_MS / steps);
+    this.downSent = true;
+    this.sentPoint = from;
+    await this.lane.touchDown(from.x, from.y);
+    try {
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const p = { x: Math.round(from.x + (to.x - from.x) * t), y: Math.round(from.y + (to.y - from.y) * t) };
+        await this.sleep(perStep);
+        await this.lane.touchMove(p.x, p.y);
+        this.sentPoint = p;
+      }
+    } finally {
+      await this.lane.touchUp(this.sentPoint.x, this.sentPoint.y).catch(() => undefined);
+      this.downSent = false;
     }
   }
 

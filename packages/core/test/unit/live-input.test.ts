@@ -526,3 +526,36 @@ describe("LiveInput injection counter", () => {
     expect(stats.total).toBe(3);
   });
 });
+
+/**
+ * HarmonyOS has no key code for the recent-tasks view: `187` is AOSP's
+ * `APP_SWITCH`, and the phone ignores it along with every native multitask
+ * code in `oh_key_code.h`. The system's own route is a swipe up from the
+ * bottom edge held until the view appears, so that is what the button sends.
+ */
+describe("LiveInput recents", () => {
+  it("sends the bottom-edge hold instead of a key code", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds, sleep: async () => undefined });
+    input.key("recents");
+    await settle();
+    expect(lane.ops("key")).toEqual([]);
+    const down = lane.ops("touchDown")[0] as [number, number];
+    const up = lane.ops("touchUp")[0] as [number, number];
+    // The bottom edge, centre column, released a long way up the screen: the
+    // distance and the hold are both what the system reads as "show recents".
+    expect(down).toEqual([200, 796]);
+    expect(up[0]).toBe(200);
+    expect(up[1]).toBeLessThan(600);
+  });
+
+  it("still sends the keys that do have a code", async () => {
+    const lane = new FakeLane();
+    const input = new LiveInput({ lane, bounds });
+    input.key("back");
+    input.key("home");
+    await settle();
+    expect(lane.ops("key")).toEqual([[2], [1]]);
+    expect(lane.ops("touchDown")).toEqual([]);
+  });
+});
