@@ -1,0 +1,508 @@
+{
+  "product": "core",
+  "version": "0.10.1",
+  "date": "2026-11-18",
+  "commit": "e5946be",
+  "devices": [
+    {
+      "tag": "6c585f5b",
+      "model": "BRA-AL00",
+      "resolution": "1216x2688"
+    },
+    {
+      "tag": "7544d645",
+      "model": "MLR-AL10",
+      "resolution": "1600x2560"
+    }
+  ],
+  "cases": [
+    {
+      "id": "viewer-mirror",
+      "title": "viewer 镜像（真实浏览器）",
+      "status": "pass",
+      "detail": "1216x2688 · 0 notes",
+      "screenshots": [
+        "viewer-mirror-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "device": "6c585f5b"
+    },
+    {
+      "id": "viewer-inspect",
+      "title": "viewer 节点表",
+      "status": "pass",
+      "detail": "14 node rows",
+      "screenshots": [
+        "viewer-inspect-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "device": "6c585f5b"
+    },
+    {
+      "id": "viewer-privacy",
+      "title": "viewer 隐私开关",
+      "status": "pass",
+      "detail": "switch on->off->on (was true) · 遮罩在读布局时完成，不覆盖在画面上",
+      "screenshots": [
+        "viewer-privacy-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "device": "6c585f5b"
+    },
+    {
+      "id": "connect",
+      "title": "connect() 与会话",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "com.huawei.hmos.calculator · 1216x2688",
+      "screenshots": [
+        "connect-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1369
+    },
+    {
+      "id": "click",
+      "title": "act.tap 点击",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "settled · 1484 ms",
+      "screenshots": [
+        "click-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2463
+    },
+    {
+      "id": "swipe",
+      "title": "act.swipe 滑动",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "settled · 1879 ms",
+      "screenshots": [
+        "swipe-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2986
+    },
+    {
+      "id": "touch",
+      "title": "触摸协议 down/move/up",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "down/move/up ok",
+      "screenshots": [
+        "touch-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 880
+    },
+    {
+      "id": "triggerKey",
+      "title": "act.key 系统按键",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "settled · power",
+      "screenshots": [
+        "triggerKey-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5026
+    },
+    {
+      "id": "captureLayout",
+      "title": "observe.layout UI 树",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "194 nodes",
+      "screenshots": [
+        "captureLayout-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1058
+    },
+    {
+      "id": "captureScreen",
+      "title": "observe.screenshot 截图",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "288 ms · 43672 B",
+      "screenshots": [
+        "captureScreen-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 703
+    },
+    {
+      "id": "cropScreen",
+      "title": "按 bundle 裁剪截图",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "com.huawei.hmos.calculator · 59600 B",
+      "screenshots": [
+        "cropScreen-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1441
+    },
+    {
+      "id": "streamScreen",
+      "title": "streamScreen MJPEG 取帧",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "10.9 fps",
+      "screenshots": [
+        "streamScreen-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1783
+    },
+    {
+      "id": "createCast",
+      "title": "cast.open H.264 投流",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "h264 · 31 B",
+      "screenshots": [
+        "createCast-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2059
+    },
+    {
+      "id": "createCastRecord",
+      "title": "cast.record MP4 录制",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "478125 B mp4",
+      "screenshots": [
+        "createCastRecord-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 7912
+    },
+    {
+      "id": "dualCast",
+      "title": "两路并发投流",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "31 B / 31 B",
+      "screenshots": [
+        "dualCast-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 3554
+    },
+    {
+      "id": "dumpLayout",
+      "title": "cli.dumpLayout",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "194 nodes",
+      "screenshots": [
+        "dumpLayout-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1765
+    },
+    {
+      "id": "queue",
+      "title": "并发调用排队",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "10 calls · 81 ms",
+      "screenshots": [
+        "queue-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 778
+    },
+    {
+      "id": "rpcDuringStream",
+      "title": "投流期间调用 RPC",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "11 ms",
+      "screenshots": [
+        "rpcDuringStream-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 910
+    },
+    {
+      "id": "streamUiActions",
+      "title": "UI 事件流",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "session opens; synthetic touches are not reported (device behaviour)",
+      "screenshots": [
+        "streamUiActions-6c585f5b.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1210
+    },
+    {
+      "id": "security-origin",
+      "title": "viewer 来源校验（7 种握手）",
+      "device": "6c585f5b",
+      "status": "pass",
+      "detail": "7/7 handshakes · origin: 101",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "viewer-mirror",
+      "title": "viewer 镜像（真实浏览器）",
+      "status": "pass",
+      "detail": "1600x2560 · 0 notes",
+      "screenshots": [
+        "viewer-mirror-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "device": "7544d645"
+    },
+    {
+      "id": "viewer-inspect",
+      "title": "viewer 节点表",
+      "status": "pass",
+      "detail": "8 node rows",
+      "screenshots": [
+        "viewer-inspect-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "device": "7544d645"
+    },
+    {
+      "id": "viewer-privacy",
+      "title": "viewer 隐私开关",
+      "status": "pass",
+      "detail": "switch on->off->on (was true) · 遮罩在读布局时完成，不覆盖在画面上",
+      "screenshots": [
+        "viewer-privacy-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "device": "7544d645"
+    },
+    {
+      "id": "connect",
+      "title": "connect() 与会话",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "com.huawei.hmos.calculator · 1600x2560",
+      "screenshots": [
+        "connect-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1489
+    },
+    {
+      "id": "click",
+      "title": "act.tap 点击",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 1272 ms",
+      "screenshots": [
+        "click-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2330
+    },
+    {
+      "id": "swipe",
+      "title": "act.swipe 滑动",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 2408 ms",
+      "screenshots": [
+        "swipe-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 3654
+    },
+    {
+      "id": "touch",
+      "title": "触摸协议 down/move/up",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "down/move/up ok",
+      "screenshots": [
+        "touch-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1027
+    },
+    {
+      "id": "triggerKey",
+      "title": "act.key 系统按键",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · power",
+      "screenshots": [
+        "triggerKey-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5448
+    },
+    {
+      "id": "captureLayout",
+      "title": "observe.layout UI 树",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "227 nodes",
+      "screenshots": [
+        "captureLayout-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1363
+    },
+    {
+      "id": "captureScreen",
+      "title": "observe.screenshot 截图",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "215 ms · 47327 B",
+      "screenshots": [
+        "captureScreen-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 669
+    },
+    {
+      "id": "cropScreen",
+      "title": "按 bundle 裁剪截图",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "com.huawei.hmos.calculator · 65699 B",
+      "screenshots": [
+        "cropScreen-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2012
+    },
+    {
+      "id": "streamScreen",
+      "title": "streamScreen MJPEG 取帧",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "10.7 fps",
+      "screenshots": [
+        "streamScreen-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1912
+    },
+    {
+      "id": "createCast",
+      "title": "cast.open H.264 投流",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "h264 · 31 B",
+      "screenshots": [
+        "createCast-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 2021
+    },
+    {
+      "id": "createCastRecord",
+      "title": "cast.record MP4 录制",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "211271 B mp4",
+      "screenshots": [
+        "createCastRecord-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 8260
+    },
+    {
+      "id": "dualCast",
+      "title": "两路并发投流",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "31 B / 31 B",
+      "screenshots": [
+        "dualCast-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 3719
+    },
+    {
+      "id": "dumpLayout",
+      "title": "cli.dumpLayout",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "227 nodes",
+      "screenshots": [
+        "dumpLayout-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1776
+    },
+    {
+      "id": "queue",
+      "title": "并发调用排队",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "10 calls · 100 ms",
+      "screenshots": [
+        "queue-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 876
+    },
+    {
+      "id": "rpcDuringStream",
+      "title": "投流期间调用 RPC",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "6 ms",
+      "screenshots": [
+        "rpcDuringStream-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 927
+    },
+    {
+      "id": "streamUiActions",
+      "title": "UI 事件流",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "session opens; synthetic touches are not reported (device behaviour)",
+      "screenshots": [
+        "streamUiActions-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 1157
+    },
+    {
+      "id": "security-origin",
+      "title": "viewer 来源校验（7 种握手）",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "7/7 handshakes · origin: 101",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "package",
+      "title": "npm 包内容",
+      "status": "pass",
+      "detail": "151 个文件 · 1033 KB · 无 src/test/bin · 3 个设备扩展",
+      "screenshots": [],
+      "kind": "log",
+      "device": "host"
+    }
+  ],
+  "summary": {
+    "passed": 41,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rerun": [
+    "unset HDC_SERVER_PORT",
+    "npx tsx scripts/acceptance-core.ts --targets <id>[,<id>]",
+    "node scripts/gen-acceptance-pages.mjs"
+  ],
+  "issues": []
+}
