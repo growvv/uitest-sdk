@@ -57,6 +57,30 @@ describe("gitHead", () => {
   });
 
 
+  // The runners call git from a subdirectory: the `ROOT` they import for
+  // evidence paths is `docs/acceptance`, not the repository. A pathspec is
+  // resolved relative to git's cwd, so `docs/acceptance/console-0.1.1` meant
+  // `docs/acceptance/docs/acceptance/console-0.1.1` and excluded nothing —
+  // every report of 0.10.1 came out `+dirty` on a clean tree.
+  it("excludes an evidence directory when git runs from a subdirectory", () => {
+    const dir = repo();
+    const sub = join(dir, "docs", "acceptance");
+    mkdirSync(join(sub, "core-0.10.1"), { recursive: true });
+    writeFileSync(join(sub, "core-0.10.1", "report.json"), "{}\n");
+    expect(gitHead({ root: sub, exclude: ["docs/acceptance/core-0.10.1"] })).toMatch(
+      /^[0-9a-f]{7,}$/,
+    );
+  });
+
+  it("still reports dirt outside the excluded directory when run from a subdirectory", () => {
+    const dir = repo();
+    const sub = join(dir, "docs", "acceptance");
+    mkdirSync(join(sub, "core-0.10.1"), { recursive: true });
+    writeFileSync(join(sub, "core-0.10.1", "report.json"), "{}\n");
+    writeFileSync(join(dir, "a.txt"), "changed\n");
+    expect(gitHead({ root: sub, exclude: ["docs/acceptance/core-0.10.1"] })).toMatch(/\+dirty$/);
+  });
+
   // Three runners each had their own copy, and a fix in one would have left
   // the other two stamping `+dirty` on every first run at a new version.
   it.each(RUNNERS)("%s stamps the commit through the shared helper", (name) => {

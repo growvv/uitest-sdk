@@ -51,17 +51,23 @@ export function envName(target: string): string {
  * A report must be reproducible: a reader who checks the hash has to find the
  * code that produced the page. So a run on a modified tree says so.
  *
- * `exclude` is the run's own output directory. Every run writes a report and
- * screenshots into a directory that does not exist until the first run at a
- * new version, so without this every such run stamped itself `+dirty` — on a
- * clean tree, because of nothing but its own evidence. A marker that is
- * always there is a marker nobody reads.
+ * `exclude` is the run's own output directory, relative to the repository root.
+ * Every run writes a report and screenshots into a directory that does not
+ * exist until the first run at a new version, so without this every such run
+ * stamped itself `+dirty` — on a clean tree, because of nothing but its own
+ * evidence. A marker that is always there is a marker nobody reads.
+ *
+ * `:(top,...)` is what makes the exclusion work from any working directory.
+ * Git resolves a plain pathspec against its own cwd, and the runners call this
+ * with `root` set to `docs/acceptance`, so `docs/acceptance/console-0.1.1`
+ * meant `docs/acceptance/docs/acceptance/console-0.1.1` and matched nothing.
+ * That is how all three 0.10.1 reports came out `+dirty` on a clean tree.
  */
 export function gitHead(opts: { root?: string; exclude?: string[] } = {}): string {
   const root = opts.root ?? ROOT;
   try {
     const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-    const paths = (opts.exclude ?? []).flatMap((p) => ["--", `:(exclude)${p}`]);
+    const paths = (opts.exclude ?? []).flatMap((p) => ["--", `:(top,exclude)${p}`]);
     const dirty = execFileSync("git", ["status", "--porcelain", ...paths], { cwd: root, encoding: "utf8" }).trim();
     return dirty ? `${head}+dirty` : head;
   } catch {
