@@ -151,4 +151,53 @@ export type _Device = SessionDevice;
     }
     expect(output).toBe("");
   });
+
+  // An import line can resolve while the sample around it does not compile:
+  // the API reference's two-step Session recipe imported `Session` twice and
+  // called `CoreSession.open(...)`, a type imported with `import type`. Each
+  // line passed on its own, so the reader got "Duplicate identifier 'Session'"
+  // and "'CoreSession' cannot be used as a value" in their editor. A sample is
+  // read and typed as a whole, so the one recipe that is a whole program is
+  // compiled as a whole.
+  it("compiles the two-step Session recipe as written", () => {
+    const text = readFileSync(new URL("../../../../packages/core/docs/api.md", import.meta.url), "utf8");
+    const blocks = [...text.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) => m[1]!);
+    const recipe = blocks.find((b) => b.includes("或分两步"));
+    expect(recipe, "the two-step Session recipe").toBeDefined();
+
+    const dir = mkdtempSync(join(tmpdir(), "uitest-docsnippet-"));
+    mkdirSync(join(dir, "node_modules"), { recursive: true });
+    symlinkSync(CORE, join(dir, "node_modules", "uitest-sdk"), "junction");
+    // The recipe's variables stand for a caller's; declare them so the compile
+    // is about the recipe and not about where deviceId came from.
+    writeFileSync(
+      join(dir, "snippet.mts"),
+      `declare const deviceId: string;\n${recipe}\nexport {};\n`,
+    );
+    writeFileSync(
+      join(dir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          types: [],
+        },
+        files: ["snippet.mts"],
+      }),
+    );
+
+    const tsc = join(CORE, "..", "..", "node_modules", "typescript", "bin", "tsc");
+    let output = "";
+    try {
+      execFileSync(process.execPath, [tsc, "-p", dir], { cwd: dir, encoding: "utf8" });
+    } catch (e) {
+      const err = e as { stdout?: string; stderr?: string };
+      output = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+    }
+    expect(output).toBe("");
+  });
 });

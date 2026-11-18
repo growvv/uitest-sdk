@@ -152,22 +152,32 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Puts the calculator in front: a keypad and a result line, nothing personal. */
 async function stageCalculator(device: string): Promise<{ restore(): Promise<void> }> {
   const session = await connect({ deviceId: device, stateDir: join(WORK, "stage"), task: "stage", lease: false });
-  const apps = new AppManager(session.device.hdc);
-  // Every screenshot this run takes is published. The lock screen and an open
-  // notification shade carry messages and bank alerts, so the run refuses to
-  // photograph either: the guards close the shade and refuse a PIN-locked phone
-  // before the first capture rather than after the images are on disk.
-  await assertCapturable(session.device.hypium);
-  await assertShadeClosed(session.device.hypium);
-  const before = await apps.current().catch(() => null);
-  await apps.launch("calculator").catch(() => undefined);
-  await sleep(1500);
-  return {
-    async restore() {
-      if (before) await apps.launch(before.bundle, before.ability ? { ability: before.ability } : {}).catch(() => undefined);
-      await session.close();
-    },
-  };
+  try {
+    const apps = new AppManager(session.device.hdc);
+    // Every screenshot this run takes is published. The lock screen and an open
+    // notification shade carry messages and bank alerts, so the run refuses to
+    // photograph either: the guards close the shade and refuse a PIN-locked
+    // phone before the first capture rather than after the images are on disk.
+    //
+    // They are inside this `try` because they are the calls most likely to
+    // throw. Leaving them outside it meant a locked phone aborted the run with
+    // the daemon still up and an `hdc fport` still forwarded — no report, and a
+    // device left in use.
+    await assertCapturable(session.device.hypium);
+    await assertShadeClosed(session.device.hypium);
+    const before = await apps.current().catch(() => null);
+    await apps.launch("calculator").catch(() => undefined);
+    await sleep(1500);
+    return {
+      async restore() {
+        if (before) await apps.launch(before.bundle, before.ability ? { ability: before.ability } : {}).catch(() => undefined);
+        await session.close();
+      },
+    };
+  } catch (e) {
+    await session.close().catch(() => undefined);
+    throw e;
+  }
 }
 
 /** Each of the 21 commands, one real invocation, with the screen it produced. */

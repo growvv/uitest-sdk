@@ -10,7 +10,11 @@ export type { CommandSpec, ArgType, RunnerOptions, RunResult } from "../operatio
 export { EXIT_CODE, statusOf, actionText, isOk } from "../driver/agent/result.js";
 export { exitCodeForError, parseArgv } from "../operations/argv.js";
 export type { ParsedArgv } from "../operations/argv.js";
-export type { Session as CoreSession } from "../operations/session.js";
+// The class, not just its type: `CoreSession.open()` is how a product that
+// brings its own `Device` builds a session, and the API reference documents
+// exactly that. Exported as a type only, the recipe it printed did not compile.
+export { Session as CoreSession } from "../operations/session.js";
+export type { Session as CoreSessionType } from "../operations/session.js";
 // The device probe is a library capability: a product's `doctor` command is a
 // formatter around this, not its own copy of the capability checks.
 export { doctor, renderDoctor, deviceTagOf } from "../operations/doctor.js";

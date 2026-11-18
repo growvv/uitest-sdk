@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createViewerSource } from "../../src/viewer/source.js";
 import type { Screen } from "../../src/driver/agent/screen.js";
+import type { ActionResult } from "../../src/driver/agent/result.js";
 
 function fakes() {
   const setRedact = vi.fn();
@@ -16,7 +17,7 @@ function fakes() {
     tree: { attributes: {}, children: [] },
     at: 0,
   }));
-  const observe = vi.fn(async () => ({ status: "settled" }));
+  const observe = vi.fn(async (): Promise<ActionResult> => ({ status: "settled", screen: null }));
   const session = { reader: { builder: { setRedact }, read }, observe };
   const device = {
     deviceId: "SERIAL",
@@ -72,7 +73,7 @@ describe("createViewerSource", () => {
   // was never taken.
   it("refuses a screenshot the session did not save", async () => {
     const f = fakes();
-    f.observe.mockResolvedValueOnce({ status: "device_locked", text: "unlock the phone" });
+    f.observe.mockResolvedValueOnce({ status: "device_locked", screen: null });
     const source = createViewerSource(f.session as never, f.device as never, { stateDir: "state" });
 
     await expect(source.capture!()).rejects.toThrow(/device_locked/);

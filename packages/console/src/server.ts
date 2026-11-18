@@ -124,11 +124,16 @@ export function consoleHooks(deps: ConsoleDeps): ViewerHooks {
               ? { reason: message.reason }
               : {}),
           });
+          // The list first, the reason last. A client that redraws the inbox
+          // on every list frame would otherwise wipe the message in the same
+          // tick it arrived — which is what a person clicking Deny on an
+          // already-allowed id saw: the row came back and nothing explained
+          // why their click did nothing.
+          list(client);
           if (result.kind === "unknown") fail(client, result.reason ?? "unknown approval id");
           else if (result.kind === "expired") fail(client, result.reason ?? "approval expired");
           else if (result.kind === "already-used") fail(client, result.reason ?? "already used");
           else if (result.kind === "conflict") fail(client, result.reason ?? "already decided");
-          list(client);
           return true;
         }
         case "console:hold":

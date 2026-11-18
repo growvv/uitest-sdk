@@ -101,9 +101,9 @@ describe("console hooks", () => {
       decision: "allow",
     });
 
-    const reply = c.sent[0]!;
-    expect(reply.type).toBe("console:error");
-    expect(String(reply.message)).toContain("unknown approval id");
+    const reply = c.sent.find((m) => m.type === "console:error");
+    expect(reply).toBeDefined();
+    expect(String(reply!.message)).toContain("unknown approval id");
   });
 
   it("tells the tab when its deny lost to an allow already given", () => {
@@ -121,9 +121,26 @@ describe("console hooks", () => {
       decision: "deny",
     });
 
-    const reply = c.sent[0]!;
-    expect(reply.type).toBe("console:error");
-    expect(String(reply.message)).toContain("already allowed");
+    const reply = c.sent.find((m) => m.type === "console:error");
+    expect(reply).toBeDefined();
+    expect(String(reply!.message)).toContain("already allowed");
+  });
+
+  it("sends the refreshed inbox before the reason it did not change", () => {
+    // Order is the whole message here. The page redraws the inbox on every
+    // list frame, so an error sent first is erased by the frame that follows
+    // it — the person sees the row come back and no explanation. The reason
+    // has to be the last thing on the wire.
+    const { dir, approvals, pending } = store();
+    approvals.decide(pending.id, "allow", { by: "cli", scope: "once" });
+    const hooks = consoleHooks(deps(dir, approvals));
+    const c = tab();
+
+    hooks.onMessage!(c, { type: "console:approvals:decide", id: pending.id, decision: "deny" });
+
+    const types = c.sent.map((m) => m.type);
+    expect(types).toContain("console:approvals");
+    expect(types.at(-1)).toBe("console:error");
   });
 
   it("takes the device for the person and reports who had it", async () => {

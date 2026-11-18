@@ -154,6 +154,12 @@ export const CONSOLE_HTML = `
     color: #d29922; font-weight: 600; font-size: 12px;
   }
   #locked-banner.on { display: block; }
+  #console-error {
+    display: none; margin-bottom: 8px; padding: 7px 10px;
+    background: rgba(248,81,73,.16); color: var(--bad);
+    font-weight: 600; font-size: 12px;
+  }
+  #console-error.on { display: block; }
   #hold.on { border-color: var(--bad); color: var(--bad); }
   @media (max-width: 900px) {
     #console-panel { display: none; }
@@ -167,6 +173,7 @@ export const CONSOLE_HTML = `
   <div id="locked-banner">The phone is locked · unlock it to see the screen</div>
   <section id="inbox">
     <h3>Approvals waiting for you</h3>
+    <div id="console-error"></div>
     <div id="approvals-list" class="list"><div class="empty">none</div></div>
   </section>
   <section id="activity">
@@ -189,7 +196,20 @@ export const CONSOLE_SCRIPT = `
   var holdEl = document.getElementById('hold');
   var heldEl = document.getElementById('held-banner');
   var lockedEl = document.getElementById('locked-banner');
+  var errorEl = document.getElementById('console-error');
   var held = false;
+
+  // The inbox redraws on every poll, so an error written into the list is gone
+  // in the same tick. It lives in its own element above the list and stays
+  // until the next decision or a successful poll shows the inbox is healthy.
+  function showError(text) {
+    errorEl.textContent = text;
+    errorEl.className = 'on';
+  }
+
+  function clearError() {
+    errorEl.className = '';
+  }
 
   // A locked phone is the one state where a black mirror is the truth rather
   // than a fault: the screen is off, so there is nothing to stream. Saying so
@@ -234,6 +254,7 @@ export const CONSOLE_SCRIPT = `
     var row = target.closest('[data-id]');
     if (!row) return;
     var select = row.querySelector('[data-scope]');
+    clearError();
     viewer.send({
       type: 'console:approvals:decide',
       id: row.getAttribute('data-id'),
@@ -254,8 +275,7 @@ export const CONSOLE_SCRIPT = `
   // phone was still locked.
   viewer.on('nodes', function (msg) { setLocked(!!msg.locked); });
   viewer.on('console:error', function (msg) {
-    var text = String(msg.message || 'console error');
-    approvalsEl.insertAdjacentHTML('afterbegin', '<div class="empty">' + escapeHtml(text) + '</div>');
+    showError(String(msg.message || 'console error'));
   });
 
   // Poll while idle: an agent in another process can be gated at any moment,

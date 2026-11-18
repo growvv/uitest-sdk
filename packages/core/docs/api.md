@@ -90,12 +90,11 @@ SDK 不做静默降级：能走 H.264 就走 H.264，走不了会明确告诉你
 
 ```ts
 import { connect, Device, Session } from "uitest-sdk";
+import { CoreSession } from "uitest-sdk/commands";
 
 const session = await connect({ deviceId, task: "check WLAN" }); // 一步
 // 或分两步，自己管 Device 的生命周期：
 const dev = await Device.connect({ deviceId });
-import { Session } from "uitest-sdk";
-import type { CoreSession } from "uitest-sdk/commands";
 const session2 = new Session(dev, await CoreSession.open(dev, { task: "check WLAN" }));
 ```
 
