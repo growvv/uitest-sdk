@@ -243,6 +243,8 @@ async function start(
     castFailures?: number;
     /** Start recording at startup, as `--record` does. */
     recordOnStart?: boolean;
+    /** Makes the first N `startRecording` calls fail, then succeed. */
+    startFailures?: number;
     /** Keeps the startup `startRecording` pending until `releaseStart` is called. */
     holdStart?: boolean;
     /** A guard the product supplies; rejects to mean "the device is not yours". */
@@ -323,6 +325,9 @@ async function start(
         // The startup recording can be in flight while a tab clicks Record;
         // the gate makes that window wide enough to test.
         if (startGate) await startGate;
+        if (over.startFailures !== undefined && recordings <= over.startFailures) {
+          throw new Error("device busy; try again");
+        }
         recording = true;
         return "/tmp/rec.mp4";
       },
@@ -938,6 +943,32 @@ describe("ViewerServer: capture and record", () => {
     c.send({ type: "shot" });
     await until(() => c.texts.some((t) => t.type === "saved" && t.error));
     expect(c.texts.find((t) => t.type === "saved")!.error).toBe("device_locked");
+    c.close();
+  });
+
+  /**
+   * A startup failure is remembered for the greeting. A later page-started
+   * recording makes that reason obsolete, and a tab that connects afterwards
+   * must not be told "record failed" for a recording that is running.
+   */
+  it("forgets a startup failure once a page starts a recording", async () => {
+    // The startup attempt and the `live` retry both fail; the page's own click
+    // is the one that succeeds.
+    const h = await start({ recordOnStart: true, startFailures: 2 });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    h.cast.push(keyframe());
+    await until(() => c.texts.some((t) => t.type === "record" && t.error));
+
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.recording === true));
+
+    const late = await connect(h.port);
+    await until(() => late.texts.some((t) => t.type === "hello"));
+    const hello = late.texts.find((t) => t.type === "hello")!;
+    expect(hello.recording).toBe(true);
+    expect(hello.recordingError).toBeUndefined();
+    late.close();
     c.close();
   });
 
@@ -1597,5 +1628,42 @@ describe("ViewerServer: features, hooks and page", () => {
     expect(res.body).toContain("window.uitestViewer.on");
     // The built-in page is still the document around the extension.
     expect(res.body).toContain("VideoDecoder");
+  });
+});
+
+/**
+ * The grace timer's `stopCast()` runs beside `close()`.
+ *
+ * The last tab leaving schedules `stopCast()` after `graceMs`. It clears
+ * `this.cast` and awaits `cast.dispose()`, but nothing tracked that promise:
+ * a `close()` landing in the window saw no cast, closed the HTTP server and
+ * resolved while the device daemon and its forward were still being released.
+ */
+describe("ViewerServer grace-period shutdown", () => {
+  it("waits for the grace stop before close resolves", async () => {
+    const h = await start({ graceMs: 50 });
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => c.binaries.length > 0);
+
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let disposeBegun = false;
+    h.cast.disposeStarted = () => {
+      disposeBegun = true;
+    };
+    h.cast.holdDispose(gate);
+
+    c.close();
+    // The grace timer fires and starts disposing the cast.
+    await until(() => disposeBegun, 3000);
+    let closed = false;
+    const closing = h.server.close().then(() => (closed = true));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(closed).toBe(false);
+
+    release();
+    await closing;
+    expect(h.cast.disposed).toBe(true);
   });
 });

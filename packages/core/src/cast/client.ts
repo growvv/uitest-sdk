@@ -123,6 +123,10 @@ export class H264CastClient implements CastClient {
       "-iFrameInterval",
       String(opts.iFrameInterval ?? 2000),
     ];
+    // `pidof` before the launch: if the marker lookup below misses, the pidof
+    // difference is the only way to know which process this call started, and
+    // the alternative to killing it is leaving a daemon nobody owns.
+    const beforeStart = pids(await hdc.shell("pidof uitest"));
     await hdc.shell(`/system/bin/uitest ${args.join(" ")}`);
 
     // Identify our daemon by the socket name in its argv, not by the timing of
@@ -133,6 +137,14 @@ export class H264CastClient implements CastClient {
     // turns killing each other's daemons.
     const ownPid = await ownDaemon(hdc, `-scrcpy_socket_name ${socketName}`);
     if (!ownPid) {
+      // The daemon may have started even though `ps -ef` did not show it yet.
+      // Exactly one new pid is attributable to this call; killing it is the
+      // only way to free the phone, and refusing to because the marker is
+      // missing is how every failed attempt added a process.
+      const fresh = [...pids(await hdc.shell("pidof uitest"))].filter((p) => !beforeStart.has(p));
+      if (fresh.length === 1) {
+        await hdc.shell(`kill -9 ${fresh[0]!}`).catch(() => undefined);
+      }
       throw new DaemonStartError(
         `casting daemon did not start (no process carries -scrcpy_socket_name ${socketName}; extension ${EXTENSION_NAME})`,
         "ENODAEMON",

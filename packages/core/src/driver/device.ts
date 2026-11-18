@@ -85,7 +85,8 @@ export class Device {
     private readonly extDir: string,
     agent: AgentClient,
     private readonly localPort: number,
-    private readonly ownPid: string | null,
+    /** Every daemon this connection started, the reconnect's included. */
+    private readonly ownPids: Set<string>,
   ) {
     this.hdc = hdc;
     this.deviceId = deviceId;
@@ -162,9 +163,13 @@ export class Device {
 
     const listening = await isAgentListening(hdc);
     let ownPid: string | null = null;
+    // Every daemon this connection started, including the ones the reconnect
+    // path starts later. `dispose()` stops all of them and nothing else.
+    const ownPids = new Set<string>();
 
     if (!listening) {
       ownPid = await startDaemon(hdc);
+      if (ownPid !== null) ownPids.add(ownPid);
       // Inside a guard: a daemon that spawns but never binds is a process this
       // call owns and must not outlive it. Without this, every retry added one
       // more `uitest` process to the phone, and none of them were ever killed.
@@ -186,7 +191,11 @@ export class Device {
         opts.autoRestart !== false
           ? async () => {
               if (!(await isAgentListening(hdc))) {
-                await startDaemon(hdc);
+                // The replacement daemon is this connection's too. Discarding
+                // the pid left it on the phone after `dispose()`, which only
+                // knew the pid from the first start.
+                const replacement = await startDaemon(hdc);
+                if (replacement !== null) ownPids.add(replacement);
                 await waitForAgent(hdc);
               }
               return connectTcp(localPort);
@@ -222,7 +231,10 @@ export class Device {
         sock = null;
         for (const pid of pids) await hdc.shell(`kill -9 ${pid}`).catch(() => undefined);
         await sleep(200);
-        await startDaemon(hdc);
+        const restarted = await startDaemon(hdc);
+        // The replacement is this connection's: it was started here, and the
+        // old daemon that held the dead lock is gone.
+        if (restarted !== null) ownPids.add(restarted);
         await waitForAgent(hdc);
         sock = await connectTcp(localPort);
         agent = new AgentClient(sock, {
@@ -238,14 +250,16 @@ export class Device {
       if (agent) agent.close();
       else if (sock) sock.destroy();
       if (localPort !== 0) await hdc.fportRemove(localPort).catch(() => undefined);
-      if (ownPid !== null) await hdc.shell(`kill -9 ${ownPid}`).catch(() => undefined);
+      // Every daemon this call started, the health-check restart included —
+      // killing only the first one left the replacement running.
+      for (const pid of ownPids) await hdc.shell(`kill -9 ${pid}`).catch(() => undefined);
       throw e;
     }
 
     // The target actually in use: an explicit id, the environment's, or the
     // first attached one that is connected. A trace and a lease are keyed by it.
     const deviceId = target.id;
-    return new Device(hdc, opts, deviceId, abi, extDir, agent!, localPort, ownPid);
+    return new Device(hdc, opts, deviceId, abi, extDir, agent!, localPort, ownPids);
   }
 
   get state(): "connected" | "disconnected" {
@@ -253,7 +267,9 @@ export class Device {
   }
 
   get ownsDaemon(): boolean {
-    return this.ownPid !== null;
+    // A connection that reused an existing daemon owns none until its
+    // reconnect starts one; the set is the truth, not the first start's pid.
+    return this.ownPids.size > 0;
   }
 
   /**
@@ -298,8 +314,13 @@ export class Device {
     await this.hdc.fportRemove(this.localPort).catch(() => undefined);
 
     // Only a daemon this instance started, and only when explicitly asked for.
-    if (this.ownPid !== null && this.ownPid !== "" && this.opts.ownDaemon === true) {
-      await this.hdc.shell(`kill -9 ${this.ownPid}`).catch(() => undefined);
+    // The reconnect may have started a replacement; it is as much this
+    // connection's as the first one, and leaving it would strand a process
+    // nobody owns.
+    if (this.opts.ownDaemon === true) {
+      for (const pid of this.ownPids) {
+        if (pid) await this.hdc.shell(`kill -9 ${pid}`).catch(() => undefined);
+      }
     }
   }
 

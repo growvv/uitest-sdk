@@ -581,11 +581,15 @@ describe("Device.connect", () => {
     const agent = await startFakeAgent();
     hdcState.agentPort = agent.port;
 
-    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+    const dev = await Device.connect({ extensionDir: hdcState.extDir, ownDaemon: true });
     expect(hdcState.killed).toContain("1000");
     expect(hdcState.shellCalls.some((c) => c.includes("start-daemon"))).toBe(true);
     expect(dev.state).toBe("connected");
     await dev.dispose();
+    // The replacement the restart started is this connection's too: the daemon
+    // that held the dead lock was killed, and the new one must not outlive the
+    // device it was started for.
+    expect(hdcState.killed).toContain("4000");
     await agent.close();
   });
 
@@ -682,6 +686,41 @@ describe("Device.connect", () => {
     await input.close();
     expect(hdcState.removedPorts).toContain(hdcState.agentPort);
     await dev.dispose();
+    await agent.close();
+  });
+});
+
+/**
+ * A daemon the auto-restart started is owned by this connection too.
+ *
+ * `reconnect` starts a replacement daemon when the agent is no longer
+ * listening, but it discarded the pid `startDaemon()` returned. `dispose()`
+ * only knew the original `ownPid`, so the replacement outlived the device —
+ * a process this connection spawned, left on the phone with nobody to stop
+ * it.
+ */
+describe("Device.connect auto-restart ownership", () => {
+  it("disposes the daemon the reconnect started", async () => {
+    hdcState.listening = true;
+    hdcState.pidofAfterStart = "1000 2000";
+    const agent = await startFakeAgent();
+    hdcState.agentPort = agent.port;
+
+    const dev = await Device.connect({ extensionDir: hdcState.extDir, ownDaemon: true });
+    // The connect used a daemon that was already listening, so it owns none
+    // yet. Kill the transport, and the next call finds the agent gone: the
+    // reconnect starts a replacement and that one is ours.
+    const sock = (dev.agent as unknown as { sock: net.Socket }).sock;
+    sock.destroy();
+    hdcState.listening = false;
+    hdcState.pidof = "1000";
+    hdcState.pidofAfterStart = "1000 3000";
+
+    await expect(dev.agent.call("CtrlCmd", { api: "y", args: [] }))
+      .resolves.toEqual({ width: 1216, height: 2688 });
+
+    await dev.dispose();
+    expect(hdcState.killed).toContain("3000");
     await agent.close();
   });
 });

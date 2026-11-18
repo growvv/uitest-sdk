@@ -52,16 +52,32 @@ export class Recording {
    * synchronously, before the first await, so the second call is refused.
    */
   private starting = false;
+  /**
+   * The `start()` in flight, so a `stop()` that arrives during it waits for the
+   * cast to exist instead of reporting that nothing was running. Returning
+   * `null` there told the caller the file was not coming while `start()` was
+   * about to install a live cast nobody would stop.
+   */
+  private startPromise: Promise<string> | null = null;
+  /**
+   * The `stop()` in flight. `this.cast` is cleared before `dispose()` is
+   * awaited, so a second caller saw nothing running and resolved at once —
+   * while the first was still stopping the daemon, pulling the MP4 and
+   * removing the forward.
+   */
+  private stopPromise: Promise<string | null> | null = null;
 
   constructor(private readonly opts: RecordingOptions) {}
 
   /** Starts recording; resolves with the path the MP4 will be written to. */
   async start(): Promise<string> {
-    if (this.cast || this.starting) throw new UitestError("already recording", "EBADARG");
+    if (this.cast || this.starting || this.stopPromise) {
+      throw new UitestError("already recording", "EBADARG");
+    }
     this.starting = true;
 
     const out = this.opts.outputPath ?? join(this.opts.stateDir, "shots", `live-${Date.now()}.mp4`);
-    try {
+    const run = (async () => {
       await mkdir(dirname(out), { recursive: true });
 
       const stream = this.opts.streamCast;
@@ -79,8 +95,14 @@ export class Recording {
       this.cast = cast;
       this.path = out;
       return out;
+    })();
+    // Recorded synchronously, before the first await, so `stop()` can join it.
+    this.startPromise = run;
+    try {
+      return await run;
     } finally {
       this.starting = false;
+      if (this.startPromise === run) this.startPromise = null;
     }
   }
 
@@ -88,13 +110,29 @@ export class Recording {
    * Stops the recording and resolves with the finished file, or null when
    * nothing was running. `dispose()` ends the call and pulls the MP4.
    */
-  async stop(): Promise<string | null> {
+  stop(): Promise<string | null> {
+    // A second caller joins the first stop rather than returning `null` while
+    // the daemon, the file and the forward are still being released.
+    if (this.stopPromise) return this.stopPromise;
+    this.stopPromise = this.finishStop();
+    return this.stopPromise;
+  }
+
+  private async finishStop(): Promise<string | null> {
+    // A start that is still opening the daemon is about to install a cast. It
+    // is ours to stop, not something to report as absent.
+    const starting = this.startPromise;
+    if (starting) await starting.catch(() => undefined);
     const cast = this.cast;
     const out = this.path;
     this.cast = null;
     this.path = null;
-    if (!cast) return null;
-    await cast.dispose();
-    return out;
+    try {
+      if (!cast) return null;
+      await cast.dispose();
+      return out;
+    } finally {
+      this.stopPromise = null;
+    }
   }
 }

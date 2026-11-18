@@ -416,3 +416,30 @@ describe("WsCastClient", () => {
     await fake.close();
   });
 });
+
+/**
+ * The ws daemon launches but `ps -ef` does not yet carry its `-p <port>`.
+ *
+ * `ownDaemon()` ran before the cleanup scope, so the throw left the daemon it
+ * had just started running with nothing to kill it by — the same leak the
+ * gRPC path had. The pidof difference identifies it.
+ */
+describe("WsCastClient.start — daemon launched but not identifiable", () => {
+  it("kills the one new daemon when the marker lookup misses", async () => {
+    const { hdc, calls } = fakeHdc(1, { psLine: "" });
+    // Before the start `pidof` shows only the agent daemon; after it, the cast
+    // daemon is there too.
+    let started = false;
+    const original = hdc.shell.bind(hdc);
+    (hdc as unknown as { shell(cmd: string): Promise<string> }).shell = async (cmd: string) => {
+      if (cmd.includes("start-daemon")) started = true;
+      if (cmd.includes("pidof uitest")) return started ? "1000 2000" : "1000";
+      return original(cmd);
+    };
+    await expect(
+      WsCastClient.start(hdc, { mode: "stream", port: 5000, wsExtension }),
+    ).rejects.toThrow(DaemonStartError);
+    expect(calls).toContain("kill -9 2000");
+    expect(calls).not.toContain("kill -9 1000");
+  });
+});

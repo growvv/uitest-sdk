@@ -212,6 +212,8 @@ export class Session {
    * EADDRINUSE.
    */
   private viewSeq = 0;
+  /** The `close()` in flight, so a second caller joins it rather than racing. */
+  private closePromise: Promise<void> | null = null;
   /** Handles from `keepAwake` whose restore `close()` still owes. */
   private readonly awakeHandles = new Set<KeepAwakeHandle>();
 
@@ -395,7 +397,17 @@ export class Session {
   }
 
   /** Closes every viewer this session opened, releases the lease, disposes the device. */
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    // A second caller joins the first cleanup instead of running beside it:
+    // the loop below removes each viewer from the set before awaiting its
+    // close, so a concurrent caller found the set empty, released the core and
+    // resolved while the viewer still owned a cast daemon and an fport.
+    if (this.closePromise) return this.closePromise;
+    this.closePromise = this.finishClose();
+    return this.closePromise;
+  }
+
+  private async finishClose(): Promise<void> {
     for (const viewer of [...this.views]) {
       this.views.delete(viewer);
       await viewer.close().catch(() => undefined);

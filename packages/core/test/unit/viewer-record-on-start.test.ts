@@ -64,7 +64,13 @@ afterEach(async () => {
 });
 
 async function start(
-  opts: { recordOnStart?: boolean; startGate?: Promise<void>; startFails?: Error } = {},
+  opts: {
+    recordOnStart?: boolean;
+    startGate?: Promise<void>;
+    startFails?: Error;
+    /** Fails this many `startRecording` calls, then succeeds. */
+    failStarts?: number;
+  } = {},
 ) {
   const cast = new FakeCast();
   const started: string[] = [];
@@ -86,6 +92,9 @@ async function start(
         started.push("start");
         if (opts.startGate) await opts.startGate;
         if (opts.startFails) throw opts.startFails;
+        if (opts.failStarts !== undefined && started.length <= opts.failStarts) {
+          throw new Error("device busy; try again");
+        }
         return "/tmp/x.mp4";
       },
       async stopRecording() {
@@ -226,6 +235,29 @@ describe("recordOnStart", () => {
     // The tab that was already attached learns about it from the broadcast.
     const text = await readText(c.socket, (m) => m.type === "record" && "error" in m);
     expect(String(text.error)).toMatch(/H\.264 extension/);
+    c.close();
+  });
+
+  /**
+   * A failure is remembered for the greeting, so a tab that connects later
+   * still learns why `--record` produced nothing. But once a retry succeeds
+   * the reason is no longer true: the greeting carried both `recording: true`
+   * and the stale error, and the page toasted "record failed" for a recording
+   * that was running.
+   */
+  it("forgets a startup failure once a retry succeeds", async () => {
+    // Attempt 1 runs at startup, before any tab, and fails. The `live`
+    // transition retries (attempt 2) and succeeds.
+    const h = await start({ recordOnStart: true, failStarts: 1 });
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => h.started.length >= 2);
+
+    const late = await connect(h.port);
+    const hello = await readText(late.socket, (m) => m.type === "hello");
+    expect(hello.recording).toBe(true);
+    expect(hello.recordingError).toBeUndefined();
+    late.close();
     c.close();
   });
 });

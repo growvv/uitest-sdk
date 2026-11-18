@@ -51,3 +51,51 @@ describe("H264CastClient.start — failure after the forward", () => {
     expect(removed).toHaveLength(1);
   });
 });
+
+/**
+ * The daemon launches but its pid cannot be identified.
+ *
+ * `ownDaemon()` ran before the cleanup scope, so a `start-daemon` that
+ * succeeded while `ps -ef` did not yet show the marker threw out of the
+ * function with the daemon already running and nothing to kill it by. The
+ * lookup belongs inside the scope, with the pid it did not find recorded as
+ * "unknown" rather than the whole daemon abandoned.
+ */
+describe("H264CastClient.start — daemon launched but not identifiable", () => {
+  it("kills the daemon it can see on the device when the marker lookup misses", async () => {
+    const local: string[] = [];
+    const removedLocal: number[] = [];
+    let startDaemonCalls = 0;
+    const hdc2 = {
+      async shell(cmd: string): Promise<string> {
+        local.push(cmd);
+        if (cmd.includes("start-daemon")) {
+          startDaemonCalls++;
+          return "";
+        }
+        if (cmd.includes("pidof uitest")) {
+          // Before the start only the agent daemon; after it, the cast daemon
+          // is there too — but `ps -ef` has not caught up, so the marker
+          // lookup finds nothing.
+          return startDaemonCalls > 0 ? "1000 2000" : "1000";
+        }
+        if (cmd.includes("ps -ef")) return "";
+        return "";
+      },
+      async fportAdd(port: number): Promise<number> {
+        return port;
+      },
+      async fportRemove(port: number): Promise<void> {
+        removedLocal.push(port);
+      },
+    } as unknown as HdcRunner;
+
+    await expect(
+      H264CastClient.start(hdc2, { mode: "stream", socketName: "uitest_live_probe" }),
+    ).rejects.toThrow(/did not start/);
+    // The pid this start added is the only one it may kill — the agent daemon
+    // 1000 is somebody else's.
+    expect(local).toContain("kill -9 2000");
+    expect(local).not.toContain("kill -9 1000");
+  });
+});

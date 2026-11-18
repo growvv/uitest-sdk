@@ -14,6 +14,9 @@ class FakeRecordClient implements CastClient {
   readonly castKind = "h264" as const;
   streamCalls = 0;
   disposed = false;
+  disposes = 0;
+  /** Holds `dispose()` open so a second `stop()` can be observed mid-cleanup. */
+  disposeGate: Promise<void> | null = null;
   async *stream(): AsyncIterable<never> {
     this.streamCalls++;
     // A record client streams nothing to us: frames go to the device muxer.
@@ -21,6 +24,8 @@ class FakeRecordClient implements CastClient {
   }
   async requestIDRFrame(): Promise<void> {}
   async dispose(): Promise<void> {
+    this.disposes++;
+    if (this.disposeGate) await this.disposeGate;
     this.disposed = true;
   }
 }
@@ -188,5 +193,76 @@ describe("Recording: chosen output path", () => {
     expect(await rec.start()).toBe("C:/tmp/demo.mp4");
     expect(options[0]!.outputPath).toBe("C:/tmp/demo.mp4");
     await rec.stop();
+  });
+});
+
+describe("Recording: stop joins an in-flight stop", () => {
+  /**
+   * `stop()` cleared `this.cast` before awaiting `cast.dispose()`, so a second
+   * caller saw nothing running and resolved `null` at once — while the first
+   * was still stopping the daemon, pulling the MP4 and removing the forward.
+   * A process that exits when the second call resolves cuts that off.
+   */
+  it("makes a second stop wait for the first", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const made: FakeRecordClient[] = [];
+    const rec = new Recording({
+      stateDir: "C:/tmp/state",
+      socketName: "uitest_live_record_4242",
+      createCast: async () => {
+        const c = new FakeRecordClient();
+        c.disposeGate = gate;
+        made.push(c);
+        return c;
+      },
+      streamCast: { mode: "stream" } as CastOptions,
+    });
+    const path = await rec.start();
+
+    const first = rec.stop();
+    await new Promise((r) => setTimeout(r, 20));
+    let secondDone = false;
+    const second = rec.stop().then(() => {
+      secondDone = true;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(secondDone).toBe(false);
+
+    release();
+    await expect(first).resolves.toBe(path);
+    await second;
+    expect(secondDone).toBe(true);
+    // One dispose: the second caller joined the first.
+    expect(made[0]!.disposes).toBe(1);
+  });
+
+  /**
+   * A stop that lands while `start()` is still opening the daemon must not
+   * report "nothing was running": the start is about to install a live cast,
+   * and returning `null` there tells the caller the file is not coming.
+   */
+  it("waits for an in-flight start rather than reporting nothing", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const made: FakeRecordClient[] = [];
+    const rec = new Recording({
+      stateDir: "C:/tmp/state",
+      socketName: "uitest_live_record_4242",
+      createCast: async () => {
+        await gate;
+        const c = new FakeRecordClient();
+        made.push(c);
+        return c;
+      },
+      streamCast: { mode: "stream" } as CastOptions,
+    });
+
+    const starting = rec.start();
+    const stopping = rec.stop();
+    release();
+    const path = await starting;
+    await expect(stopping).resolves.toBe(path);
+    expect(made[0]!.disposed).toBe(true);
   });
 });

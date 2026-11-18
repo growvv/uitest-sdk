@@ -103,3 +103,40 @@ describe("session API uses core's shared implementations", () => {
     await expect(rec.stop()).resolves.toBe(out);
   });
 });
+
+/**
+ * `Session.close()` is called by the product's own shutdown and again by a
+ * supervisor's. It removed each viewer from the set before awaiting its close,
+ * so the second caller found an empty set, went straight to `core.release()`
+ * and resolved — while the first viewer still owned a cast daemon and an
+ * fport. A process that exits on the second call leaves them on the phone.
+ */
+describe("Session.close", () => {
+  it("makes a second close wait for the first", async () => {
+    windowCalls.length = 0;
+    const s = session();
+    const view = await s.view.open({ open: false });
+    let open = () => undefined as void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    // The viewer's close is what the session must wait for.
+    const stub = (s as unknown as { views: Set<{ close(): Promise<void> }> }).views.values().next()
+      .value as { close(): Promise<void> };
+    stub.close = async () => {
+      await gate;
+    };
+
+    const first = s.close();
+    await new Promise((r) => setTimeout(r, 20));
+    let secondDone = false;
+    const second = s.close().then(() => {
+      secondDone = true;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(secondDone).toBe(false);
+
+    open();
+    await Promise.all([first, second]);
+    expect(secondDone).toBe(true);
+    void view;
+  });
+});

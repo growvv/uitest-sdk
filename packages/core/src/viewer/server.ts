@@ -1069,6 +1069,10 @@ export class ViewerServer {
       try {
         const path = await start.call(this.source);
         this.recording = path;
+        // A startup attempt may have failed earlier; its reason is obsolete
+        // now, and the greeting would otherwise toast "record failed" for a
+        // recording the page started itself.
+        this.recordingError = null;
         // Every tab shows the same badge: the recording belongs to the device,
         // not to the tab that started it.
         this.broadcastText({ type: "record", recording: true, path });
@@ -1544,6 +1548,10 @@ export class ViewerServer {
           return;
         }
         this.recording = path;
+        // The failure this greeting remembered is no longer true once a retry
+        // succeeds; keeping it told a new tab "record failed" for a recording
+        // that was running.
+        this.recordingError = null;
         this.broadcastText({ type: "record", recording: true, path });
       } catch (e) {
         // No tab may be attached yet; one that arrives later reads this from

@@ -146,6 +146,9 @@ export class WsCastClient implements CastClient {
       "-p",
       String(port),
     ];
+    // The pidof difference is the only identity left when the marker lookup
+    // below misses; without it a daemon that started is abandoned.
+    const beforeStart = pids(await hdc.shell("pidof uitest"));
     await hdc.shell(`/system/bin/uitest ${args.join(" ")}`);
 
     // Identify our daemon by its `-p <port>` in the argv, not by pid timing:
@@ -154,6 +157,12 @@ export class WsCastClient implements CastClient {
     // other's daemons.
     const ownPid = await ownDaemon(hdc, `-p ${port}`);
     if (!ownPid) {
+      // A daemon that launched but has not shown up in `ps -ef` yet is still
+      // this call's process. Exactly one new pid is attributable to it.
+      const fresh = [...pids(await hdc.shell("pidof uitest"))].filter((p) => !beforeStart.has(p));
+      if (fresh.length === 1) {
+        await hdc.shell(`kill -9 ${fresh[0]!}`).catch(() => undefined);
+      }
       throw new DaemonStartError(
         `casting daemon did not start (no process carries -p ${port}; ` +
           `port ${port} may already be in use by another daemon)`,
