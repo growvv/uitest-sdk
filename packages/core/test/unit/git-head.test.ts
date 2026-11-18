@@ -81,6 +81,19 @@ describe("gitHead", () => {
     expect(gitHead({ root: sub, exclude: ["docs/acceptance/core-0.10.1"] })).toMatch(/\+dirty$/);
   });
 
+  // `path.relative()` returns backslashes on Windows, and git reads a
+  // backslash in a pathspec as an escape — `docs\acceptance` is the path
+  // `docsacceptance`, which matches nothing. So the exclusion is silently dead
+  // on the one platform this project is developed on, and every report came out
+  // `+dirty` again after the `:(top,...)` fix. Pathspecs are always
+  // forward-slashed, on every platform.
+  it("excludes a directory given with Windows separators", () => {
+    const dir = repo();
+    mkdirSync(join(dir, "docs", "acceptance", "core-0.10.1"), { recursive: true });
+    writeFileSync(join(dir, "docs", "acceptance", "core-0.10.1", "report.json"), "{}\n");
+    expect(gitHead({ root: dir, exclude: ["docs\\acceptance"] })).toMatch(/^[0-9a-f]{7,}$/);
+  });
+
   // Three runners each had their own copy, and a fix in one would have left
   // the other two stamping `+dirty` on every first run at a new version.
   //

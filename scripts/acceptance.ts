@@ -61,13 +61,17 @@ export function envName(target: string): string {
  * Git resolves a plain pathspec against its own cwd, and the runners call this
  * with `root` set to `docs/acceptance`, so `docs/acceptance/console-0.1.1`
  * meant `docs/acceptance/docs/acceptance/console-0.1.1` and matched nothing.
- * That is how all three 0.10.1 reports came out `+dirty` on a clean tree.
+ *
+ * The separator is normalized because `path.relative()` returns backslashes on
+ * Windows and git reads a backslash in a pathspec as an escape: `docs\acceptance`
+ * is the path `docsacceptance`, which matches nothing. A pathspec is always
+ * forward-slashed, whatever platform produced the path.
  */
 export function gitHead(opts: { root?: string; exclude?: string[] } = {}): string {
   const root = opts.root ?? ROOT;
   try {
     const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-    const paths = (opts.exclude ?? []).flatMap((p) => ["--", `:(top,exclude)${p}`]);
+    const paths = (opts.exclude ?? []).flatMap((p) => ["--", `:(top,exclude)${p.replaceAll("\\", "/")}`]);
     const dirty = execFileSync("git", ["status", "--porcelain", ...paths], { cwd: root, encoding: "utf8" }).trim();
     return dirty ? `${head}+dirty` : head;
   } catch {
