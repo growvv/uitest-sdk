@@ -175,18 +175,39 @@ export async function capturePage({
       }
       await sleep(150);
     }
-    if (!ready) throw new Error(`page never satisfied: ${waitFor}`);
+    const grab = async () => {
+      const shot = await send("Page.captureScreenshot", {
+        format: target.toLowerCase().endsWith(".png") ? "png" : "jpeg",
+        quality: target.toLowerCase().endsWith(".png") ? undefined : 88,
+      });
+      const data = shot.result?.data;
+      if (!data) throw new Error("captureScreenshot returned nothing");
+      await writeFile(target, Buffer.from(data, "base64"));
+    };
+
+    if (!ready) {
+      // A timeout is the failure that most needs a picture: the predicate is
+      // the assertion ("a frame is on the canvas"), so what the page did show
+      // — a black canvas, a "reconnecting" overlay — is the evidence. Save it
+      // under the name the report already uses and say which file it is; a
+      // thrown expression alone cost a separate probe to explain.
+      const failed = target.replace(/\.jpg$/i, "-timeout.jpg");
+      try {
+        const shot = await send("Page.captureScreenshot", {
+          format: "jpeg",
+          quality: 80,
+        });
+        if (shot.result?.data) await writeFile(failed, Buffer.from(shot.result.data, "base64"));
+      } catch {
+        // The page is unresponsive too; the reason still stands on its own.
+      }
+      throw new Error(`page never satisfied: ${waitFor} · what the page showed: ${failed}`);
+    }
 
     // One more frame so the canvas is painted after the predicate goes true.
     await sleep(400);
     const notes = prepare ? await prepare(evaluate) : [];
-    const shot = await send("Page.captureScreenshot", {
-      format: target.toLowerCase().endsWith(".png") ? "png" : "jpeg",
-      quality: target.toLowerCase().endsWith(".png") ? undefined : 88,
-    });
-    const data = shot.result?.data;
-    if (!data) throw new Error("captureScreenshot returned nothing");
-    await writeFile(target, Buffer.from(data, "base64"));
+    await grab();
     return { path: target, notes: notes ?? [] };
   } finally {
     try {
