@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uitest-sdk 0.10.1 验收报告 · uitest-sdk</title>
+  <meta name="description" content="uitest-sdk 0.10.1 的验收记录：41 个用例、2026-11-18、提交 e5946be，每条都带设备或浏览器截图。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#packages">三个包</a>
+      <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
+      <a href="index.html#showcase">实拍</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">文档</a>
+      <a href="acceptance.html" aria-current="page">验收</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="目录">
+      <a href="#summary">一页结论</a>
+      <a href="#devices">设备</a>
+      <a href="#cases">用例与截图</a>
+      <a href="#issues">问题</a>
+      <a href="#rerun">自己复现</a>
+      <a href="acceptance.html">全部产品的验收</a>
+    </aside>
+
+    <article class="doc-body">
+      <h1>uitest-sdk 0.10.1 验收报告</h1>
+      <p class="doc-meta"><strong>uitest-sdk</strong> 0.10.1 · 2026-11-18 · 提交 <code>e5946be</code></p>
+
+      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/core-0.10.1/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的，截图由被测程序自己产出。</p>
+
+      <h2 id="summary">一页结论</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>用例</th><th>通过</th><th>失败</th><th>跳过</th></tr></thead>
+          <tbody>
+            <tr><td>41</td><td>41</td><td>0</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="devices">设备</h2>
+      <p class="note">设备只以序列号哈希后的 8 位标签出现，原序列号不进入仓库，也不进入本页。</p>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>标签</th><th>型号</th><th>分辨率</th></tr></thead>
+          <tbody>
+            <tr><td><code>6c585f5b</code></td><td>BRA-AL00</td><td>1216x2688</td></tr>
+            <tr><td><code>7544d645</code></td><td>MLR-AL10</td><td>1600x2560</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="cases">用例与截图</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>#</th><th>用例</th><th>结果</th><th>截图</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>viewer-mirror</code></td>
+              <td>viewer 镜像（真实浏览器）<br><span class="cell-detail">1216x2688 · 0 notes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/viewer-mirror-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/viewer-mirror-6c585f5b.jpg" alt="viewer 镜像（真实浏览器）" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>viewer-inspect</code></td>
+              <td>viewer 节点表<br><span class="cell-detail">14 node rows</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/viewer-inspect-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/viewer-inspect-6c585f5b.jpg" alt="viewer 节点表" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>viewer-privacy</code></td>
+              <td>viewer 隐私开关<br><span class="cell-detail">switch on-&gt;off-&gt;on (was true) · 遮罩在读布局时完成，不覆盖在画面上</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/viewer-privacy-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/viewer-privacy-6c585f5b.jpg" alt="viewer 隐私开关" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>connect</code></td>
+              <td>connect() 与会话<br><span class="cell-detail">com.huawei.hmos.calculator · 1216x2688</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/connect-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/connect-6c585f5b.jpg" alt="connect() 与会话" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>click</code></td>
+              <td>act.tap 点击<br><span class="cell-detail">settled · 1484 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/click-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/click-6c585f5b.jpg" alt="act.tap 点击" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>swipe</code></td>
+              <td>act.swipe 滑动<br><span class="cell-detail">settled · 1879 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/swipe-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/swipe-6c585f5b.jpg" alt="act.swipe 滑动" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>touch</code></td>
+              <td>触摸协议 down/move/up<br><span class="cell-detail">down/move/up ok</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/touch-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/touch-6c585f5b.jpg" alt="触摸协议 down/move/up" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>triggerKey</code></td>
+              <td>act.key 系统按键<br><span class="cell-detail">settled · power</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/triggerKey-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/triggerKey-6c585f5b.jpg" alt="act.key 系统按键" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>captureLayout</code></td>
+              <td>observe.layout UI 树<br><span class="cell-detail">194 nodes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/captureLayout-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/captureLayout-6c585f5b.jpg" alt="observe.layout UI 树" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>captureScreen</code></td>
+              <td>observe.screenshot 截图<br><span class="cell-detail">288 ms · 43672 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/captureScreen-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/captureScreen-6c585f5b.jpg" alt="observe.screenshot 截图" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cropScreen</code></td>
+              <td>按 bundle 裁剪截图<br><span class="cell-detail">com.huawei.hmos.calculator · 59600 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/cropScreen-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/cropScreen-6c585f5b.jpg" alt="按 bundle 裁剪截图" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>streamScreen</code></td>
+              <td>streamScreen MJPEG 取帧<br><span class="cell-detail">10.9 fps</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/streamScreen-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/streamScreen-6c585f5b.jpg" alt="streamScreen MJPEG 取帧" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>createCast</code></td>
+              <td>cast.open H.264 投流<br><span class="cell-detail">h264 · 31 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/createCast-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/createCast-6c585f5b.jpg" alt="cast.open H.264 投流" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>createCastRecord</code></td>
+              <td>cast.record MP4 录制<br><span class="cell-detail">478125 B mp4</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/createCastRecord-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/createCastRecord-6c585f5b.jpg" alt="cast.record MP4 录制" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>dualCast</code></td>
+              <td>两路并发投流<br><span class="cell-detail">31 B / 31 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/dualCast-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/dualCast-6c585f5b.jpg" alt="两路并发投流" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>dumpLayout</code></td>
+              <td>cli.dumpLayout<br><span class="cell-detail">194 nodes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/dumpLayout-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/dumpLayout-6c585f5b.jpg" alt="cli.dumpLayout" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>queue</code></td>
+              <td>并发调用排队<br><span class="cell-detail">10 calls · 81 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/queue-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/queue-6c585f5b.jpg" alt="并发调用排队" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>rpcDuringStream</code></td>
+              <td>投流期间调用 RPC<br><span class="cell-detail">11 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/rpcDuringStream-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/rpcDuringStream-6c585f5b.jpg" alt="投流期间调用 RPC" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>streamUiActions</code></td>
+              <td>UI 事件流<br><span class="cell-detail">session opens; synthetic touches are not reported (device behaviour)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/streamUiActions-6c585f5b.jpg"><img src="assets/acceptance/core-0.10.1/streamUiActions-6c585f5b.jpg" alt="UI 事件流" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>security-origin</code></td>
+              <td>viewer 来源校验（7 种握手）<br><span class="cell-detail">7/7 handshakes · origin: 101</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>viewer-mirror</code></td>
+              <td>viewer 镜像（真实浏览器）<br><span class="cell-detail">1600x2560 · 0 notes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/viewer-mirror-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/viewer-mirror-7544d645.jpg" alt="viewer 镜像（真实浏览器）" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>viewer-inspect</code></td>
+              <td>viewer 节点表<br><span class="cell-detail">8 node rows</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/viewer-inspect-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/viewer-inspect-7544d645.jpg" alt="viewer 节点表" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>viewer-privacy</code></td>
+              <td>viewer 隐私开关<br><span class="cell-detail">switch on-&gt;off-&gt;on (was true) · 遮罩在读布局时完成，不覆盖在画面上</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/viewer-privacy-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/viewer-privacy-7544d645.jpg" alt="viewer 隐私开关" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>connect</code></td>
+              <td>connect() 与会话<br><span class="cell-detail">com.huawei.hmos.calculator · 1600x2560</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/connect-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/connect-7544d645.jpg" alt="connect() 与会话" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>click</code></td>
+              <td>act.tap 点击<br><span class="cell-detail">settled · 1272 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/click-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/click-7544d645.jpg" alt="act.tap 点击" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>swipe</code></td>
+              <td>act.swipe 滑动<br><span class="cell-detail">settled · 2408 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/swipe-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/swipe-7544d645.jpg" alt="act.swipe 滑动" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>touch</code></td>
+              <td>触摸协议 down/move/up<br><span class="cell-detail">down/move/up ok</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/touch-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/touch-7544d645.jpg" alt="触摸协议 down/move/up" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>triggerKey</code></td>
+              <td>act.key 系统按键<br><span class="cell-detail">settled · power</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/triggerKey-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/triggerKey-7544d645.jpg" alt="act.key 系统按键" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>captureLayout</code></td>
+              <td>observe.layout UI 树<br><span class="cell-detail">227 nodes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/captureLayout-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/captureLayout-7544d645.jpg" alt="observe.layout UI 树" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>captureScreen</code></td>
+              <td>observe.screenshot 截图<br><span class="cell-detail">215 ms · 47327 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/captureScreen-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/captureScreen-7544d645.jpg" alt="observe.screenshot 截图" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cropScreen</code></td>
+              <td>按 bundle 裁剪截图<br><span class="cell-detail">com.huawei.hmos.calculator · 65699 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/cropScreen-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/cropScreen-7544d645.jpg" alt="按 bundle 裁剪截图" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>streamScreen</code></td>
+              <td>streamScreen MJPEG 取帧<br><span class="cell-detail">10.7 fps</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/streamScreen-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/streamScreen-7544d645.jpg" alt="streamScreen MJPEG 取帧" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>createCast</code></td>
+              <td>cast.open H.264 投流<br><span class="cell-detail">h264 · 31 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/createCast-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/createCast-7544d645.jpg" alt="cast.open H.264 投流" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>createCastRecord</code></td>
+              <td>cast.record MP4 录制<br><span class="cell-detail">211271 B mp4</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/createCastRecord-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/createCastRecord-7544d645.jpg" alt="cast.record MP4 录制" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>dualCast</code></td>
+              <td>两路并发投流<br><span class="cell-detail">31 B / 31 B</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/dualCast-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/dualCast-7544d645.jpg" alt="两路并发投流" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>dumpLayout</code></td>
+              <td>cli.dumpLayout<br><span class="cell-detail">227 nodes</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/dumpLayout-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/dumpLayout-7544d645.jpg" alt="cli.dumpLayout" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>queue</code></td>
+              <td>并发调用排队<br><span class="cell-detail">10 calls · 100 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/queue-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/queue-7544d645.jpg" alt="并发调用排队" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>rpcDuringStream</code></td>
+              <td>投流期间调用 RPC<br><span class="cell-detail">6 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/rpcDuringStream-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/rpcDuringStream-7544d645.jpg" alt="投流期间调用 RPC" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>streamUiActions</code></td>
+              <td>UI 事件流<br><span class="cell-detail">session opens; synthetic touches are not reported (device behaviour)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/core-0.10.1/streamUiActions-7544d645.jpg"><img src="assets/acceptance/core-0.10.1/streamUiActions-7544d645.jpg" alt="UI 事件流" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>security-origin</code></td>
+              <td>viewer 来源校验（7 种握手）<br><span class="cell-detail">7/7 handshakes · origin: 101</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>package</code></td>
+              <td>npm 包内容<br><span class="cell-detail">151 个文件 · 1033 KB · 无 src/test/bin · 3 个设备扩展</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="issues">问题</h2>
+      <ul>
+            <li>无</li>
+      </ul>
+
+      <h2 id="rerun">自己复现</h2>
+      <pre class="cli-code"><code>unset HDC_SERVER_PORT</code><br><code>npx tsx scripts/acceptance-core.ts --targets &lt;id&gt;[,&lt;id&gt;]</code><br><code>node scripts/gen-acceptance-pages.mjs</code></pre>
+      <p class="note">重跑会覆盖本页引用的截图。截图进入官网之前必须逐张看过：通知栏、账户信息、聊天与第三方个人资料都不能出现在这里。</p>
+    </article>
+  </main>
+  <script src="main.js" defer></script>
+</body>
+</html>
