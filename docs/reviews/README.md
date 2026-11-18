@@ -55,9 +55,17 @@ finding names, then the code changed until it passed, then the whole suite ran.
 | I4 | `live-record.test.ts` — "refuses a second start that arrives while the first is still opening"; `viewer-server.test.ts` — "refuses a second record click that lands while the first is still opening" | the in-flight start is recorded synchronously, at both levels |
 | I5 | `approvals-io.test.ts`; `console/server.test.ts` — "tells the tab when the decision could not be written" | a non-`EEXIST` write failure throws `EAPPROVALWRITE`, and the console reports it instead of throwing past the hook |
 | I6 | `package-docs.test.ts` — "names every product a reader should install instead" | the core README names `uitest-mirror`; root README says three products |
-| M1 | `gen-acceptance.test.ts` — `unacceptedVersions` cases | a current version with no report is an error the caller exits 1 on |
+| M1 | `gen-acceptance.test.ts` — `unacceptedVersions` and `misplacedReports` cases | a current version with no report is an error the caller exits 1 on; a historic report is not |
 
-`npm test` → 118 files, 1119 tests passing. `npm run typecheck`,
+**M1 had a second half.** Fixing the missing-report exit exposed that the
+generator also compared every *historic* report's version with today's
+`package.json`, so it already exited 1 on a healthy tree — which made the new
+exit code meaningless. It now checks that a report matches its own directory
+(`core-0.10.0/` holds a 0.10.0 report); whether the *current* version has one is
+`check-site.mjs`'s question, answered from `package.json`. Verified by hand:
+exit 0 on the tree as it stands, exit 1 with `mirror-0.1.0/` moved aside.
+
+`npm test` → 118 files, 1121 tests passing. `npm run typecheck`,
 `npm run typecheck:tests`, `check-layers`, `check-site` and `check-skill` all pass.
 
 ## Cross-check findings, also fixed

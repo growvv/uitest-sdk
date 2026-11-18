@@ -3,6 +3,7 @@ import {
   renderReportPage,
   renderHubPage,
   unacceptedVersions,
+  misplacedReports,
 } from "../../../../scripts/gen-acceptance-pages.mjs";
 
 const fixture = {
@@ -115,6 +116,32 @@ describe("acceptance page generator", () => {
         { core: "0.11.0" },
         [{ product: "core", version: "0.11.0" }, { product: "core", version: "0.10.0" }],
       ),
+    ).toEqual([]);
+  });
+
+  /**
+   * Historic reports are the record, not an error.
+   *
+   * The generator compared *every* report's version with today's
+   * `package.json`, so once a product moved on, every earlier report counted as
+   * a failure and the script exited 1 on a perfectly healthy tree. That made
+   * the exit code useless — including the missing-report check, which is the
+   * one that matters. The invariant is that a report matches its own directory
+   * (`core-0.10.0` holds a 0.10.0 report); comparing with today's version is
+   * `check-site.mjs`'s job, and only for the current version.
+   */
+  it("flags a report whose version does not match its own directory", () => {
+    expect(
+      misplacedReports([
+        { dir: "core-0.11.0", product: "core", version: "0.10.0" },
+        { dir: "phone-0.10.2", product: "phone", version: "0.10.2" },
+      ]),
+    ).toEqual([{ dir: "core-0.11.0", expected: "core-0.10.0" }]);
+  });
+
+  it("does not flag a report merely because the package has moved on", () => {
+    expect(
+      misplacedReports([{ dir: "core-0.10.0", product: "core", version: "0.10.0" }]),
     ).toEqual([]);
   });
 });

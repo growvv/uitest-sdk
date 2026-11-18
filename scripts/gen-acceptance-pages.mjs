@@ -14,7 +14,7 @@
  * Usage: node scripts/gen-acceptance-pages.mjs
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const SITE = join(ROOT, "site");
@@ -314,19 +314,43 @@ export function unacceptedVersions(versions, reports) {
   return out;
 }
 
+/**
+ * Reports whose version does not match the directory they live in.
+ *
+ * A report is filed as `<product>-<version>/`, so `core-0.10.0` must hold a
+ * 0.10.0 report. Comparing a report with *today's* `package.json` instead
+ * marked every historic report as an error: once core moved to 0.11.0, the
+ * 0.10.0 and 0.10.1 reports failed, and the script exited 1 on a healthy tree.
+ * Whether the *current* version has a report is a different question, and
+ * `check-site.mjs` answers it from `package.json`.
+ */
+export function misplacedReports(reports) {
+  const out = [];
+  for (const r of reports) {
+    // `dir` is the absolute report directory, and its name is how the report
+    // is addressed. `core-0.11.0/` holding a 0.10.0 report is a misfiled
+    // record: the name the directory should have is what the message says.
+    // Comparing with today's `package.json` instead — which this used to do —
+    // made every historic report an error, so the script exited 1 on a healthy
+    // tree and the exit code stopped meaning anything.
+    const name = basename(r.dir);
+    if (name !== `${r.product}-${r.version}`) {
+      out.push({ dir: name, expected: `${r.product}-${r.version}` });
+    }
+  }
+  return out;
+}
+
 function main() {
   const reports = readReports();
   const versions = packageVersions();
   let bad = false;
 
+  for (const { dir, expected } of misplacedReports(reports)) {
+    console.error(`report docs/acceptance/${dir} is filed under the wrong name; it must be ${expected}`);
+    bad = true;
+  }
   for (const report of reports) {
-    const expected = versions[report.product];
-    if (expected && expected !== report.version) {
-      console.error(
-        `report ${report.dir} is ${report.version}, but packages/${report.product}/package.json is ${expected}`,
-      );
-      bad = true;
-    }
     const shots = join(report.dir, "screenshots");
     const dest = join(SITE, "assets", "acceptance", assetDir(report));
     mkdirSync(dest, { recursive: true });

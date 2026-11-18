@@ -38,3 +38,10 @@ export function unacceptedVersions(
   versions: Record<string, string>,
   reports: { product: string; version: string }[],
 ): { product: string; version: string }[];
+/**
+ * Reports whose version does not match their own directory name
+ * (`core-0.10.0` must hold a 0.10.0 report). Historic reports are not errors.
+ */
+export function misplacedReports(
+  reports: { dir: string; product: string; version: string }[],
+): { dir: string; expected: string }[];
