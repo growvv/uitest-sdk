@@ -230,9 +230,20 @@ export class Approvals {
     };
     try {
       writeFileSync(target, JSON.stringify(stored), { flag: "wx", mode: 0o600 });
-    } catch {
-      // Lost the race to the opposite writer: report the answer on disk.
-      return this.decisionResult(safe, decision);
+    } catch (e) {
+      // `wx` fails with EEXIST when the opposite writer won the race — that is
+      // the only failure that is an answer already on disk. A read-only
+      // directory, a full disk or a permission error left no decision behind,
+      // and reporting it as "already decided" told the person their Allow or
+      // Deny was recorded while the agent waited out the TTL.
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+        return this.decisionResult(safe, decision);
+      }
+      throw new ApprovalWriteError(
+        `the decision could not be written to ${this.dir}: ${e instanceof Error ? e.message : String(e)}`,
+        "EAPPROVALWRITE",
+        e,
+      );
     }
     return this.decisionResult(safe, decision);
   }

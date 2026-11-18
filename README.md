@@ -1,7 +1,7 @@
 # uitest-sdk
 
 鸿蒙（HarmonyOS / OpenHarmony）`uitest` 设备侧扩展的 TypeScript 工具链。一个库，
-两个产品，同一个仓库、同一个官网、各自发版。
+三个产品，同一个仓库、同一个官网、各自发版。
 
 [官网](https://growvv.github.io/uitest-sdk/) · [文档](https://growvv.github.io/uitest-sdk/docs.html) ·
 [完整 API](https://growvv.github.io/uitest-sdk/api.html) · [验收报告](https://growvv.github.io/uitest-sdk/acceptance.html) ·
@@ -14,8 +14,9 @@
 | [`packages/core`](packages/core) | [`uitest-sdk`](https://www.npmjs.com/package/uitest-sdk) | 库：连接、观察、动作、投屏、viewer、治理。没有可执行文件 | `npm install uitest-sdk` |
 | [`packages/phone`](packages/phone) | [`uitest-phone`](https://www.npmjs.com/package/uitest-phone) | 无界面的设备 Agent：21 条命令的 CLI、stdio MCP、Agent Skill | `npm i -g uitest-phone` |
 | [`packages/console`](packages/console) | [`uitest-console`](https://www.npmjs.com/package/uitest-console) | 人的界面：浏览器镜像、接管、审批收件箱 | `npm i -g uitest-console` |
+| [`packages/mirror`](packages/mirror) | [`uitest-mirror`](https://www.npmjs.com/package/uitest-mirror) | 纯投屏窗口：画面加键盘鼠标，不读布局 | `npm i -g uitest-mirror` |
 
-依赖只有一个方向：`phone` 与 `console` → `core`，产品之间互不依赖，`core` 不认识任何产品。
+依赖只有一个方向：`phone`、`console` 与 `mirror` → `core`，产品之间互不依赖，`core` 不认识任何产品。
 `scripts/check-layers.mjs` 在 CI 里强制这条边——core 里出现产品代码、产品深路径 import、
 或者产品依赖另一个产品，都会失败。
 

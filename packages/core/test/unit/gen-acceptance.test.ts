@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { renderReportPage, renderHubPage } from "../../../../scripts/gen-acceptance-pages.mjs";
+import {
+  renderReportPage,
+  renderHubPage,
+  unacceptedVersions,
+} from "../../../../scripts/gen-acceptance-pages.mjs";
 
 const fixture = {
   product: "core" as const,
@@ -84,5 +88,33 @@ describe("acceptance page generator", () => {
   it("writes rerun commands without nesting code elements", () => {
     const html = renderReportPage(fixture);
     expect(html).not.toContain("<code><code>");
+  });
+
+  /**
+   * A product at a version nobody accepted is a release failure.
+   *
+   * `main()` printed a `note:` for it and still exited 0. Its own header says
+   * a missing report fails the site check, and `check-site.mjs` does — but a
+   * person running the generator directly, which every acceptance script's
+   * rerun list tells them to do, was told the run succeeded.
+   */
+  it("names every product whose current version has no report", () => {
+    const missing = unacceptedVersions(
+      { core: "0.11.0", phone: "0.10.2", console: "0.1.2", mirror: "0.1.0" },
+      [{ product: "core", version: "0.11.0" }, { product: "phone", version: "0.10.2" }],
+    );
+    expect(missing).toEqual([
+      { product: "console", version: "0.1.2" },
+      { product: "mirror", version: "0.1.0" },
+    ]);
+  });
+
+  it("names none when every current version has a report", () => {
+    expect(
+      unacceptedVersions(
+        { core: "0.11.0" },
+        [{ product: "core", version: "0.11.0" }, { product: "core", version: "0.10.0" }],
+      ),
+    ).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Approvals, Grants } from "../../src/governance/approvals.js";
@@ -47,8 +47,7 @@ describe("approval decisions", () => {
     expect((thrown as UitestError).code).toBe("EAPPROVALWRITE");
   });
 
-  it("cannot be consumed by the agent alone", () => {
-    const a = store();
+  it("cannot be consumed by the agent alone", () => {    const a = store();
     const pending = a.request(step, "deletes", { bundle: "com.demo", task: "t" });
     expect(a.consume(pending.id, step).kind).toBe("pending");
   });

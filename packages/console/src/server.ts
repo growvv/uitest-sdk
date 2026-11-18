@@ -49,6 +49,11 @@ export interface ConsoleOptions extends ConsoleDeps {
   privacy?: boolean;
   /** What `--record <file>` asked for; omitted means a timestamped name. */
   recordPath?: string;
+  /**
+   * Start recording without a page click. `--record` has already named the
+   * file, so a person who opens the window and closes it later expects one.
+   */
+  recordOnStart?: boolean;
 }
 
 /** One row the page renders; `expiresInMs` is computed here, not in the page. */
@@ -117,13 +122,23 @@ export function consoleHooks(deps: ConsoleDeps): ViewerHooks {
           const decision = message.decision === "allow" ? "allow" : "deny";
           const scope =
             message.scope === "task" || message.scope === "always" ? message.scope : "once";
-          const result = deps.approvals.decide(id, decision, {
-            by: "console",
-            ...(decision === "allow" ? { scope } : {}),
-            ...(typeof message.reason === "string" && message.reason
-              ? { reason: message.reason }
-              : {}),
-          });
+          // A failed write throws. Without this the throw escaped the hook into
+          // the viewer's message handler: the tab got no frame at all and the
+          // person believed their click was registered.
+          let result;
+          try {
+            result = deps.approvals.decide(id, decision, {
+              by: "console",
+              ...(decision === "allow" ? { scope } : {}),
+              ...(typeof message.reason === "string" && message.reason
+                ? { reason: message.reason }
+                : {}),
+            });
+          } catch (e) {
+            list(client);
+            fail(client, e instanceof Error ? e.message : String(e));
+            return true;
+          }
           // The list first, the reason last. A client that redraws the inbox
           // on every list frame would otherwise wipe the message in the same
           // tick it arrived — which is what a person clicking Deny on an
@@ -174,6 +189,7 @@ export async function createConsoleServer(opts: ConsoleOptions): Promise<ViewerS
     host: opts.host ?? "127.0.0.1",
     privacy: opts.privacy ?? true,
     source: opts.source,
+    ...(opts.recordOnStart ? { recordOnStart: true } : {}),
     page: renderPlayerPage({
       title: "uitest-console",
       extraHtml: CONSOLE_HTML,

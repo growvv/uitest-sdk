@@ -710,12 +710,13 @@ await dev.agent.hypium("Driver.screenCapture", "Driver#0", []);
 
 ## 13. 产品与命令行
 
-本库不带可执行文件，也没有界面。想直接驱动手机的人用两个产品，它们只用本文档里的公开 API：
+本库不带可执行文件，也没有界面。想直接驱动手机的人用三个产品，它们只用本文档里的公开 API：
 
 | 包 | 是什么 | 装法 |
 |---|---|---|
 | [`uitest-phone`](https://www.npmjs.com/package/uitest-phone) | 21 条命令的 CLI、stdio MCP server、Agent Skill；`hold` / `handoff` / `resume` / `approvals` | `npm i -g uitest-phone` |
 | [`uitest-console`](https://www.npmjs.com/package/uitest-console) | 浏览器页面：镜像、节点表、接管、审批收件箱、Hold/Resume | `npm i -g uitest-console` |
+| [`uitest-mirror`](https://www.npmjs.com/package/uitest-mirror) | 原生窗口投屏：画面加键盘鼠标，不读布局、不带节点表 | `npm i -g uitest-mirror` |
 
 ```bash
 npx uitest-phone doctor

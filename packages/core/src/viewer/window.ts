@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
  * Chrome both take `--app=<url>`, which is the cheapest window a product can
  * have without shipping a native shell (spec §6.2 defers that shell).
  *
- * It lives in core because two products need the same discovery order and the
+ * It lives in core because every product needs the same discovery order and the
  * same fallback; a copy in each would drift, and the product that drifted
  * would silently stop opening a window.
  */

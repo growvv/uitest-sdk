@@ -241,7 +241,7 @@ ${nav("acceptance.html")}
 
     <article class="doc-body">
       <h1>验收报告</h1>
-      <p class="doc-meta">一个库、两个产品 · 每一版各自验收</p>
+      <p class="doc-meta">一个库、三个产品 · 每一版各自验收</p>
 
       <p>库里的一份实现，产品只是组合它——所以每个产品单独验收，各自出一页。每页都由该版本的验收脚本生成：用例、命令、原始输出与截图，跑的是什么版本就写什么版本。</p>
 
@@ -296,6 +296,24 @@ function packageVersions() {
   return out;
 }
 
+/**
+ * The products whose current version has no report.
+ *
+ * A report for an older version is not evidence for this one. The caller
+ * treats a non-empty list as a release failure: the generator's header says so,
+ * and the rerun command every acceptance script prints ends in this script —
+ * exiting 0 there told the person the release was accepted when nothing had
+ * been.
+ */
+export function unacceptedVersions(versions, reports) {
+  const out = [];
+  for (const [product, version] of Object.entries(versions)) {
+    if (reports.some((r) => r.product === product && r.version === version)) continue;
+    out.push({ product, version });
+  }
+  return out;
+}
+
 function main() {
   const reports = readReports();
   const versions = packageVersions();
@@ -327,10 +345,14 @@ function main() {
     console.log(`page: site/acceptance-${assetDir(report)}.html`);
   }
 
-  // A product at a version with no report is a release nobody accepted.
-  for (const [product, version] of Object.entries(versions)) {
-    const has = reports.some((r) => r.product === product && r.version === version);
-    if (!has) console.log(`note: ${PRODUCT_NAMES[product]} ${version} has no report yet`);
+  // A product at a version with no report is a release nobody accepted. This
+  // is an error, not a note: `check-site.mjs` is the independent final guard,
+  // but a person running the generator directly — which is what every
+  // acceptance script's rerun list tells them to do — must not be told the
+  // release succeeded.
+  for (const { product, version } of unacceptedVersions(versions, reports)) {
+    console.error(`error: ${PRODUCT_NAMES[product]} ${version} has no acceptance report`);
+    bad = true;
   }
 
   const hub = reports

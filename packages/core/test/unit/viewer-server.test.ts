@@ -990,6 +990,62 @@ describe("ViewerServer: capture and record", () => {
     c.close();
   });
 
+  it("makes a second close wait for the first to finish", async () => {
+    // `close()` used to return immediately when another close was in progress.
+    // A caller that awaited the second call — a supervisor shutting two pages
+    // at once, a session closing its views — then believed the device was
+    // free while the cast daemon, the fport and the recording were still being
+    // released, and could exit the process mid-cleanup.
+    const h = await start({ holdStop: true });
+    const c = await connect(h.port);
+    await until(() => c.texts.some((t) => t.type === "hello"));
+    c.send({ type: "record", action: "start" });
+    await until(() => c.texts.some((t) => t.type === "record" && t.recording === true));
+
+    const first = h.server.close();
+    await until(() => h.recordStops() === 1);
+    let secondDone = false;
+    const second = h.server.close().then(() => {
+      secondDone = true;
+    });
+    await sleep(60);
+    // The first close is still inside the recording stop.
+    expect(secondDone).toBe(false);
+
+    h.releaseStop();
+    await Promise.all([first, second]);
+    expect(secondDone).toBe(true);
+    c.close();
+  });
+
+  /**
+   * Two tabs clicking Record in the same tick.
+   *
+   * `startRecording()` checked `startingRecording` but never assigned its own
+   * in-flight promise to it, so the second click saw no recording and no
+   * startup and called the source again — two record daemons on one socket,
+   * and the extension refuses the second `onStart`.
+   */
+  it("refuses a second record click that lands while the first is still opening", async () => {
+    const h = await start({ holdStart: true });
+    const a = await connect(h.port);
+    const b = await connect(h.port);
+    try {
+      await until(() => a.texts.some((t) => t.type === "hello"));
+      await until(() => b.texts.some((t) => t.type === "hello"));
+
+      a.send({ type: "record", action: "start" });
+      await until(() => h.recordings() === 1);
+      b.send({ type: "record", action: "start" });
+      await until(() => b.texts.some((t) => t.type === "record" && t.error));
+      expect(h.recordings()).toBe(1);
+    } finally {
+      h.releaseStart();
+      a.close();
+      b.close();
+    }
+  });
+
   it("stops a recording when the server closes", async () => {
     const h = await start();
     const c = await connect(h.port);

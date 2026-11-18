@@ -215,6 +215,13 @@ export class Session {
    */
   readonly keepAwake: (seconds?: number) => Promise<KeepAwakeHandle>;
   private readonly views = new Set<ViewerServer>();
+  /**
+   * How many viewers this session has opened. The first gets the documented
+   * port 7000; later ones ask the OS for a free port, because two pages that
+   * both default to 7000 is the documented second viewer failing with
+   * EADDRINUSE.
+   */
+  private viewSeq = 0;
   /** Handles from `keepAwake` whose restore `close()` still owes. */
   private readonly awakeHandles = new Set<KeepAwakeHandle>();
 
@@ -304,13 +311,22 @@ export class Session {
 
     this.view = {
       open: async (opts = {}) => {
+        // Each view gets its own cast daemons. The suffix defaults to the pid,
+        // which is unique per process but not per view: two views in one
+        // process would share `uitest_live_<pid>` and take turns stealing each
+        // other's socket. The sequence makes it unique per view.
+        const seq = this.viewSeq++;
         const source = createViewerSource(this.core, this.device, {
           stateDir: this.stateDir,
           cast: await this.castDefaults(),
+          socketSuffix: `${process.pid}_${seq}`,
           ...(opts.layout !== undefined ? { layout: opts.layout } : {}),
         });
         const server = await startViewerServer({
-          port: opts.port ?? 7000,
+          // 7000 is the documented default for the first page. A second page
+          // that asked for it too would fail with EADDRINUSE; `port: 0` asks
+          // the OS, and the caller reads the real port from the handle.
+          port: opts.port ?? (seq === 0 ? 7000 : 0),
           host: opts.host ?? "127.0.0.1",
           privacy: opts.privacy ?? true,
           source,

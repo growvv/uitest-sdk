@@ -173,6 +173,9 @@ export async function startConsole(
       port: opts.port,
       host: opts.host,
       privacy: opts.privacy,
+      // `--record <file>` names the file, so nothing on the page should have
+      // to press Record as well: the server starts it as the stream goes live.
+      ...(opts.record ? { recordOnStart: true } : {}),
     });
   } catch (e) {
     // A port already in use is the everyday case: the person ran the console

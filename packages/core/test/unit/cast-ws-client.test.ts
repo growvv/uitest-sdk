@@ -17,7 +17,14 @@ interface FakeServer {
 }
 
 function startFakeExtension(
-  opts: { script?: (cmd: string, send: (s: string) => void, bin: (b: Buffer) => void) => void } = {},
+  opts: {
+    script?: (
+      cmd: string,
+      send: (s: string) => void,
+      bin: (b: Buffer) => void,
+      close: () => void,
+    ) => void;
+  } = {},
 ): Promise<FakeServer> {
   const commands: string[] = [];
   const sockets = new Set<Socket>();
@@ -62,7 +69,7 @@ function startFakeExtension(
         buf = buf.subarray(off + 4 + len);
         const cmd = plain.toString("utf8");
         commands.push(cmd);
-        if (opts.script) opts.script(cmd, send, bin);
+        if (opts.script) opts.script(cmd, send, bin, () => sock.destroy());
         else if (cmd.includes("requestIDR")) send('{"type":"idrResponse","result":0}');
         else if (cmd.includes("start")) send('{"type":"started"}');
         else if (cmd.includes("stop")) send('{"type":"stopped","frameCount":3}');
@@ -253,6 +260,32 @@ describe("WsCastClient", () => {
     const { hdc, calls } = fakeHdc(fake.port, { fportThrows: true });
     await expect(WsCastClient.start(hdc, { mode: "stream", port: 5000, wsExtension })).rejects.toThrow();
     expect(calls).toContain("kill -9 2000");
+    await fake.close();
+  });
+
+  /**
+   * The record-mode `start` command runs after the forward is made and the
+   * socket is connected, so a failure there used to escape the startup
+   * cleanup: the daemon and its `hdc fport` stayed on the device.
+   */
+  it("releases the daemon and forward when the record start is refused", async () => {
+    const fake = await startFakeExtension({
+      script: (cmd, send, _bin, close) => {
+        // The extension drops the connection instead of acknowledging `start`.
+        if (cmd.includes("start")) close();
+      },
+    });
+    const { hdc, calls, removed } = fakeHdc(fake.port);
+    await expect(
+      WsCastClient.start(hdc, {
+        mode: "record",
+        port: 5000,
+        wsExtension,
+        outputPath: join(tmpdir(), "rec-refused.mp4"),
+      }),
+    ).rejects.toThrow();
+    expect(calls).toContain("kill -9 2000");
+    expect(removed).toContain(fake.port);
     await fake.close();
   });
 

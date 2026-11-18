@@ -41,6 +41,16 @@ const hdcState = {
   psLines: [] as string[],
   /** Per-target hdc state; an id without an entry is Connected. */
   states: {} as Record<string, string>,
+  /**
+   * A daemon that spawns and shows up in `pidof` but never binds 8012 —
+   * a broken extension, not a missing one.
+   */
+  neverListens: false,
+  /**
+   * Held open by a test to keep `fportRemove` pending, so a second
+   * `dispose()` can be observed while the first is still cleaning up.
+   */
+  removeGate: null as Promise<void> | null,
 };
 
 /** Fake agent server that answers the connect-time health check. */
@@ -169,7 +179,7 @@ vi.mock("../../src/transport/hdc.js", () => {
       hdcState.shellCalls.push(cmd);
       if (cmd.startsWith("param get")) return hdcState.abi;
       if (cmd.includes("start-daemon")) {
-        hdcState.listening = true;
+        hdcState.listening = !hdcState.neverListens;
         hdcState.pidof = hdcState.pidofAfterStart;
         hdcState.stuck = false;
         // Echo the argv the way a real `ps -ef` does, so the client can find
@@ -213,7 +223,10 @@ vi.mock("../../src/transport/hdc.js", () => {
       }
       return hdcState.agentPort || port;
     }
-    async fportRemove(port: number) { hdcState.removedPorts.push(port); }
+    async fportRemove(port: number) {
+      hdcState.removedPorts.push(port);
+      if (hdcState.removeGate) await hdcState.removeGate;
+    }
     async listTargets() { return hdcState.targets; }
     async listTargetDetails() {
       return hdcState.targets.map((id) => ({ id, state: hdcState.states[id] ?? "connected" }));
@@ -243,6 +256,8 @@ beforeEach(() => {
   hdcState.killed = [];
   hdcState.cmdlines = { "1000": "/system/bin/uitest\u0000start-daemon\u0000singleness\u0000--extension-name\u0000agent.so\u0000" };
   hdcState.states = {};
+  hdcState.neverListens = false;
+  hdcState.removeGate = null;
 });
 
 // --------------------------------------------------------------------- tests
@@ -298,8 +313,36 @@ describe("Device.connect", () => {
     await agent.close();
   });
 
-  it("never kills a daemon it does not own on dispose", async () => {
+  /**
+   * `dispose()` marked itself disconnected and returned before the tunnel was
+   * removed. A second caller — `Session.release()` beside a product's own
+   * shutdown — awaited it and was told the device was free while the fport was
+   * still going away, so the process could exit mid-cleanup.
+   */
+  it("makes a second dispose wait for the first", async () => {
     const agent = await startFakeAgent();
+    hdcState.listening = true;
+    hdcState.agentPort = agent.port;
+    const dev = await Device.connect({ extensionDir: hdcState.extDir });
+
+    let open = () => undefined as void;
+    hdcState.removeGate = new Promise<void>((r) => (open = r));
+    const first = dev.dispose();
+    await new Promise((r) => setTimeout(r, 20));
+    let secondDone = false;
+    const second = dev.dispose().then(() => {
+      secondDone = true;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(secondDone).toBe(false);
+
+    open();
+    await Promise.all([first, second]);
+    expect(secondDone).toBe(true);
+    await agent.close();
+  });
+
+  it("never kills a daemon it does not own on dispose", async () => {    const agent = await startFakeAgent();
     hdcState.listening = true;
     hdcState.agentPort = agent.port;
     const dev = await Device.connect({ extensionDir: hdcState.extDir });
@@ -308,6 +351,24 @@ describe("Device.connect", () => {
     expect(dev.state).toBe("disconnected");
     await agent.close();
   });
+
+  /**
+   * A daemon that starts but never listens used to outlive the failure: the
+   * readiness poll sat above the cleanup `try`, so the pid this call had just
+   * claimed was never killed. Each retry added another process on the phone.
+   */
+  it("kills the daemon it started when it never becomes ready", async () => {
+    // The daemon is spawned and reported by pidof, but never binds 8012.
+    hdcState.neverListens = true;
+    hdcState.pidofAfterStart = "1000 2000";
+    const connect = Device.connect({ extensionDir: hdcState.extDir });
+    // `START_TIMEOUT_MS` is 5 s; the fake never listens, so this is the poll's
+    // own deadline, not a test timeout.
+    await expect(connect).rejects.toThrow(/never listened/);
+    expect(hdcState.shellCalls).toContain("kill -9 2000");
+    expect(hdcState.shellCalls.some((c) => c.includes("start-daemon"))).toBe(true);
+    // The poll's own 5 s deadline is the test's duration; give it room.
+  }, 15_000);
 
   it("resolves the default extension dir from the module, not the cwd", () => {
     // An installed package lives in node_modules/<pkg>/dist: a cwd-relative

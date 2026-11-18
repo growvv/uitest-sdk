@@ -42,31 +42,46 @@ export interface RecordingOptions {
 export class Recording {
   private cast: CastClient | null = null;
   private path: string | null = null;
+  /**
+   * A `start()` that has not resolved yet.
+   *
+   * `this.cast` is only set once `createCast` resolves, so two calls that
+   * arrive while the first is still opening the record daemon both passed the
+   * `cast` check and started a second daemon on the same socket — the second
+   * takes the first one's place and one recording is lost. This flag is set
+   * synchronously, before the first await, so the second call is refused.
+   */
+  private starting = false;
 
   constructor(private readonly opts: RecordingOptions) {}
 
   /** Starts recording; resolves with the path the MP4 will be written to. */
   async start(): Promise<string> {
-    if (this.cast) throw new UitestError("already recording", "EBADARG");
+    if (this.cast || this.starting) throw new UitestError("already recording", "EBADARG");
+    this.starting = true;
 
     const out = this.opts.outputPath ?? join(this.opts.stateDir, "shots", `live-${Date.now()}.mp4`);
-    await mkdir(dirname(out), { recursive: true });
+    try {
+      await mkdir(dirname(out), { recursive: true });
 
-    const stream = this.opts.streamCast;
-    const cast = await this.opts.createCast({
-      ...stream,
-      mode: "record",
-      // A second daemon on the stream's socket would take the picture away.
-      ...(stream.transport === "ws"
-        ? { port: (stream.port ?? 5000) + RECORD_PORT_OFFSET }
-        : { socketName: this.opts.socketName }),
-      outputPath: out,
-    });
-    // Set only after the cast exists: a failed start must leave no half-state
-    // behind, or the next attempt would be refused as "already recording".
-    this.cast = cast;
-    this.path = out;
-    return out;
+      const stream = this.opts.streamCast;
+      const cast = await this.opts.createCast({
+        ...stream,
+        mode: "record",
+        // A second daemon on the stream's socket would take the picture away.
+        ...(stream.transport === "ws"
+          ? { port: (stream.port ?? 5000) + RECORD_PORT_OFFSET }
+          : { socketName: this.opts.socketName }),
+        outputPath: out,
+      });
+      // Set only after the cast exists: a failed start must leave no half-state
+      // behind, or the next attempt would be refused as "already recording".
+      this.cast = cast;
+      this.path = out;
+      return out;
+    } finally {
+      this.starting = false;
+    }
   }
 
   /**

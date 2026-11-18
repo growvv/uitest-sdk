@@ -106,6 +106,28 @@ describe("console hooks", () => {
     expect(String(reply!.message)).toContain("unknown approval id");
   });
 
+  it("tells the tab when the decision could not be written", () => {
+    // `Approvals.decide()` now surfaces a failed write instead of pretending a
+    // decision was already made. A throw here used to escape the hook into the
+    // viewer's message handler; the person saw nothing at all and believed
+    // their click was registered. The reason must reach the tab like any other
+    // refused decision.
+    const { dir, approvals, pending } = store();
+    approvals.decide = () => {
+      throw new Error("EACCES: permission denied");
+    };
+    const hooks = consoleHooks(deps(dir, approvals));
+    const c = tab();
+
+    expect(() =>
+      hooks.onMessage!(c, { type: "console:approvals:decide", id: pending.id, decision: "allow" }),
+    ).not.toThrow();
+
+    const reply = c.sent.find((m) => m.type === "console:error");
+    expect(reply).toBeDefined();
+    expect(String(reply!.message)).toContain("permission denied");
+  });
+
   it("tells the tab when its deny lost to an allow already given", () => {
     // The console's Deny button must not look like it worked. The allow is
     // already on disk, so the agent's replay proceeds whatever this click does;

@@ -257,9 +257,13 @@ describe("package split", () => {
     }
   });
 
-  it("names the two products a reader should install instead", () => {
+  it("names every product a reader should install instead", () => {
+    // The repository ships four packages. A doc that names two leaves the
+    // mirror — the package a person looking for a phone mirror installs —
+    // undiscoverable from npm and GitHub.
     expect(coreReadme).toContain("uitest-phone");
     expect(coreReadme).toContain("uitest-console");
+    expect(coreReadme).toContain("uitest-mirror");
   });
 
   it("documents the session categories and the subpaths", () => {

@@ -153,24 +153,27 @@ await rec.stop();   // 关闭 muxer，拉回 out.mp4
 静止画面不产生样本 —— 录制期间要让 UI 动。更底层的开关（显式 `transport`、`socketName`、
 `outputPath`）在 `uitest-sdk/cast` 的 `createCast` / `Recording`。
 
-## 产品：库之上还有两个包
+## 产品：库之上还有三个包
 
-这个仓库按「一个库 + 两个产品」组织。库不装命令、不起界面，产品各自独立发版：
+这个仓库按「一个库 + 三个产品」组织。库不装命令、不起界面，产品各自独立发版：
 
 | 包 | 是什么 | 装法 |
 |---|---|---|
 | [`uitest-sdk`](https://www.npmjs.com/package/uitest-sdk) | 本库：连接、观察、动作、投屏、viewer、治理 | `npm install uitest-sdk` |
 | [`uitest-phone`](https://www.npmjs.com/package/uitest-phone) | 无界面的设备 Agent：21 条命令的 CLI、MCP server、Agent Skill | `npm i -g uitest-phone` |
 | [`uitest-console`](https://www.npmjs.com/package/uitest-console) | 人的界面：浏览器投屏、接管、审批收件箱 | `npm i -g uitest-console` |
+| [`uitest-mirror`](https://www.npmjs.com/package/uitest-mirror) | 纯投屏窗口：画面加键盘鼠标，不读布局、不带节点表 | `npm i -g uitest-mirror` |
 
 ```bash
 npx uitest-phone doctor             # 探测设备与能力
 npx uitest-phone observe --task "check WLAN"
 uitest-console                      # 浏览器里看手机、接管、批准
+uitest-mirror                       # 一个窗口里的手机画面，键盘鼠标可用
 ```
 
 `uitest-phone` 的 21 条命令、MCP 工具与 Skill 见它自己的 README；`uitest-console` 的
-接管与收件箱见它的 README。两者都只通过本库的公开 API 工作——这里没有给产品留的后门。
+接管与收件箱、`uitest-mirror` 的录制与窗口选项见它们各自的 README。三者都只通过本库的
+公开 API 工作——这里没有给产品留的后门。
 
 ## 完整 hypium API（`dev.hypium`）
 

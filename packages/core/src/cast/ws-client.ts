@@ -182,8 +182,19 @@ export class WsCastClient implements CastClient {
     client.attach(socket);
     // Record mode never iterates `stream()`, and `start` is what opens the
     // muxer — without this the recording is empty and `stop` writes nothing.
+    //
+    // This runs after the forward and the socket, so a refusal here must
+    // release them: the client is not returned to any caller, and its own
+    // `dispose()` would send `stop` to an extension that never started.
     if (opts.mode === "record") {
-      await client.command({ type: "start" }, "started");
+      try {
+        await client.command({ type: "start" }, "started");
+      } catch (e) {
+        socket.destroy();
+        await hdc.fportRemove(localPort).catch(() => undefined);
+        await hdc.shell(`kill -9 ${ownPid}`).catch(() => undefined);
+        throw e;
+      }
       client.armDuration();
     }
     return client;

@@ -84,6 +84,8 @@ export class Device {
   readonly deviceId: string;
 
   private _state: "connected" | "disconnected" = "connected";
+  /** In-flight `dispose()`, so a second caller waits for the same cleanup. */
+  private disposePromise: Promise<void> | null = null;
   private _hypium: HypiumDriver | null = null;
 
   private constructor(
@@ -174,7 +176,15 @@ export class Device {
 
     if (!listening) {
       ownPid = await startDaemon(hdc);
-      await waitForAgent(hdc);
+      // Inside a guard: a daemon that spawns but never binds is a process this
+      // call owns and must not outlive it. Without this, every retry added one
+      // more `uitest` process to the phone, and none of them were ever killed.
+      try {
+        await waitForAgent(hdc);
+      } catch (e) {
+        if (ownPid !== null) await hdc.shell(`kill -9 ${ownPid}`).catch(() => undefined);
+        throw e;
+      }
     }
 
     let localPort = 0;
@@ -282,10 +292,17 @@ export class Device {
     return this.opts.agentPort ?? 8012;
   }
 
-  async dispose(): Promise<void> {
-    if (this._state === "disconnected") return;
+  dispose(): Promise<void> {
+    // A second caller joins the first cleanup instead of returning at once:
+    // returning early told it the device was free while the fport was still
+    // being removed, and the process could exit mid-cleanup.
+    if (this.disposePromise) return this.disposePromise;
     this._state = "disconnected";
+    this.disposePromise = this.finishDispose();
+    return this.disposePromise;
+  }
 
+  private async finishDispose(): Promise<void> {
     this._hypium?.close();
     this._hypium = null;
     this.agent.close();

@@ -185,6 +185,15 @@ export class ViewerServer {
   private cast: CastClient | null = null;
   private startingCast = false;
   private closing = false;
+  /**
+   * The cleanup `close()` is running, so a second caller joins it.
+   *
+   * Returning early left a caller that awaited the second close free to exit
+   * the process while the first was still releasing the cast daemon, the fport
+   * and the recording. `closing` still gates the work; this is what the second
+   * caller waits on.
+   */
+  private closePromise: Promise<void> | null = null;
 
   private codec: string | null = null;
   private description: Buffer | null = null;
@@ -381,9 +390,17 @@ export class ViewerServer {
     return this.live.reconnects;
   }
 
-  async close(): Promise<void> {
-    if (this.closing) return;
+  close(): Promise<void> {
+    // A second caller joins the first cleanup instead of returning at once:
+    // returning early let it exit the process while the cast daemon, the fport
+    // and the recording were still being released.
+    if (this.closePromise) return this.closePromise;
     this.closing = true;
+    this.closePromise = this.finishClose();
+    return this.closePromise;
+  }
+
+  private async finishClose(): Promise<void> {
     clearTimeout(this.graceTimer);
     clearTimeout(this.retryTimer);
     clearTimeout(this.layoutTimer);
@@ -1045,18 +1062,27 @@ export class ViewerServer {
       this.sendText(client, { type: "record", error: "already recording" });
       return;
     }
-    try {
-      const path = await start.call(this.source);
-      this.recording = path;
-      // Every tab shows the same badge: the recording belongs to the device,
-      // not to the tab that started it.
-      this.broadcastText({ type: "record", recording: true, path });
-    } catch (e) {
-      this.sendText(client, {
-        type: "record",
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
+    // The in-flight start is recorded synchronously, before the first await.
+    // Two tabs clicking Record in the same tick both saw no recording and no
+    // startup, and both called the source: two record daemons on one socket.
+    const run = (async () => {
+      try {
+        const path = await start.call(this.source);
+        this.recording = path;
+        // Every tab shows the same badge: the recording belongs to the device,
+        // not to the tab that started it.
+        this.broadcastText({ type: "record", recording: true, path });
+      } catch (e) {
+        this.sendText(client, {
+          type: "record",
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    })();
+    this.startingRecording = run;
+    await run.finally(() => {
+      if (this.startingRecording === run) this.startingRecording = null;
+    });
   }
 
   /**

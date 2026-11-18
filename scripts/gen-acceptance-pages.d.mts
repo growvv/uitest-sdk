@@ -30,3 +30,11 @@ export interface HubEntry {
 export const PRODUCT_NAMES: Record<string, string>;
 export function renderReportPage(report: AcceptanceReport): string;
 export function renderHubPage(reports: HubEntry[]): string;
+/**
+ * The products whose current version has no report. A non-empty result is a
+ * release failure: the generator exits 1 on it.
+ */
+export function unacceptedVersions(
+  versions: Record<string, string>,
+  reports: { product: string; version: string }[],
+): { product: string; version: string }[];

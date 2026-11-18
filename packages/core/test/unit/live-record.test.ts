@@ -112,6 +112,43 @@ describe("Recording", () => {
     await rec.stop();
   });
 
+  /**
+   * Two clicks — or a startup recording and a page click — can arrive while
+   * `createCast()` is still opening the first record daemon. The `this.cast`
+   * check ran before that await, so both passed it and two daemons were
+   * started on the same socket; the second takes the first one's place and one
+   * recording is lost.
+   */
+  it("refuses a second start that arrives while the first is still opening", async () => {
+    let open = () => undefined as void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const made: FakeRecordClient[] = [];
+    let opens = 0;
+    const rec = new Recording({
+      stateDir: "C:/tmp/state",
+      socketName: "uitest_live_record_4242",
+      createCast: async () => {
+        // Only the first open is held: a second call resolving at once is
+        // exactly the bug — it would claim the socket while the first is
+        // still starting a daemon.
+        if (opens++ === 0) await gate;
+        const c = new FakeRecordClient();
+        made.push(c);
+        return c;
+      },
+      streamCast: { mode: "stream", frameRate: 30 } as CastOptions,
+    });
+
+    const first = rec.start();
+    await expect(rec.start()).rejects.toThrow(/already recording/i);
+    open();
+    await first;
+    // The refused call never reached `createCast`: one daemon, one socket.
+    expect(opens).toBe(1);
+    expect(made).toHaveLength(1);
+    await rec.stop();
+  });
+
   it("clears the client when start fails, so a retry can work", async () => {
     let calls = 0;
     const rec = new Recording({

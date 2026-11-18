@@ -151,24 +151,29 @@ export class H264CastClient implements CastClient {
         );
       }
       localPort = await hdc.fportAdd(await freePort(), `localabstract:${socketName}`);
+
+      // Everything below runs after the daemon and the forward exist, so it
+      // belongs to the same cleanup scope. A missing `scrcpy.proto` in a
+      // published `dist/` (or a recorder the extension refuses) would
+      // otherwise leave both on the device for every attempt.
+      const Service = loadScrcpyService();
+      const stub = new Service(`127.0.0.1:${localPort}`, grpc.credentials.createInsecure());
+      const client = new H264CastClient(hdc, stub, socketName, ownPid, localPort, opts);
+
+      // Record mode must be started here: `onEnd` only closes a muxer that
+      // `onStart` opened, and a client that never opened one records zero
+      // frames.
+      if (opts.mode === "record") {
+        client.beginRecording();
+        client.armDuration();
+      }
+      return client;
     } catch (e) {
       // Never leak the process we spawned, nor a half-made forward.
       if (localPort !== 0) await hdc.fportRemove(localPort).catch(() => undefined);
       await hdc.shell(`kill -9 ${ownPid}`).catch(() => undefined);
       throw e;
     }
-
-    const Service = loadScrcpyService();
-    const stub = new Service(`127.0.0.1:${localPort}`, grpc.credentials.createInsecure());
-    const client = new H264CastClient(hdc, stub, socketName, ownPid, localPort, opts);
-
-    // Record mode must be started here: `onEnd` only closes a muxer that
-    // `onStart` opened, and a client that never opened one records zero frames.
-    if (opts.mode === "record") {
-      client.beginRecording();
-      client.armDuration();
-    }
-    return client;
   }
 
   /**

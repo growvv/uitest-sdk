@@ -212,7 +212,8 @@ export class Session {
   private readonly settleMs: number;
   private readonly traceShots: boolean;
   private readonly shotsDir: string;
-  private released = false;
+  /** In-flight `release()`, so a second caller waits for the same cleanup. */
+  private releasePromise: Promise<void> | null = null;
   private lastScreen: Screen | null = null;
   private stepCount = 0;
 
@@ -944,9 +945,16 @@ ${renderFull(screen)}`, {
   // ---------------------------------------------------------------- finish
 
   /** Ends the task: releases the lease, stops the trace, disposes the device. */
-  async release(): Promise<void> {
-    if (this.released) return;
-    this.released = true;
+  release(): Promise<void> {
+    // A second caller joins the first instead of returning at once. Returning
+    // early let it exit the process while the lease, the trace and the device
+    // daemon were still being released.
+    if (this.releasePromise) return this.releasePromise;
+    this.releasePromise = this.finishRelease();
+    return this.releasePromise;
+  }
+
+  private async finishRelease(): Promise<void> {
     await this.trace?.flush();
     await this.lease?.release();
     await this.device.dispose?.();
