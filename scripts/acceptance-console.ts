@@ -21,7 +21,13 @@ import { fileURLToPath } from "node:url";
 import { connect, tagOf } from "uitest-sdk";
 import { AppManager } from "uitest-sdk/drivers";
 import { capturePage } from "./screenshot.mjs";
-import { assertCapturable, assertShadeClosed, captureOrFail, gitHead } from "./acceptance.js";
+import {
+  assertCapturable,
+  assertShadeClosed,
+  captureOrFail,
+  gitHead,
+  isHistoryListInFront,
+} from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "console";
@@ -142,10 +148,7 @@ async function stage(device: string): Promise<void> {
     await assertCapturable(session.device.hypium);
     await assertShadeClosed(session.device.hypium);
     const apps = new AppManager(session.device.hdc);
-    /** The list is in front and has a row: `history record delete` only exists there. */
-    const onListWithRows = (elements: { label?: string }[]): boolean =>
-      elements.some((e) => e.label === "history record delete") &&
-      !elements.some((e) => e.label?.includes("没有历史记录"));
+    const onListWithRows = isHistoryListInFront;
 
     for (let i = 0; i < 5; i++) {
       await apps.launch("calculator").catch(() => undefined);
@@ -181,6 +184,23 @@ async function stage(device: string): Promise<void> {
   } finally {
     await session.close();
   }
+}
+
+/**
+ * Re-runs the guards and puts the staged surface back in front.
+ *
+ * Called before every capture, not once at the start. A console run spends
+ * minutes in a browser while the phone is a real phone: it sleeps, and waking
+ * it shows the lock screen or the launcher. The 0.1.1 run checked at staging
+ * and then spent its last four cases on a locked phone — the mirror went black
+ * and the replay found nothing to tap, both reported as console defects.
+ *
+ * `stage` already does exactly this work and is idempotent (a non-empty list in
+ * front is its success condition), so this is the same function under a name
+ * that says why it is being called again.
+ */
+async function recheckSurface(device: string): Promise<void> {
+  await stage(device);
 }
 
 /** Polls a page expression until it is true; throws when it never becomes so. */
@@ -325,9 +345,15 @@ async function consoleCases(device: string): Promise<{ cases: Case[]; tag: strin
       opts: { waitFor: string; prepare?: (evaluate: (e: string) => Promise<unknown>) => Promise<string[]> },
       detail: (notes: string[]) => string,
     ): Promise<string[] | null> => {
-      const r = await captureOrFail(() =>
-        capturePage({ url, out: join(SHOTS, file), waitFor: opts.waitFor, ...(opts.prepare ? { prepare: opts.prepare } : {}) }),
-      );
+      // The phone is a real phone: it sleeps during a run that spends minutes
+      // in a browser, and it was left on its lock screen for the last four
+      // cases of the 0.1.1 run. Every picture here is published, so the lock
+      // and shade guards run before each one — and the surface the cases are
+      // about is put back in front, because a woken phone shows the launcher.
+      const r = await captureOrFail(async () => {
+        await recheckSurface(device);
+        return capturePage({ url, out: join(SHOTS, file), waitFor: opts.waitFor, ...(opts.prepare ? { prepare: opts.prepare } : {}) });
+      });
       if (!r.ok) {
         add(id, title, "fail", `screenshot failed: ${r.reason}`, []);
         return null;

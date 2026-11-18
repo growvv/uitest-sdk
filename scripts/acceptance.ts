@@ -486,6 +486,24 @@ export async function captureOrFail(
   }
 }
 
+/**
+ * Whether the calculator's history list is in front, with a row on it.
+ *
+ * The console's inbox case needs this list: its delete key is the step the
+ * policy flags, so it is the one place a real agent request can be made from.
+ * A run stages it once and then spends minutes driving a browser, and the phone
+ * is a real phone — it sleeps, and waking it lands on the lock screen or the
+ * launcher. Checking once at staging left the last cases running against a
+ * locked phone, and both the black mirror and the failed replay were reported
+ * as console defects.
+ */
+export function isHistoryListInFront(elements: Array<{ label?: string }>): boolean {
+  return (
+    elements.some((e) => e.label === "history record delete") &&
+    !elements.some((e) => e.label?.includes("没有历史记录"))
+  );
+}
+
 /** First bundleName in the tree that also has parsable bounds. */function findBundle(n: {
   attributes: Record<string, string>;
   children?: unknown[];
