@@ -98,19 +98,31 @@ function pidAlive(pid: number): boolean {
  * Liveness is a heartbeat plus the pid, not a TTL alone: a long task must be
  * allowed to hold the device forever, while a crashed one must not block it
  * for a fixed window.
+ *
+ * The pid alone is not enough, because a pid outlives its process: Windows and
+ * Linux both hand a dead process's pid to the next one, so a killed task's
+ * lock names a pid that is alive again. That is not hypothetical — a killed
+ * `mcp` session wedged a device this way for hours, its pid reused by an
+ * unrelated console, with `lease_held` telling the next person to wait for a
+ * heartbeat that never came. So the lease heartbeats while it is held (see
+ * `startHeartbeat`), and silence past `staleMs` is abandonment on any host. A
+ * gone pid is still the fast path: it frees the device at once instead of
+ * after the window.
  */
 export class Lease {
   readonly info: LeaseInfo;
+  readonly staleMs: number;
   private readonly path: string;
   private readonly now: () => number;
-  private readonly staleMs: number;
   private released = false;
+  private timer: ReturnType<typeof setInterval> | null = null;
 
   private constructor(info: LeaseInfo, path: string, now: () => number, staleMs: number) {
     this.info = info;
     this.path = path;
     this.now = now;
     this.staleMs = staleMs;
+    this.startHeartbeat();
   }
 
   static async acquire(opts: LeaseOptions): Promise<Lease> {
@@ -181,11 +193,11 @@ export class Lease {
       // A hold belongs to a person, not to a process: it has no pid to check
       // and lasts until `resume`, so it is never stale on this host.
       const processGone = sameHost && !current.hold && !alive(current.pid);
-      // A live process on this host keeps its lease even if its heartbeat is
-      // late: it may be inside one long device call. A remote host can only be
-      // judged by the clock.
-      const abandonedHere = !sameHost && !current.hold && at - current.heartbeatAt > staleMs;
-      if (!opts.force && !processGone && !abandonedHere) {
+      // The clock, not the pid, is what a reused pid cannot fake: a held lease
+      // refreshes its heartbeat, so silence past `staleMs` means nobody is
+      // working, on this host or another.
+      const abandoned = !current.hold && at - current.heartbeatAt > staleMs;
+      if (!opts.force && !processGone && !abandoned) {
         throw new LeaseHeldError(
           `lease_held · this device already runs task "${current.task}"` +
             (current.hold
@@ -223,8 +235,12 @@ export class Lease {
       now: this.now,
       hold: this.info.hold,
     });
+    // The fresh lease started its own interval in the constructor; this object
+    // keeps the identity, so it keeps the one timer.
+    fresh.stopHeartbeat();
     Object.assign(this.info, fresh.info);
     this.released = false;
+    this.startHeartbeat();
   }
 
   /** Refreshes the heartbeat. Nothing changes if another task has taken over. */
@@ -236,10 +252,33 @@ export class Lease {
     Object.assign(this.info, next);
   }
 
+  /**
+   * Keeps the heartbeat fresh while this lease is held.
+   *
+   * Half the staleness window, so one late tick does not look like death. The
+   * interval is `unref`'d: it must never be the reason a process stays alive,
+   * and a one-command CLI that forgets to release still exits on its own.
+   */
+  private startHeartbeat(): void {
+    if (this.timer) return;
+    const every = Math.max(50, Math.floor(this.staleMs / 2));
+    this.timer = setInterval(() => {
+      void this.heartbeat().catch(() => undefined);
+    }, every);
+    this.timer.unref?.();
+  }
+
+  private stopHeartbeat(): void {
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+
   /** Releases the lock, but only when this lease still owns it. */
   async release(): Promise<void> {
     if (this.released) return;
     this.released = true;
+    this.stopHeartbeat();
     const current = await readLease(this.path);
     if (current?.token === this.info.token) {
       await unlink(this.path).catch(() => undefined);

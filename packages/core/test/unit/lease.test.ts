@@ -90,11 +90,58 @@ describe("Lease", () => {
     await withDir(async (dir) => {
       const path = join(dir, "dev.lock");
       let now = 1000;
-      await Lease.acquire({ path, task: "busy", staleMs: 500, now: () => now, isAlive: () => true });
-      now = 2000; // stale by clock, but the process is alive and will heartbeat
+      const owner = await Lease.acquire({
+        path, task: "busy", staleMs: 500, now: () => now, isAlive: () => true,
+      });
+      now = 2000;
+      await owner.heartbeat(); // alive and working: the heartbeat is what says so
       await expect(
         Lease.acquire({ path, task: "other", staleMs: 500, now: () => now, isAlive: () => true }),
       ).rejects.toBeInstanceOf(LeaseHeldError);
+    });
+  });
+
+  it("takes over a lease whose pid was reused by an unrelated process", async () => {
+    // The wedge this fixes: a killed `mcp` session leaves its lock behind, the
+    // OS hands the pid to something else, and a pid-only liveness check calls
+    // that "still alive" forever. A live pid is not evidence that the task is
+    // still working; a fresh heartbeat is. The owner above is not heartbeating,
+    // so this lease is abandoned no matter whose pid it names.
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      await writeFile(
+        path,
+        `${JSON.stringify({
+          task: "mcp", token: "deadbeef", pid: 40668, host: hostname(),
+          since: 1000, heartbeatAt: 1000,
+        })}\n`,
+      );
+      const next = await Lease.acquire({
+        path, task: "next", staleMs: 500, now: () => 2000, isAlive: () => true,
+      });
+      expect(next.info.task).toBe("next");
+      expect((await readLease(path))?.token).toBe(next.info.token);
+    });
+  });
+
+  it("reclaims a same-host lease whose owner went silent, pid or not", async () => {
+    // The other half of the wedge: a killed task's lock is only reclaimable
+    // through the clock. A live owner refreshes the heartbeat (see the
+    // Session test), so silence past `staleMs` means the task is not working,
+    // whatever pid the file happens to name.
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      await writeFile(
+        path,
+        `${JSON.stringify({
+          task: "mcp", token: "deadbeef", pid: 4242, host: hostname(),
+          since: 1000, heartbeatAt: 1000,
+        })}\n`,
+      );
+      const next = await Lease.acquire({
+        path, task: "next", staleMs: 500, now: () => 2000, isAlive: () => true,
+      });
+      expect(next.info.task).toBe("next");
     });
   });
 
@@ -107,6 +154,27 @@ describe("Lease", () => {
       await lease.heartbeat();
       const info = await readLease(path);
       expect(info).toMatchObject({ task: "t", token: lease.info.token, heartbeatAt: 5000 });
+    });
+  });
+
+  it("keeps its heartbeat fresh while it is held", async () => {
+    // The clock can only judge a same-host lease if a working owner keeps the
+    // heartbeat moving. Without this, the reused-pid test above would be right
+    // for the wrong reason: every lease would look abandoned after `staleMs`,
+    // including one whose owner is in the middle of a long device call.
+    await withDir(async (dir) => {
+      const path = join(dir, "dev.lock");
+      const lease = await Lease.acquire({ path, task: "busy", staleMs: 120 });
+      const first = (await readLease(path))!.heartbeatAt;
+      await new Promise((r) => setTimeout(r, 400));
+      const later = (await readLease(path))!.heartbeatAt;
+      expect(later).toBeGreaterThan(first);
+      // And the owner is still protected: the heartbeat it just wrote is what
+      // keeps this from stealing the device.
+      await expect(Lease.acquire({ path, task: "other", staleMs: 120 })).rejects.toBeInstanceOf(
+        LeaseHeldError,
+      );
+      await lease.release();
     });
   });
 

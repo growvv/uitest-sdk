@@ -275,14 +275,18 @@ const COMMAND_CASES: Array<{
  * with an input field and a `history record go` button.
  */
 async function ensureKeypad(ctx: Ctx): Promise<void> {
+  let last = "";
   for (let i = 0; i < 4; i++) {
     ctx.run(["launch", "--app", "calculator"]);
     const probe = ctx.run(["observe"]);
     if (probe.out.includes("history record go")) return;
+    last = (probe.text || last).trim().split("\n").slice(0, 3).join(" · ");
     ctx.run(["key", "--key", "back"]);
     await sleep(600);
   }
-  throw new Error("the calculator keypad never came to the front");
+  // The command's own words, not a guess: a run where every call failed with
+  // `lease_held` was reported as a calculator problem for hours.
+  throw new Error(`the calculator keypad never came to the front: ${last || "observe printed nothing"}`);
 }
 
 /**
@@ -564,8 +568,17 @@ async function mcpCase(bin: string, device: string, tag: string): Promise<Case> 
       kind: "log",
     };
   } finally {
+    // Closing stdin is how `serve()` ends, and the process then runs
+    // `session.close()` — which is what releases the device lease. Killing it
+    // straight away skips that and leaves the lock behind, wedging every later
+    // case and every later run with `lease_held`. So: close, wait, kill only
+    // as the fallback.
     child.stdin.end();
-    child.kill();
+    const exited = await Promise.race([
+      new Promise<boolean>((res) => child.once("exit", () => res(true))),
+      sleep(10_000).then(() => false),
+    ]);
+    if (!exited) child.kill();
   }
 }
 
