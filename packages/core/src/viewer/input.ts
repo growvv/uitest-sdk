@@ -51,7 +51,7 @@ interface Point {
 }
 
 /** HarmonyOS key codes for the system keys the page exposes. */
-const KEY_CODES = { back: 2, home: 1, enter: 2054, delete: 2055 } as const;
+const KEY_CODES = { back: 2, home: 1, recents: 187, enter: 2054, delete: 2055 } as const;
 export type LiveKey = keyof typeof KEY_CODES;
 
 type TextMode = "typing" | "paste";

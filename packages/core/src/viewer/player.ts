@@ -202,6 +202,7 @@ const BASE = `<!doctype html>
   <button id="send-text" title="Send the text to the device" aria-label="Send text">发送</button>
   <button id="key-back" title="System back" aria-label="Back">返回</button>
   <button id="key-home" title="System home" aria-label="Home">Home</button>
+  <button id="key-recents" title="Recent apps" aria-label="Recents">任务</button>
   <button id="key-enter" title="Enter" aria-label="Enter">回车</button>
   <button id="key-delete" title="Delete one character backward" aria-label="Delete">删除</button>
   <span id="text-hint" class="hint">超过 12 字或中文将用粘贴，会覆盖设备剪贴板</span>
@@ -1012,6 +1013,7 @@ const BASE = `<!doctype html>
   });
   bindSystemKey('key-back', 'back');
   bindSystemKey('key-home', 'home');
+  bindSystemKey('key-recents', 'recents');
   bindSystemKey('key-enter', 'enter');
   bindSystemKey('key-delete', 'delete');
 
