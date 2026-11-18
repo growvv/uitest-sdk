@@ -107,15 +107,17 @@ describe("Approvals", () => {
     expect(r.kind === "denied" && r.reason).toMatch(/expired/);
   });
 
-  it("keeps the first decision when asked twice", () => {
+  it("keeps the first decision when asked twice, and says which answer won", () => {
     const dir = mkdtempSync(join(tmpdir(), "uitest-appr-"));
     const first = new Approvals({ dir });
     const { id } = first.request(step, "deletes");
     expect(first.decide(id, "allow", { by: "cli" }).kind).toBe("allowed");
     // The id alone is not enough to flip the answer: a second decision loses.
+    // It must not be reported as if the deny took effect — a person who is
+    // told "denied" stops looking, and the agent's replay still proceeds.
     expect(new Approvals({ dir }).decide(id, "deny", { by: "console" })).toMatchObject({
-      kind: "denied",
-      reason: "already decided",
+      kind: "conflict",
+      reason: expect.stringMatching(/already allowed/),
     });
     expect(new Approvals({ dir }).consume(id, step)).toMatchObject({ kind: "approved" });
   });

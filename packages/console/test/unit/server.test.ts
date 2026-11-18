@@ -106,6 +106,26 @@ describe("console hooks", () => {
     expect(String(reply.message)).toContain("unknown approval id");
   });
 
+  it("tells the tab when its deny lost to an allow already given", () => {
+    // The console's Deny button must not look like it worked. The allow is
+    // already on disk, so the agent's replay proceeds whatever this click does;
+    // the person needs to be told that, not shown a quiet refresh.
+    const { dir, approvals, pending } = store();
+    approvals.decide(pending.id, "allow", { by: "cli", scope: "once" });
+    const hooks = consoleHooks(deps(dir, approvals));
+    const c = tab();
+
+    hooks.onMessage!(c, {
+      type: "console:approvals:decide",
+      id: pending.id,
+      decision: "deny",
+    });
+
+    const reply = c.sent[0]!;
+    expect(reply.type).toBe("console:error");
+    expect(String(reply.message)).toContain("already allowed");
+  });
+
   it("takes the device for the person and reports who had it", async () => {
     const { dir, approvals } = store();
     const d = deps(dir, approvals);

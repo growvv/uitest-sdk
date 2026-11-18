@@ -185,6 +185,12 @@ export async function approvalsMain(argv: string[]): Promise<number> {
       process.stdout.write(`${sub === "allow" ? "allowed" : "denied"} ${id}\n`);
       return 0;
     }
+    // A conflict is not a refusal: the opposite answer is already on disk and
+    // the agent's replay will follow it. Saying "denied" here would tell a
+    // person their deny took effect when it did not.
+    if (result.kind === "conflict") {
+      return fail(`approval_conflict · ${result.reason ?? "already decided"}`, 2);
+    }
     return fail(`approval_refused · ${result.reason ?? result.kind}`);
   } catch (e) {
     return fail(e instanceof Error ? e.message : String(e), 1);

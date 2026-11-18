@@ -198,7 +198,7 @@ try {
 } finally {
   await session.close();                    // 释放租约、关 viewer、dispose 设备
 }</code></pre>
-      <p>要自己管设备时用 <code>Device.connect()</code> + <code>new Session(dev, await CoreSession.open(dev, opts))</code>；<code>session.device</code> 与 <code>session.core</code> 就是这两层。</p>
+      <p>要自己管设备时用 <code>Device.connect()</code> + <code>new Session(dev, await CoreSession.open(dev, opts))</code>（<code>Session</code> 从 <code>uitest-sdk</code> 取，<code>CoreSession</code> 从 <code>uitest-sdk/commands</code> 取）；<code>session.device</code> 与 <code>session.core</code> 就是这两层。</p>
 
       <h3>六个命名空间</h3>
       <div class="doc-table">
@@ -410,7 +410,7 @@ const jpeg2 = await dev.agent.cropToWindow({ windowId: 12, scale: 1 });</code></
       <pre><code>const tree = await dev.cli.dumpLayout({ windowId: 12 });
 const tree2 = await dev.cli.dumpLayout({ bundleName: "com.huawei.hmos.settings", withFontAttrs: true });</code></pre>
       <h3>找节点并点击</h3>
-      <pre><code>import { parseBounds } from "uitest-sdk";
+      <pre><code>import { parseBounds } from "uitest-sdk/drivers";
 
 const tree = await dev.agent.captureLayout();
 const target = find(tree, (n) =&gt; n.attributes.text === "设置");
@@ -427,7 +427,7 @@ if (bounds) {
 
       <h2 id="hypium">10. 完整 hypium API<span class="doc-tag">0.5.0</span></h2>
       <p>设备侧的 hypium 驱动公开 118 个方法（<code>OHOSDriver</code> 106 + 兼容层 12）。<code>dev.hypium</code> 把它们逐个映射成 TypeScript 方法，参数按设备实际行为定，并逐条标注真机状态：</p>
-      <pre><code>import { On } from "uitest-sdk";
+      <pre><code>import { On } from "uitest-sdk/drivers";
 
 await dev.hypium.click(On.text("设置"));
 await dev.hypium.waitForComponent(On.text("WLAN"), { timeoutMs: 3000 });

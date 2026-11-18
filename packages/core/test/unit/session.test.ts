@@ -227,8 +227,33 @@ describe("Session: standing approvals", () => {
     });
   });
 
-  it("forgets task grants when the person hands the phone back", async () => {
+  // The person's answer decides the scope, not the agent's flag. `allow` with
+  // no `--scope` is the documented default a person types, and the agent can
+  // always add `--approval-scope always` to the replay: if that flag won, one
+  // "yes" would become a standing grant over every task in the state dir.
+  it("takes the grant scope from the person's answer, not the agent's flag", async () => {
     await withDir(async (dir) => {
+      const fake = fakeDevice([deletePage(), deletePage(), deletePage()]);
+      const s = await open(fake, dir, { task: "cleanup" });
+      const observed = await s.observe();
+      const ref = observed.screen!.elements.find((e) => e.label === "删除")!.ref;
+      const asked = await s.tap(ref);
+      const id = (asked as { approvalId: string }).approvalId;
+      // The person allows without a scope: one action, nothing remembered.
+      expect(s.resolveApproval(id, "allow", { by: "cli" }).kind).toBe("allowed");
+
+      const approved = await s.tap(ref, { approvalId: id, approvalScope: "always" });
+      expect(approved.status).toBe("settled");
+      await s.release();
+
+      // A different task must be asked again: no `always` grant was written.
+      const other = await open(fake, dir, { task: "another task" });
+      expect((await other.tap(ref)).status).toBe("approval_pending");
+      await other.release();
+    });
+  });
+
+  it("forgets task grants when the person hands the phone back", async () => {    await withDir(async (dir) => {
       const { Grants } = await import("../../src/governance/approvals.js");
       const { resumeDevice } = await import("../../src/governance/hold.js");
       const tag = tagOf("SERIAL");

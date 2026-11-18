@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { connect, tagOf } from "uitest-sdk";
 import { AppManager } from "uitest-sdk/drivers";
 import { capturePage } from "./screenshot.mjs";
+import { assertCapturable, assertShadeClosed } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "console";
@@ -68,7 +69,12 @@ function localDate(d = new Date()): string {
 
 function gitHead(): string {
   try {
-    return execSync("git rev-parse --short HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
+    const head = execSync("git rev-parse --short HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
+    // A run on a dirty tree cannot be attributed to HEAD: the report would name
+    // a commit that does not contain the script it ran. Say so instead of
+    // lying — a reader who checks the hash must find what produced the page.
+    const dirty = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" }).trim();
+    return dirty ? `${head}+dirty` : head;
   } catch {
     return "unknown";
   }
@@ -137,6 +143,12 @@ async function makeCtx(url: string, port: number, tag: string, device: string, s
 async function stage(device: string): Promise<void> {
   const session = await connect({ deviceId: device, stateDir: join(WORK, "stage"), task: "stage", lease: false });
   try {
+    // The console photographs the browser page, and the page contains the raw
+    // mirror frame. A locked phone or an open shade would be published as a
+    // "mirror" screenshot, so the same guards the core acceptance uses run
+    // before anything is staged or captured.
+    await assertCapturable(session.device.hypium);
+    await assertShadeClosed(session.device.hypium);
     const apps = new AppManager(session.device.hdc);
     /** The list is in front and has a row: `history record delete` only exists there. */
     const onListWithRows = (elements: { label?: string }[]): boolean =>

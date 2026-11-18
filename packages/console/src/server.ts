@@ -118,9 +118,7 @@ export function consoleHooks(deps: ConsoleDeps): ViewerHooks {
           if (result.kind === "unknown") fail(client, result.reason ?? "unknown approval id");
           else if (result.kind === "expired") fail(client, result.reason ?? "approval expired");
           else if (result.kind === "already-used") fail(client, result.reason ?? "already used");
-          else if (result.kind === "denied" && decision === "allow") {
-            fail(client, result.reason ?? "already decided");
-          }
+          else if (result.kind === "conflict") fail(client, result.reason ?? "already decided");
           list(client);
           return true;
         }

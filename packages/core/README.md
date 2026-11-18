@@ -22,7 +22,7 @@ const session = await connect({ deviceId: "<your-device-id>" });
 try {
   const screen = await session.observe.layout();        // 节点表 + display 尺寸
   const { width, height } = screen.display;
-  await session.act.tap({ text: "WLAN" });              // ref / 文本 / 选择器 / 坐标
+  await session.act.tap({ text: "WLAN" });              // ref / 文本 / 选择器 / On
   const shot = await session.observe.screenshot();      // 608×1344 JPEG
   await session.act.swipe({ from: { x: width / 2, y: height * 0.7 }, to: { x: width / 2, y: height * 0.3 } });
 } finally {
@@ -179,7 +179,8 @@ hypium 6.1.0.210 的 **118 个方法**（`OHOSDriver` 106 + 兼容接口 12）�
 TypeScript 驼峰，参数和返回值都做了类型：
 
 ```ts
-import { Device, On } from "uitest-sdk";
+import { Device } from "uitest-sdk";
+import { On } from "uitest-sdk/drivers";
 
 const dev = await Device.connect();
 const h = dev.hypium;

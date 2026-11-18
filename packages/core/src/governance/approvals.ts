@@ -45,7 +45,14 @@ export interface Grant {
 }
 
 export type DecisionResult = {
-  kind: "allowed" | "denied" | "unknown" | "expired" | "already-used";
+  /**
+   * `conflict` means an answer was already given and it was the opposite one:
+   * nothing was written. It is separate from `denied` because "denied" reads
+   * as "the person refused" — a caller that reports a conflict as a refusal
+   * tells a person their deny took effect when the agent's replay will still
+   * proceed.
+   */
+  kind: "allowed" | "denied" | "conflict" | "unknown" | "expired" | "already-used";
   reason?: string;
 };
 
@@ -192,7 +199,13 @@ export class Approvals {
 
     const target = join(this.dir, `${safe}.${decision === "allow" ? "allow" : "deny"}`);
     const opposite = join(this.dir, `${safe}.${decision === "allow" ? "deny" : "allow"}`);
-    if (existsSync(opposite)) return { kind: "denied", reason: "already decided" };
+    if (existsSync(opposite)) {
+      const onDisk = this.decisionOf(safe);
+      return {
+        kind: "conflict",
+        reason: onDisk === "allowed" ? "already allowed; the replay will proceed" : "already denied",
+      };
+    }
     if (existsSync(target)) return this.decisionResult(safe, decision);
 
     const stored: StoredDecision = {

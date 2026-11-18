@@ -2,6 +2,8 @@
 export { createCast } from "../cast/create.js";
 export type { CastHost } from "../cast/create.js";
 export type { CastClient, CastOptions, JpegFrame } from "../cast/types.js";
+// The frame a `stream()` yields: a consumer writing its own sink names it.
+export type { H264Chunk } from "../transport/model.js";
 export { CastConfig, castConfigPath } from "../cast/config.js";
 export type { CastSettings } from "../cast/config.js";
 export { Recording } from "../cast/record.js";

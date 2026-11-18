@@ -1060,7 +1060,13 @@ ${renderFull(screen)}`, {
       if (result.kind === "approved") {
         // A remembered answer: the id itself stays single-use, but the rule it
         // carried now covers this app (and task, for `task`).
-        const scope = result.scope ?? approvalScope;
+        //
+        // The person's answer is authoritative. `approvalScope` is a flag on
+        // the replaying command, so it is the agent's word; a person who typed
+        // plain `approvals allow` said "this one action" and a later replay
+        // asking for `always` must not turn that into a standing grant over
+        // every task in the state dir.
+        const scope = result.scope ?? "once";
         if ((scope === "task" || scope === "always") && result.rule) {
           this.grants.add({
             rule: result.rule,

@@ -374,7 +374,8 @@ ${toc}
       <p class="doc-meta">uitest-sdk <strong>${VERSION}</strong> · hypium <strong>6.1.0.210</strong> · <strong>${HYPIIUM_CATALOG.length}</strong> 个方法</p>
       <p>DevEco Testing 的 hypium 驱动在设备上公开 ${HYPIIUM_CATALOG.length} 个方法（<code>OHOSDriver</code> 106 个 + 兼容层 12 个）。<code>dev.hypium</code> 把它们逐个映射成 TypeScript 的同名 camelCase 方法，参数与返回值按设备实际行为定，不是照着文档猜的：每一条都在真机（BRA-AL00 / uitest 7.0.0.1）上跑过，状态标在表里。</p>
 
-      <pre><code>import { Device, On, Gesture, UnsupportedError } from "uitest-sdk";
+      <pre><code>import { Device, UnsupportedError } from "uitest-sdk";
+import { On } from "uitest-sdk/drivers";
 
 const dev = await Device.connect();
 try {

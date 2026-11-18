@@ -78,7 +78,12 @@ function localDate(d = new Date()): string {
 
 function gitHead(): string {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+    const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+    // A run on a dirty tree cannot be attributed to HEAD: the report would name
+    // a commit that does not contain the script it ran. Say so instead of
+    // lying — a reader who checks the hash must find what produced the page.
+    const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).trim();
+    return dirty ? `${head}+dirty` : head;
   } catch {
     return "unknown";
   }

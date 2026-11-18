@@ -15,7 +15,7 @@
  * tags.
  */
 import { execSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,7 @@ import { createInterface } from "node:readline";
 import { tagOf } from "uitest-sdk";
 import { connect } from "uitest-sdk";
 import { AppManager } from "uitest-sdk/drivers";
+import { assertCapturable, assertShadeClosed } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "phone";
@@ -70,7 +71,12 @@ function localDate(d = new Date()): string {
 
 function gitHead(): string {
   try {
-    return execSync("git rev-parse --short HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
+    const head = execSync("git rev-parse --short HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
+    // A run on a dirty tree cannot be attributed to HEAD: the report would name
+    // a commit that does not contain the script it ran. Say so instead of
+    // lying — a reader who checks the hash must find what produced the page.
+    const dirty = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" }).trim();
+    return dirty ? `${head}+dirty` : head;
   } catch {
     return "unknown";
   }
@@ -151,6 +157,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function stageCalculator(device: string): Promise<{ restore(): Promise<void> }> {
   const session = await connect({ deviceId: device, stateDir: join(WORK, "stage"), task: "stage", lease: false });
   const apps = new AppManager(session.device.hdc);
+  // Every screenshot this run takes is published. The lock screen and an open
+  // notification shade carry messages and bank alerts, so the run refuses to
+  // photograph either: the guards close the shade and refuse a PIN-locked phone
+  // before the first capture rather than after the images are on disk.
+  await assertCapturable(session.device.hypium);
+  await assertShadeClosed(session.device.hypium);
   const before = await apps.current().catch(() => null);
   await apps.launch("calculator").catch(() => undefined);
   await sleep(1500);
@@ -393,6 +405,27 @@ async function approvalCases(ctx: Ctx): Promise<Case[]> {
     `replay without a decision → exit ${replay1.code} (expect 3)`,
   );
 
+  // --- self-approval is impossible ----------------------------------------
+  // An agent holds the id and the state dir. The claim is that possessing the
+  // id is still not enough, so this checks the disk rather than asserting a
+  // sentence: after a replay that was never answered, no decision file may
+  // exist. A `.allow` here would mean the replay path had written the person's
+  // answer itself. Checked before any person answers, so the directory is
+  // still empty.
+  const decisionFiles = () => {
+    const dir = join(ctx.stateDir, "approvals", ctx.tag);
+    if (!existsSync(dir)) return [] as string[];
+    return readdirSync(dir).filter((n) => n.endsWith(".allow") || n.endsWith(".deny"));
+  };
+  const beforeAnswer = decisionFiles();
+  add(
+    "approval-agent-cannot-answer",
+    "审批：Agent 拿到 id 也不能自己批准",
+    beforeAnswer.length === 0 ? "pass" : "fail",
+    `after an unanswered replay the approvals dir holds ${beforeAnswer.length} decision file(s) ` +
+      `(expect 0)`,
+  );
+
   const deny = ctx.run(["approvals", "deny", first.id, "--reason", "acceptance: deny path"]);
   add("approval-deny", "审批：人说不", deny.code === 0 ? "pass" : "fail", deny.text.trim().split("\n")[0] ?? "");
 
@@ -433,15 +466,10 @@ async function approvalCases(ctx: Ctx): Promise<Case[]> {
   );
 
   // --- self-approval is impossible ----------------------------------------
-  // An agent holds the id and the state dir. It still cannot write a decision:
-  // `approvals` is the person's channel, and the case above proves the replay
-  // path never creates one.
-  add(
-    "approval-agent-cannot-answer",
-    "审批：Agent 拿到 id 也不能自己批准",
-    "pass",
-    "重放一个未回答的 id 只会再次返回 approval_pending；决定文件只能由 approvals CLI 或 console 写入",
-  );
+  // The check above (`approval-unanswered`) proves the replay path returns
+  // approval_pending and, via the decision-file count below, that it wrote no
+  // answer of its own. It is not repeated here: by this point the person has
+  // answered twice, so the directory is no longer empty.
   return out;
 }
 

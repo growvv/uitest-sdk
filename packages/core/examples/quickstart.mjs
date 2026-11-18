@@ -22,8 +22,10 @@ try {
   const cy = Math.round(height / 2);
 
   const t1 = performance.now();
-  await session.act.tap({ x: cx, y: cy });
-  console.log(`✓ tap(${cx}, ${cy})  ${Math.round(performance.now() - t1)} ms`);
+  // A coordinate is not a target: tap takes a ref, text, selector or On.
+  // The centre of the screen has no label, so this presses the keypad instead.
+  await session.act.tap({ text: "7" });
+  console.log(`✓ tap({ text: "7" })  ${Math.round(performance.now() - t1)} ms`);
 
   const t2 = performance.now();
   await session.act.swipe({

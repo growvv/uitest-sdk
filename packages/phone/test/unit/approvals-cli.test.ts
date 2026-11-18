@@ -73,8 +73,26 @@ describe("uitest-phone approvals", () => {
     });
   });
 
-  it("finds an id under the tag that owns it when several devices have approvals", () => {
-    const dir = mkdtempSync(join(tmpdir(), "uitest-phone-cli-"));
+  // A deny that loses to an allow already on disk must say so and exit
+  // non-zero. Printing "denied" and exiting 0 tells a person their refusal
+  // took effect while the agent's replay still goes ahead.
+  it("refuses a deny that lost to an allow, and says the replay proceeds", () => {
+    const { dir, store } = freshState();
+    const pending = store.request(STEP, "deletes", { bundle: "com.demo", task: "t" });
+    store.decide(pending.id, "allow", { by: "cli" });
+
+    const out = spawnSync(
+      process.execPath,
+      [bin, "approvals", "deny", pending.id, "--state-dir", dir],
+      { encoding: "utf8" },
+    );
+
+    expect(out.status).not.toBe(0);
+    expect(`${out.stdout}${out.stderr}`).toMatch(/already allowed/);
+    expect(store.consume(pending.id, STEP).kind).toBe("approved");
+  });
+
+  it("finds an id under the tag that owns it when several devices have approvals", () => {    const dir = mkdtempSync(join(tmpdir(), "uitest-phone-cli-"));
     const first = new Approvals({ dir: join(dir, "approvals", "7544d645") });
     const second = new Approvals({ dir: join(dir, "approvals", "6c585f5b") });
     first.request(STEP, "deletes");

@@ -80,3 +80,7 @@ export type {
   WaitIdleOptions,
   WindowCheck,
 } from "../driver/hypium/index.js";
+
+// The session's own halves: a product running commands through
+// CommandRunner needs the types of what it passes in.
+export type { SessionAgent, SessionDevice } from "../operations/session.js";
