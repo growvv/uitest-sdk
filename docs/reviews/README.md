@@ -1,5 +1,8 @@
 # Review record — 2026-11-19, `master` at `57cfd21`
 
+Reviewed at `57cfd21`; every accepted finding is fixed in `4dd3cab`, `2941606`
+and `0331071`. Nothing below is still open.
+
 Two independent passes over the whole repository:
 
 - **Codex** (`lab/gpt-6.2-sol`, reasoning `xhigh`, read-only, ~2 h, 16 M tokens):
