@@ -2,7 +2,7 @@
   "product": "mirror",
   "version": "0.1.0",
   "date": "2026-11-18",
-  "commit": "bb783c2+dirty",
+  "commit": "9f96536+dirty",
   "devices": [
     {
       "tag": "7544d645",
@@ -25,12 +25,12 @@
       "title": "窗口打开，画面有帧",
       "device": "7544d645",
       "status": "pass",
-      "detail": "live at http://127.0.0.1:62032/",
+      "detail": "live at http://127.0.0.1:61932/",
       "screenshots": [
         "window-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 5505
+      "ms": 5303
     },
     {
       "id": "click",
@@ -80,7 +80,7 @@
       "title": "录制产出 MP4，--stay-awake 生效并复原",
       "device": "7544d645",
       "status": "pass",
-      "detail": "224658 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed",
+      "detail": "224586 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed",
       "screenshots": [
         "record-live-7544d645.jpg"
       ],
@@ -91,7 +91,7 @@
       "title": "--max-size 按最长边换算",
       "device": "7544d645",
       "status": "pass",
-      "detail": "longest 2560 → expected -scale 3, daemon got 3",
+      "detail": "longest 2560 → expected -scale 3, daemon got 3 · frame 534 px (bound 1024)",
       "screenshots": [
         "max-size-7544d645.jpg"
       ],
@@ -102,7 +102,7 @@
       "title": "--no-control 只读",
       "device": "7544d645",
       "status": "pass",
-      "detail": "no key row, no input",
+      "detail": "no key row; tap+enter dispatched left the display unchanged",
       "screenshots": [
         "no-control-7544d645.jpg"
       ],
@@ -113,7 +113,7 @@
       "title": "租约冲突时第二个实例退出并指名持有者",
       "device": "7544d645",
       "status": "pass",
-      "detail": "exit 1 · lease_held · this device already runs task \"mirror\" / If that task is gone, remove E:\\CodeE\\vibe51\\uitest_agent\\.work-bench\\accept-mirror\\state\\7544d645\\leases\\",
+      "detail": "exit 1 · lease_held · this device already runs task \"mirror\" / If that task is gone, remove <state dir>",
       "screenshots": [],
       "kind": "log"
     }

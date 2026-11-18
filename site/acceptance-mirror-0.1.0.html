@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>uitest-mirror 0.1.0 验收报告 · uitest-sdk</title>
-  <meta name="description" content="uitest-mirror 0.1.0 的验收记录：10 个用例、2026-11-18、提交 bb783c2+dirty，每条都带设备或浏览器截图。">
+  <meta name="description" content="uitest-mirror 0.1.0 的验收记录：10 个用例、2026-11-18、提交 9f96536+dirty，画面类用例都带设备或浏览器截图。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -35,9 +35,9 @@
 
     <article class="doc-body">
       <h1>uitest-mirror 0.1.0 验收报告</h1>
-      <p class="doc-meta"><strong>uitest-mirror</strong> 0.1.0 · 2026-11-18 · 提交 <code>bb783c2+dirty</code></p>
+      <p class="doc-meta"><strong>uitest-mirror</strong> 0.1.0 · 2026-11-18 · 提交 <code>9f96536+dirty</code></p>
 
-      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/mirror-0.1.0/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的，截图由被测程序自己产出。</p>
+      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/mirror-0.1.0/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的；画面类用例的截图由被测程序自己产出，只验命令行或日志的用例没有截图，报告中逐条标出。</p>
 
       <h2 id="summary">一页结论</h2>
       <div class="doc-table">
@@ -75,7 +75,7 @@
             </tr>
             <tr>
               <td><code>window</code></td>
-              <td>窗口打开，画面有帧<br><span class="cell-detail">live at http://127.0.0.1:62032/</span></td>
+              <td>窗口打开，画面有帧<br><span class="cell-detail">live at http://127.0.0.1:61932/</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/mirror-0.1.0/window-7544d645.jpg"><img src="assets/acceptance/mirror-0.1.0/window-7544d645.jpg" alt="窗口打开，画面有帧" loading="lazy"></a>
@@ -116,7 +116,7 @@
             </tr>
             <tr>
               <td><code>record</code></td>
-              <td>录制产出 MP4，--stay-awake 生效并复原<br><span class="cell-detail">224658 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed</span></td>
+              <td>录制产出 MP4，--stay-awake 生效并复原<br><span class="cell-detail">224586 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/mirror-0.1.0/record-live-7544d645.jpg"><img src="assets/acceptance/mirror-0.1.0/record-live-7544d645.jpg" alt="录制产出 MP4，--stay-awake 生效并复原" loading="lazy"></a>
@@ -124,7 +124,7 @@
             </tr>
             <tr>
               <td><code>max-size</code></td>
-              <td>--max-size 按最长边换算<br><span class="cell-detail">longest 2560 → expected -scale 3, daemon got 3</span></td>
+              <td>--max-size 按最长边换算<br><span class="cell-detail">longest 2560 → expected -scale 3, daemon got 3 · frame 534 px (bound 1024)</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/mirror-0.1.0/max-size-7544d645.jpg"><img src="assets/acceptance/mirror-0.1.0/max-size-7544d645.jpg" alt="--max-size 按最长边换算" loading="lazy"></a>
@@ -132,7 +132,7 @@
             </tr>
             <tr>
               <td><code>no-control</code></td>
-              <td>--no-control 只读<br><span class="cell-detail">no key row, no input</span></td>
+              <td>--no-control 只读<br><span class="cell-detail">no key row; tap+enter dispatched left the display unchanged</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/mirror-0.1.0/no-control-7544d645.jpg"><img src="assets/acceptance/mirror-0.1.0/no-control-7544d645.jpg" alt="--no-control 只读" loading="lazy"></a>
@@ -140,7 +140,7 @@
             </tr>
             <tr>
               <td><code>lease</code></td>
-              <td>租约冲突时第二个实例退出并指名持有者<br><span class="cell-detail">exit 1 · lease_held · this device already runs task &quot;mirror&quot; / If that task is gone, remove E:\CodeE\vibe51\uitest_agent\.work-bench\accept-mirror\state\7544d645\leases\</span></td>
+              <td>租约冲突时第二个实例退出并指名持有者<br><span class="cell-detail">exit 1 · lease_held · this device already runs task &quot;mirror&quot; / If that task is gone, remove &lt;state dir&gt;</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
 

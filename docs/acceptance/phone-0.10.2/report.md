@@ -1,6 +1,6 @@
 # uitest-phone 0.10.2 验收报告
 
-> 本文件由 `scripts/acceptance-phone.ts` 生成，请勿手改。生成时间：2026-11-18，提交 `4d2efff`。
+> 本文件由 `scripts/acceptance-phone.ts` 生成，请勿手改。生成时间：2026-11-18，提交 `9f96536`。
 
 ## 设备
 
@@ -13,19 +13,19 @@
 | # | 设备 | 结果 | 说明 |
 |---|---|---|---|
 | `package` | host | ✅ | uitest-phone-0.10.2.tgz · uitest-phone 0.10.2 (uitest-sdk 0.11.0) · --help exit 2 |
-| `cmd-launch` | 7544d645 | ✅ | settled · 4314 ms |
-| `cmd-observe` | 7544d645 | ✅ | settled · 3195 ms |
-| `cmd-tap` | 7544d645 | ✅ | settled · 4020 ms |
-| `cmd-type` | 7544d645 | ✅ | settled · 12080 ms |
-| `cmd-swipe` | 7544d645 | ✅ | settled · 5505 ms |
-| `cmd-double-click` | 7544d645 | ✅ | settled · 4727 ms |
-| `cmd-drag` | 7544d645 | ✅ | settled · 4753 ms |
-| `cmd-fling` | 7544d645 | ✅ | settled · 3952 ms |
-| `cmd-pinch` | 7544d645 | ✅ | settled · 4895 ms |
-| `cmd-wait-for` | 7544d645 | ✅ | settled · 19671 ms |
-| `cmd-read-list` | 7544d645 | ✅ | settled · 7294 ms |
-| `cmd-scroll-until` | 7544d645 | ✅ | settled · 7965 ms |
-| `cmd-key` | 7544d645 | ✅ | settled · 5185 ms |
+| `cmd-launch` | 7544d645 | ✅ | settled · 4585 ms |
+| `cmd-observe` | 7544d645 | ✅ | settled · 3325 ms |
+| `cmd-tap` | 7544d645 | ✅ | settled · 4731 ms |
+| `cmd-type` | 7544d645 | ✅ | settled · 12788 ms |
+| `cmd-swipe` | 7544d645 | ✅ | settled · 5635 ms |
+| `cmd-double-click` | 7544d645 | ✅ | settled · 5267 ms |
+| `cmd-drag` | 7544d645 | ✅ | settled · 6004 ms |
+| `cmd-fling` | 7544d645 | ✅ | settled · 5271 ms |
+| `cmd-pinch` | 7544d645 | ✅ | settled · 5876 ms |
+| `cmd-wait-for` | 7544d645 | ✅ | settled · 21819 ms |
+| `cmd-read-list` | 7544d645 | ✅ | settled · 7866 ms |
+| `cmd-scroll-until` | 7544d645 | ✅ | settled · 8646 ms |
+| `cmd-key` | 7544d645 | ✅ | settled · 5221 ms |
 | `cmd-apps` | 7544d645 | ✅ | settled |
 | `cmd-window` | 7544d645 | ✅ | settled |
 | `cmd-doctor` | 7544d645 | ✅ | settled · doctor |
@@ -34,10 +34,10 @@
 | `cmd-report` | 7544d645 | ✅ | settled |
 | `cmd-status` | 7544d645 | ✅ | settled · connected |
 | `cmd-handoff` | 7544d645 | ✅ | handoff exit 0 · resume exit 0 |
-| `approval-pending` | 7544d645 | ✅ | approval_pending · id 9dfedbfe6b5e · 60 s |
+| `approval-pending` | 7544d645 | ✅ | approval_pending · id 82974f6394e1 · 60 s |
 | `approval-unanswered` | 7544d645 | ✅ | replay without a decision → exit 3 (expect 3) |
-| `approval-agent-cannot-answer` | 7544d645 | ✅ | after an unanswered replay the approval 9dfedbfe6b5e holds 0 decision file(s) (expect 0) |
-| `approval-deny` | 7544d645 | ✅ | denied 9dfedbfe6b5e |
+| `approval-agent-cannot-answer` | 7544d645 | ✅ | after an unanswered replay the approval 82974f6394e1 holds 0 decision file(s) (expect 0) |
+| `approval-deny` | 7544d645 | ✅ | denied 82974f6394e1 |
 | `approval-denied-replay` | 7544d645 | ✅ | exit 4 (expect 4) · acceptance: deny path |
 | `approval-allow` | 7544d645 | ✅ | allow exit 0 · replay exit 0 (expect 0) |
 | `approval-single-use` | 7544d645 | ✅ | replay of the used id → exit 4 (expect 4) |

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>uitest-phone 0.10.2 验收报告 · uitest-sdk</title>
-  <meta name="description" content="uitest-phone 0.10.2 的验收记录：34 个用例、2026-11-18、提交 4d2efff，每条都带设备或浏览器截图。">
+  <meta name="description" content="uitest-phone 0.10.2 的验收记录：34 个用例、2026-11-18、提交 9f96536，画面类用例都带设备或浏览器截图。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -35,9 +35,9 @@
 
     <article class="doc-body">
       <h1>uitest-phone 0.10.2 验收报告</h1>
-      <p class="doc-meta"><strong>uitest-phone</strong> 0.10.2 · 2026-11-18 · 提交 <code>4d2efff</code></p>
+      <p class="doc-meta"><strong>uitest-phone</strong> 0.10.2 · 2026-11-18 · 提交 <code>9f96536</code></p>
 
-      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/phone-0.10.2/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的，截图由被测程序自己产出。</p>
+      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/phone-0.10.2/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的；画面类用例的截图由被测程序自己产出，只验命令行或日志的用例没有截图，报告中逐条标出。</p>
 
       <h2 id="summary">一页结论</h2>
       <div class="doc-table">
@@ -75,7 +75,7 @@
             </tr>
             <tr>
               <td><code>cmd-launch</code></td>
-              <td>launch 启动应用<br><span class="cell-detail">settled · 4314 ms</span></td>
+              <td>launch 启动应用<br><span class="cell-detail">settled · 4585 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-launch-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-launch-7544d645.jpg" alt="launch 启动应用" loading="lazy"></a>
@@ -83,7 +83,7 @@
             </tr>
             <tr>
               <td><code>cmd-observe</code></td>
-              <td>observe 读屏<br><span class="cell-detail">settled · 3195 ms</span></td>
+              <td>observe 读屏<br><span class="cell-detail">settled · 3325 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-observe-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-observe-7544d645.jpg" alt="observe 读屏" loading="lazy"></a>
@@ -91,7 +91,7 @@
             </tr>
             <tr>
               <td><code>cmd-tap</code></td>
-              <td>tap 点击<br><span class="cell-detail">settled · 4020 ms</span></td>
+              <td>tap 点击<br><span class="cell-detail">settled · 4731 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-tap-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-tap-7544d645.jpg" alt="tap 点击" loading="lazy"></a>
@@ -99,7 +99,7 @@
             </tr>
             <tr>
               <td><code>cmd-type</code></td>
-              <td>type 输入<br><span class="cell-detail">settled · 12080 ms</span></td>
+              <td>type 输入<br><span class="cell-detail">settled · 12788 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-type-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-type-7544d645.jpg" alt="type 输入" loading="lazy"></a>
@@ -107,7 +107,7 @@
             </tr>
             <tr>
               <td><code>cmd-swipe</code></td>
-              <td>swipe 滑动<br><span class="cell-detail">settled · 5505 ms</span></td>
+              <td>swipe 滑动<br><span class="cell-detail">settled · 5635 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-swipe-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-swipe-7544d645.jpg" alt="swipe 滑动" loading="lazy"></a>
@@ -115,7 +115,7 @@
             </tr>
             <tr>
               <td><code>cmd-double-click</code></td>
-              <td>double-click 双击<br><span class="cell-detail">settled · 4727 ms</span></td>
+              <td>double-click 双击<br><span class="cell-detail">settled · 5267 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-double-click-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-double-click-7544d645.jpg" alt="double-click 双击" loading="lazy"></a>
@@ -123,7 +123,7 @@
             </tr>
             <tr>
               <td><code>cmd-drag</code></td>
-              <td>drag 拖拽<br><span class="cell-detail">settled · 4753 ms</span></td>
+              <td>drag 拖拽<br><span class="cell-detail">settled · 6004 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-drag-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-drag-7544d645.jpg" alt="drag 拖拽" loading="lazy"></a>
@@ -131,7 +131,7 @@
             </tr>
             <tr>
               <td><code>cmd-fling</code></td>
-              <td>fling 快滑<br><span class="cell-detail">settled · 3952 ms</span></td>
+              <td>fling 快滑<br><span class="cell-detail">settled · 5271 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-fling-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-fling-7544d645.jpg" alt="fling 快滑" loading="lazy"></a>
@@ -139,7 +139,7 @@
             </tr>
             <tr>
               <td><code>cmd-pinch</code></td>
-              <td>pinch 双指缩放<br><span class="cell-detail">settled · 4895 ms</span></td>
+              <td>pinch 双指缩放<br><span class="cell-detail">settled · 5876 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-pinch-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-pinch-7544d645.jpg" alt="pinch 双指缩放" loading="lazy"></a>
@@ -147,7 +147,7 @@
             </tr>
             <tr>
               <td><code>cmd-wait-for</code></td>
-              <td>wait-for 等 UI<br><span class="cell-detail">settled · 19671 ms</span></td>
+              <td>wait-for 等 UI<br><span class="cell-detail">settled · 21819 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-wait-for-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-wait-for-7544d645.jpg" alt="wait-for 等 UI" loading="lazy"></a>
@@ -155,7 +155,7 @@
             </tr>
             <tr>
               <td><code>cmd-read-list</code></td>
-              <td>read-list 读列表<br><span class="cell-detail">settled · 7294 ms</span></td>
+              <td>read-list 读列表<br><span class="cell-detail">settled · 7866 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-read-list-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-read-list-7544d645.jpg" alt="read-list 读列表" loading="lazy"></a>
@@ -163,7 +163,7 @@
             </tr>
             <tr>
               <td><code>cmd-scroll-until</code></td>
-              <td>scroll-until 滚到目标<br><span class="cell-detail">settled · 7965 ms</span></td>
+              <td>scroll-until 滚到目标<br><span class="cell-detail">settled · 8646 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-scroll-until-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-scroll-until-7544d645.jpg" alt="scroll-until 滚到目标" loading="lazy"></a>
@@ -171,7 +171,7 @@
             </tr>
             <tr>
               <td><code>cmd-key</code></td>
-              <td>key 系统按键<br><span class="cell-detail">settled · 5185 ms</span></td>
+              <td>key 系统按键<br><span class="cell-detail">settled · 5221 ms</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/cmd-key-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/cmd-key-7544d645.jpg" alt="key 系统按键" loading="lazy"></a>
@@ -243,7 +243,7 @@
             </tr>
             <tr>
               <td><code>approval-pending</code></td>
-              <td>审批：先要人点头<br><span class="cell-detail">approval_pending · id 9dfedbfe6b5e · 60 s</span></td>
+              <td>审批：先要人点头<br><span class="cell-detail">approval_pending · id 82974f6394e1 · 60 s</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
               <a href="assets/acceptance/phone-0.10.2/approval-pending-7544d645.jpg"><img src="assets/acceptance/phone-0.10.2/approval-pending-7544d645.jpg" alt="审批：先要人点头" loading="lazy"></a>
@@ -259,7 +259,7 @@
             </tr>
             <tr>
               <td><code>approval-agent-cannot-answer</code></td>
-              <td>审批：Agent 拿到 id 也不能自己批准<br><span class="cell-detail">after an unanswered replay the approval 9dfedbfe6b5e holds 0 decision file(s) (expect 0)</span></td>
+              <td>审批：Agent 拿到 id 也不能自己批准<br><span class="cell-detail">after an unanswered replay the approval 82974f6394e1 holds 0 decision file(s) (expect 0)</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
 
@@ -267,7 +267,7 @@
             </tr>
             <tr>
               <td><code>approval-deny</code></td>
-              <td>审批：人说不<br><span class="cell-detail">denied 9dfedbfe6b5e</span></td>
+              <td>审批：人说不<br><span class="cell-detail">denied 82974f6394e1</span></td>
               <td><span class="status status-pass">通过</span></td>
               <td><div class="shot-strip">
 

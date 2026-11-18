@@ -2,7 +2,7 @@
   "product": "phone",
   "version": "0.10.2",
   "date": "2026-11-18",
-  "commit": "4d2efff",
+  "commit": "9f96536",
   "devices": [
     {
       "tag": "7544d645",
@@ -25,156 +25,156 @@
       "title": "launch 启动应用",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 4314 ms",
+      "detail": "settled · 4585 ms",
       "screenshots": [
         "cmd-launch-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4314
+      "ms": 4585
     },
     {
       "id": "cmd-observe",
       "title": "observe 读屏",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 3195 ms",
+      "detail": "settled · 3325 ms",
       "screenshots": [
         "cmd-observe-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 3195
+      "ms": 3325
     },
     {
       "id": "cmd-tap",
       "title": "tap 点击",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 4020 ms",
+      "detail": "settled · 4731 ms",
       "screenshots": [
         "cmd-tap-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4020
+      "ms": 4731
     },
     {
       "id": "cmd-type",
       "title": "type 输入",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 12080 ms",
+      "detail": "settled · 12788 ms",
       "screenshots": [
         "cmd-type-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 12080
+      "ms": 12788
     },
     {
       "id": "cmd-swipe",
       "title": "swipe 滑动",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 5505 ms",
+      "detail": "settled · 5635 ms",
       "screenshots": [
         "cmd-swipe-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 5505
+      "ms": 5635
     },
     {
       "id": "cmd-double-click",
       "title": "double-click 双击",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 4727 ms",
+      "detail": "settled · 5267 ms",
       "screenshots": [
         "cmd-double-click-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4727
+      "ms": 5267
     },
     {
       "id": "cmd-drag",
       "title": "drag 拖拽",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 4753 ms",
+      "detail": "settled · 6004 ms",
       "screenshots": [
         "cmd-drag-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4753
+      "ms": 6004
     },
     {
       "id": "cmd-fling",
       "title": "fling 快滑",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 3952 ms",
+      "detail": "settled · 5271 ms",
       "screenshots": [
         "cmd-fling-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 3952
+      "ms": 5271
     },
     {
       "id": "cmd-pinch",
       "title": "pinch 双指缩放",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 4895 ms",
+      "detail": "settled · 5876 ms",
       "screenshots": [
         "cmd-pinch-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4895
+      "ms": 5876
     },
     {
       "id": "cmd-wait-for",
       "title": "wait-for 等 UI",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 19671 ms",
+      "detail": "settled · 21819 ms",
       "screenshots": [
         "cmd-wait-for-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 19671
+      "ms": 21819
     },
     {
       "id": "cmd-read-list",
       "title": "read-list 读列表",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 7294 ms",
+      "detail": "settled · 7866 ms",
       "screenshots": [
         "cmd-read-list-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 7294
+      "ms": 7866
     },
     {
       "id": "cmd-scroll-until",
       "title": "scroll-until 滚到目标",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 7965 ms",
+      "detail": "settled · 8646 ms",
       "screenshots": [
         "cmd-scroll-until-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 7965
+      "ms": 8646
     },
     {
       "id": "cmd-key",
       "title": "key 系统按键",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 5185 ms",
+      "detail": "settled · 5221 ms",
       "screenshots": [
         "cmd-key-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 5185
+      "ms": 5221
     },
     {
       "id": "cmd-apps",
@@ -184,7 +184,7 @@
       "detail": "settled",
       "screenshots": [],
       "kind": "log",
-      "ms": 2665
+      "ms": 3155
     },
     {
       "id": "cmd-window",
@@ -194,7 +194,7 @@
       "detail": "settled",
       "screenshots": [],
       "kind": "log",
-      "ms": 3213
+      "ms": 3476
     },
     {
       "id": "cmd-doctor",
@@ -204,7 +204,7 @@
       "detail": "settled · doctor",
       "screenshots": [],
       "kind": "log",
-      "ms": 2946
+      "ms": 3386
     },
     {
       "id": "cmd-screenshot",
@@ -216,7 +216,7 @@
         "cmd-screenshot-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4444
+      "ms": 4329
     },
     {
       "id": "cmd-inspect",
@@ -228,7 +228,7 @@
         "cmd-inspect-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 3538
+      "ms": 3392
     },
     {
       "id": "cmd-report",
@@ -238,7 +238,7 @@
       "detail": "settled",
       "screenshots": [],
       "kind": "log",
-      "ms": 3885
+      "ms": 2829
     },
     {
       "id": "cmd-status",
@@ -248,7 +248,7 @@
       "detail": "settled · connected",
       "screenshots": [],
       "kind": "log",
-      "ms": 2554
+      "ms": 5019
     },
     {
       "id": "cmd-handoff",
@@ -264,7 +264,7 @@
       "title": "审批：先要人点头",
       "device": "7544d645",
       "status": "pass",
-      "detail": "approval_pending · id 9dfedbfe6b5e · 60 s",
+      "detail": "approval_pending · id 82974f6394e1 · 60 s",
       "screenshots": [
         "approval-pending-7544d645.jpg"
       ],
@@ -284,7 +284,7 @@
       "title": "审批：Agent 拿到 id 也不能自己批准",
       "device": "7544d645",
       "status": "pass",
-      "detail": "after an unanswered replay the approval 9dfedbfe6b5e holds 0 decision file(s) (expect 0)",
+      "detail": "after an unanswered replay the approval 82974f6394e1 holds 0 decision file(s) (expect 0)",
       "screenshots": [],
       "kind": "log"
     },
@@ -293,7 +293,7 @@
       "title": "审批：人说不",
       "device": "7544d645",
       "status": "pass",
-      "detail": "denied 9dfedbfe6b5e",
+      "detail": "denied 82974f6394e1",
       "screenshots": [],
       "kind": "log"
     },

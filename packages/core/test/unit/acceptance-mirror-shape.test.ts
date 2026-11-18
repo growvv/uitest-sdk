@@ -64,4 +64,15 @@ describe("mirror acceptance runner", () => {
     expect(text).toMatch(/no-control[\s\S]{0,3000}PointerEvent/);
     expect(text).toContain("left the display unchanged");
   });
+
+  /**
+   * The report is published. A CLI error quotes the absolute path of the lock
+   * file it could not take, and the first mirror run put
+   * `E:\CodeE\...\leases\` on the site.
+   */
+  it("scrubs this machine's absolute paths out of every case detail", () => {
+    const text = source();
+    expect(text).toContain("const scrub = (text: string): string =>");
+    expect(text).toContain("detail: scrub(detail)");
+  });
 });

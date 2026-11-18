@@ -474,6 +474,15 @@ async function launchApp(device: string, app: "calculator" | "settings"): Promis
 async function mirrorCases(device: string, stateDir: string): Promise<{ cases: Case[]; tag: string }> {
   const tag = tagOf(device);
   const cases: Case[] = [];
+  /**
+   * Removes this machine's absolute paths from anything that is published.
+   *
+   * The report goes to the public site, and a CLI error quotes the lock file
+   * it could not take (`E:\CodeE\...\leases\`). That is not a serial, but it
+   * is still a piece of the author's disk published as evidence; the case is
+   * about the refusal, not about where the file lives.
+   */
+  const scrub = (text: string): string => text.replace(/[A-Za-z]:\\[^\s"]*/g, "<state dir>");
   const add = (
     id: string,
     title: string,
@@ -483,7 +492,16 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
     kind: "screen" | "log" = shots.length ? "screen" : "log",
     ms?: number,
   ): void => {
-    cases.push({ id, title, device: tag, status, detail, screenshots: shots, kind, ...(ms ? { ms } : {}) });
+    cases.push({
+      id,
+      title,
+      device: tag,
+      status,
+      detail: scrub(detail),
+      screenshots: shots,
+      kind,
+      ...(ms ? { ms } : {}),
+    });
   };
 
   await stage(device);
