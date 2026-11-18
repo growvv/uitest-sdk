@@ -63,7 +63,7 @@
   },
   "scripts": {
     "build": "tsc && node -e \"require('fs').copyFileSync('src/cast/scrcpy.proto','dist/cast/scrcpy.proto')\"",
-    "prepublishOnly": "npm run build && npm test",
+    "prepublishOnly": "npm run build && npm --prefix ../.. test",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc -p tsconfig.test.json"
