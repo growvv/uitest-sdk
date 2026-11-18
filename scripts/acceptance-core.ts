@@ -23,6 +23,7 @@ import { connect, tagOf, type Session } from "uitest-sdk";
 import { startViewerServer, createViewerSource } from "uitest-sdk/viewer";
 import { AppManager, Device } from "uitest-sdk/drivers";
 import { capturePage } from "./screenshot.mjs";
+import { gitHead } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "core";
@@ -80,18 +81,6 @@ function localDate(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function gitHead(): string {
-  try {
-    const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-    // A run on a dirty tree cannot be attributed to HEAD: the report would name
-    // a commit that does not contain the script it ran. Say so instead of
-    // lying — a reader who checks the hash must find what produced the page.
-    const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).trim();
-    return dirty ? `${head}+dirty` : head;
-  } catch {
-    return "unknown";
-  }
-}
 
 /** Evidence for one case: a log line, a JPEG, and the relative name a report uses. */
 class Evidence {
@@ -841,7 +830,9 @@ async function main(): Promise<number> {
     product: PRODUCT,
     version: VERSION,
     date: localDate(),
-    commit: gitHead(),
+    // The run's own evidence is not a modification to the code: a first
+    // run at a new version would otherwise stamp itself `+dirty`.
+    commit: gitHead({ exclude: [relative(ROOT, OUT)] }),
     devices,
     cases: all,
     summary,

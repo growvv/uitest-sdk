@@ -6,6 +6,7 @@
  * reproduced. Usage:
  *   npx tsx scripts/acceptance.ts --targets <id>[,<id>...]
  */
+import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -42,6 +43,30 @@ function parseTargets(): string[] {
  */
 export function envName(target: string): string {
   return target.startsWith("127.0.0.1") ? "emulator" : tagOf(target);
+}
+
+/**
+ * The commit an acceptance report is stamped with.
+ *
+ * A report must be reproducible: a reader who checks the hash has to find the
+ * code that produced the page. So a run on a modified tree says so.
+ *
+ * `exclude` is the run's own output directory. Every run writes a report and
+ * screenshots into a directory that does not exist until the first run at a
+ * new version, so without this every such run stamped itself `+dirty` — on a
+ * clean tree, because of nothing but its own evidence. A marker that is
+ * always there is a marker nobody reads.
+ */
+export function gitHead(opts: { root?: string; exclude?: string[] } = {}): string {
+  const root = opts.root ?? ROOT;
+  try {
+    const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    const paths = (opts.exclude ?? []).flatMap((p) => ["--", `:(exclude)${p}`]);
+    const dirty = execFileSync("git", ["status", "--porcelain", ...paths], { cwd: root, encoding: "utf8" }).trim();
+    return dirty ? `${head}+dirty` : head;
+  } catch {
+    return "unknown";
+  }
 }
 
 /** Writes an independent, runnable snippet for one capability. */

@@ -16,12 +16,12 @@
 import { execSync, spawnSync } from "node:child_process";
 import { existsSync, statSync, readFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { connect, tagOf } from "uitest-sdk";
 import { AppManager } from "uitest-sdk/drivers";
 import { capturePage } from "./screenshot.mjs";
-import { assertCapturable, assertShadeClosed } from "./acceptance.js";
+import { assertCapturable, assertShadeClosed, gitHead } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "console";
@@ -71,18 +71,6 @@ function localDate(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function gitHead(): string {
-  try {
-    const head = execSync("git rev-parse --short HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
-    // A run on a dirty tree cannot be attributed to HEAD: the report would name
-    // a commit that does not contain the script it ran. Say so instead of
-    // lying — a reader who checks the hash must find what produced the page.
-    const dirty = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" }).trim();
-    return dirty ? `${head}+dirty` : head;
-  } catch {
-    return "unknown";
-  }
-}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -714,7 +702,9 @@ async function run(targets: string[]): Promise<number> {
     product: PRODUCT,
     version: VERSION,
     date: localDate(),
-    commit: gitHead(),
+    // The run's own evidence is not a modification to the code: a first
+    // run at a new version would otherwise stamp itself `+dirty`.
+    commit: gitHead({ exclude: [relative(ROOT, OUT)] }),
     devices,
     cases,
     summary,

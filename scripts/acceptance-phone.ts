@@ -17,13 +17,13 @@
 import { execSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 import { tagOf } from "uitest-sdk";
 import { connect } from "uitest-sdk";
 import { AppManager } from "uitest-sdk/drivers";
-import { assertCapturable, assertShadeClosed } from "./acceptance.js";
+import { assertCapturable, assertShadeClosed, gitHead } from "./acceptance.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "phone";
@@ -73,18 +73,6 @@ function localDate(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function gitHead(): string {
-  try {
-    const head = execSync("git rev-parse --short HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
-    // A run on a dirty tree cannot be attributed to HEAD: the report would name
-    // a commit that does not contain the script it ran. Say so instead of
-    // lying — a reader who checks the hash must find what produced the page.
-    const dirty = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf8" }).trim();
-    return dirty ? `${head}+dirty` : head;
-  } catch {
-    return "unknown";
-  }
-}
 
 /** One CLI invocation. Never throws on a non-zero exit: the case decides. */
 function cli(bin: string, args: string[], opts: { env?: NodeJS.ProcessEnv } = {}) {
@@ -413,20 +401,23 @@ async function approvalCases(ctx: Ctx): Promise<Case[]> {
   // An agent holds the id and the state dir. The claim is that possessing the
   // id is still not enough, so this checks the disk rather than asserting a
   // sentence: after a replay that was never answered, no decision file may
-  // exist. A `.allow` here would mean the replay path had written the person's
-  // answer itself. Checked before any person answers, so the directory is
-  // still empty.
-  const decisionFiles = () => {
+  // exist *for this id*. A `.allow` here would mean the replay path had
+  // written the person's answer itself.
+  //
+  // Scoped to the id, not the directory: the state dir outlives the run, so a
+  // second run at the same version finds the first run's answers on disk and
+  // a directory-wide count reports them as self-approval.
+  const decisionFor = (id: string) => {
     const dir = join(ctx.stateDir, "approvals", ctx.tag);
     if (!existsSync(dir)) return [] as string[];
-    return readdirSync(dir).filter((n) => n.endsWith(".allow") || n.endsWith(".deny"));
+    return readdirSync(dir).filter((n) => n === `${id}.allow` || n === `${id}.deny`);
   };
-  const beforeAnswer = decisionFiles();
+  const beforeAnswer = decisionFor(first.id);
   add(
     "approval-agent-cannot-answer",
     "审批：Agent 拿到 id 也不能自己批准",
     beforeAnswer.length === 0 ? "pass" : "fail",
-    `after an unanswered replay the approvals dir holds ${beforeAnswer.length} decision file(s) ` +
+    `after an unanswered replay the approval ${first.id} holds ${beforeAnswer.length} decision file(s) ` +
       `(expect 0)`,
   );
 
@@ -769,7 +760,9 @@ async function run(targets: string[]): Promise<number> {
     product: PRODUCT,
     version: VERSION,
     date: localDate(),
-    commit: gitHead(),
+    // The run's own evidence is not a modification to the code: a first
+    // run at a new version would otherwise stamp itself `+dirty`.
+    commit: gitHead({ exclude: [relative(ROOT, OUT)] }),
     devices,
     cases,
     summary,
