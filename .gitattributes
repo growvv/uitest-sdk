@@ -1,0 +1,27 @@
+# Line endings are behaviour here, not taste.
+#
+# Two places depend on them:
+#  - `scripts/` is imported by the test suite. Vitest's transform rejects a
+#    shebang line followed by CRLF ("Invalid or unexpected token"), so a
+#    Windows checkout with `core.autocrlf=true` turned a passing suite into a
+#    syntax error on files nobody edited.
+#  - Tests and acceptance tooling compare exact text in `packages/*/assets`,
+#    where a CRLF copy silently fails to match an LF literal.
+#
+# Everything is text and there are no Windows shell scripts in the repository,
+# so the whole tree is pinned to LF and every checkout agrees with CI.
+* text=auto eol=lf
+
+# Binary formats are never converted, whatever the path.
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.mp4 binary
+*.woff binary
+*.woff2 binary
+*.tgz binary
+*.so binary
+*.z.so binary
