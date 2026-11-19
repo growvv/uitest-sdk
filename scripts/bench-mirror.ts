@@ -16,7 +16,14 @@
  * Usage:
  *   unset HDC_SERVER_PORT
  *   npx tsx scripts/bench-mirror.ts --target <deviceId> [--app settings]
+ *   npx tsx scripts/bench-mirror.ts --target <deviceId> --frame-rate 60
  *   npx tsx scripts/bench-mirror.ts --target <deviceId> --out docs/benchmarks-mirror.md
+ *
+ * The default is 120, the rate the 120 Hz panel actually shows. It is not a
+ * ceiling that only trims excess: on this phone `-frameRate 60` delivered ~33
+ * fps during a finger drag, because the extension turns the rate into a
+ * sampling interval and the touch-driven render already runs at ~60. At 120
+ * the same drag runs at ~60. Measuring at 60 would report half the mirror.
  *
  * Writes `docs/benchmarks-mirror.md` (or `--out`). No screenshot is kept: the
  * device shows a person's own settings and notifications, and this benchmark
@@ -36,6 +43,9 @@ function arg(name: string, fallback?: string): string {
   const env = process.env[`UITEST_${name.toUpperCase()}`];
   return env ?? fallback ?? "";
 }
+
+/** The rates the extension accepts; anything else is a typo, not a rate. */
+type FrameRate = 15 | 30 | 60 | 120;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const median = (xs: number[]): number => {
@@ -160,9 +170,14 @@ interface FirstFrame {
 }
 
 interface DragResult {
+  /** Finger down → finger up, the window pinky calls "during the drag". */
   windowMs: number;
   frames: number;
   fps: number;
+  /** The same measurement over the momentum fling after the finger lifted. */
+  settleWindowMs: number;
+  settleFrames: number;
+  settleFps: number;
   gapsMs: number[];
   slots60: number;
   slots120: number;
@@ -183,7 +198,7 @@ interface LatencyResult {
  * fresh cast, before any drag has warmed the encoder — that is the number a
  * person opening a mirror actually waits for.
  */
-async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
+async function run(deviceId: string, transport: "grpc" | "ws", app: string, frameRate: FrameRate) {
   const device = await Device.connect({ deviceId });
   const model = await modelOf(device);
   const results: { firstFrame?: FirstFrame; drag?: DragResult; latency?: LatencyResult } = {};
@@ -195,7 +210,7 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
 
     // ---- 1. first frame -------------------------------------------------
     const tSetup = performance.now();
-    const cast = await createCast(device, { mode: "stream", frameRate: 60, transport });
+    const cast = await createCast(device, { mode: "stream", frameRate, transport });
     const setupMs = performance.now() - tSetup;
 
     const arrivals: number[] = [];
@@ -236,7 +251,6 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
       // the nudge would look like a dead stream. The first direction that
       // changes the picture is the one a person would have used.
       for (const dy of [-20, 20]) {
-        const before = sizes.length;
         const tNudge = performance.now();
         await device.agent.touchDown(width / 2, Math.round(height / 2));
         await device.agent.touchMove(width / 2, Math.round(height / 2) + dy);
@@ -249,7 +263,6 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
           break;
         }
         // Nothing moved: let the next direction try from a quiet stream.
-        void before;
       }
     }
     const firstFrame: FirstFrame = {
@@ -276,7 +289,8 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
     // The cadence is 16 ms, i.e. a 60 Hz finger. It matters: the encoder is
     // dirty-region driven, so a driver that sends 20 moves a second cannot
     // produce more than 20 fps however fast the phone is — measuring with
-    // `sleep(30)` between moves reported 30 fps for a stream that does 62.
+    // `sleep(30)` between moves reported 30 fps for a drag this phone runs
+    // at ~33–35 with the same 60 fps cap.
     // Deadlines are absolute so the sleep does not accumulate the RPC time.
     const dragStartIdx = arrivals.length;
     const tDown = performance.now();
@@ -297,16 +311,35 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
       await device.agent.touchUp(width / 2, Math.round(height * to)).catch(() => undefined);
     }
     const tUp = performance.now();
-    // A drag ends with momentum; count the settle too, then report the window.
     await sleep(600);
-    const windowEnd = tUp + 400;
-    const during = arrivals.slice(dragStartIdx).filter((t) => t <= windowEnd);
+    // Two windows, not one. The finger is on the screen for tDown→tUp; the
+    // fling after it is a different regime that usually runs at full rate.
+    // The first version counted both together and reported 43–49 fps for a
+    // drag that really ran at ~33 with a 60 fps fling appended. Only pictures
+    // count: an SPS/PPS-only chunk (31 B) is not a frame.
+    const pictures: number[] = [];
+    for (let i = dragStartIdx; i < arrivals.length; i++) {
+      const t = arrivals[i]!;
+      if (t > tUp + 400) break;
+      if (sizes[i]! <= 31) continue;
+      pictures.push(t);
+    }
+    // A frame caused by the last move can land just after touchUp; it is
+    // counted in the fling window instead. That undercounts the drag by at
+    // most one or two frames out of dozens, which is smaller than run-to-run
+    // variance and is the price of a boundary that is not invented.
+    const during = pictures.filter((t) => t <= tUp);
+    const settle = pictures.filter((t) => t > tUp);
     const gaps = during.slice(1).map((t, i) => t - during[i]!);
-    const windowMs = windowEnd - tDown;
+    const windowMs = tUp - tDown;
+    const settleWindowMs = 400;
     results.drag = {
       windowMs: Math.round(windowMs),
       frames: during.length,
       fps: Number((during.length / (windowMs / 1000)).toFixed(1)),
+      settleWindowMs,
+      settleFrames: settle.length,
+      settleFps: Number((settle.length / (settleWindowMs / 1000)).toFixed(1)),
       gapsMs: gaps.map((g) => Number(g.toFixed(1))),
       slots60: Math.round(windowMs / 16.67),
       slots120: Math.round(windowMs / 8.33),
@@ -344,7 +377,7 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string) {
       const until = performance.now() + 2000;
       let hit = -1;
       while (performance.now() < until) {
-        const idx = arrivals.findIndex((t, k) => k >= before && t >= tMove);
+        const idx = arrivals.findIndex((t, k) => k >= before && t >= tMove && sizes[k]! > 31);
         if (idx >= 0) {
           hit = arrivals[idx]! - tMove;
           break;
@@ -370,6 +403,7 @@ function report(
   app: string,
   model: string,
   r: { firstFrame?: FirstFrame; drag?: DragResult; latency?: LatencyResult },
+  frameRate: FrameRate,
 ): string {
   const ff = r.firstFrame!;
   const drag = r.drag!;
@@ -384,7 +418,7 @@ function report(
   return `# 投屏质量实测（mirrorbench）
 
 > 由 \`scripts/bench-mirror.ts\` 生成，请勿手改。生成时间：${new Date().toISOString()}
-> 设备：${model} / tag \`${tagOf(deviceId)}\`；传输 ${transport}，\`-frameRate 60\`。
+> 设备：${model} / tag \`${tagOf(deviceId)}\`；传输 ${transport}，\`-frameRate ${frameRate}\`。
 > 本文件只记录计数，不保留任何截图。
 
 ## 四项指标
@@ -394,9 +428,10 @@ function report(
 | 建流（daemon + fport） | ${ff.setupMs} ms | \`createCast()\` 返回所需时间，不含首帧 |
 | 首帧（IDR 请求） | ${ff.idrPictureMs === null ? "无画面" : `${ff.idrPictureMs} ms`} | 请求 IDR → 第一帧画面。静止屏幕下 IDR 只换回 31 B 的参数集帧（${ff.firstChunkMs ?? "?"} ms 到达），没有画面 |
 | 首帧（轻推 20 px） | ${ff.nudgeToPictureMs === null ? "未用到" : `${ff.nudgeToPictureMs} ms`} | 一次真实内容变化 → 第一帧画面；查看器挂到静止手机上的实际等待 |
-| 拖动帧率 | ${drag.fps} fps | 手指拖动列表 ${drag.windowMs} ms 内到达 ${drag.frames} 帧 |
-| 拖动输入节奏 | ${drag.moves} 次移动 / ${drag.movesPerSec} 次每秒 | 编码器是脏区驱动的，帧率上限就是输入节奏；60 Hz 手指 = 16 ms 一次 |
-| 帧 / 移动 | ${(drag.frames / Math.max(1, drag.moves)).toFixed(2)} | 一次手指移动平均换回多少帧；1.0 附近表示每动一下都出帧 |
+| 拖动帧率 | ${drag.fps} fps | 按住拖动列表 ${drag.windowMs} ms 内到达 ${drag.frames} 帧；不含松手后的惯性 |
+| 松手后惯性 | ${drag.settleFps} fps | 松手后 ${drag.settleWindowMs} ms 内 ${drag.settleFrames} 帧；惯性滚动通常跑满 ${frameRate} fps |
+| 拖动输入节奏 | ${drag.moves} 次移动 / ${drag.movesPerSec} 次每秒 | 编码器只在内容变化时出帧，帧率大体跟着输入节奏走；60 Hz 手指 = 16 ms 一次，实测偶尔略高（App 自己的滚动动画也会出帧） |
+| 帧 / 移动 | ${(drag.frames / Math.max(1, drag.moves)).toFixed(2)} | 按住期间平均一次手指移动换回多少帧；1.0 附近表示每动一下都出帧 |
 | 输入→画面 | 中位 ${latMedian} ms（${latMin}–${latMax} ms，${lat.samplesMs.length} 次） | 第一次手指移动 → 它引起的第一帧 |
 | 掉帧（按 60 Hz） | ${dropped60} / ${drag.slots60} | 拖动窗口内 16.67 ms 一格，应到 ${drag.slots60} 帧 |
 | 掉帧（按 120 Hz） | ${dropped120} / ${drag.slots120} | 同上，按 8.33 ms 一格 |
@@ -407,16 +442,19 @@ function report(
 |---|---|---|---|
 | ${gapText(0.5)} | ${gapText(0.9)} | ${gapText(0.99)} | ${drag.gapsMs.length ? Math.max(...drag.gapsMs).toFixed(1) : "-"} ms |
 
-## 读这些数字时必须知道的三件事
+## 读这些数字时必须知道的六件事
 
 1. **编码器是脏区驱动的。** 屏幕不动就没有帧，不是卡住。首帧的触发方式写在上表里：IDR 请求只换回参数集帧，画面要等屏幕真的变化——这是查看器挂到一台静止手机上的真实体验。
-2. **「掉帧」按格子算，不等于丢数据。** 设备把画面渲染在 120 Hz 上，编码器只在内容变化时出帧；一次拖动在 60 Hz 格子里「缺」的帧，可能本来就是没有变化的那几格。帧率也受输入节奏约束——编码器不会凭空造出帧，手指 16 ms 动一次最多出 60 fps。这个数字和 pinky 的 mirrorbench 同一口径，只适合横向比，不适合单独当质量结论。
-3. **「输入→画面」是端到端可见延迟的近似。** 时钟在客户端，起点是手指移动指令发出，终点是第一帧到达客户端；不含显示器扫描出画面的时间。和外部高速相机量的数字不可直接比。
+2. **拖动只算按住期间，惯性单独一行。** 两段帧率不是一回事：按住时受「移动 → 渲染 → 编码」这条链约束，松手后是惯性滚动，通常跑满 ${frameRate} fps。上一版把两段并进一个窗口，把 ~33 fps 的拖动报成了 43–49。
+3. **帧率上限直接决定拖动帧率，不是「最多这么多」。** 同一台机（120 Hz 屏）实测：\`-frameRate 30\` → 拖动 ~23 fps / 惯性 ~32；60 → ~33–35 / ~63；120 → ~59–64 / ~112–120。上限把编码器的采样间隔定死，60 会让按住阶段的帧率掉到一半；而「输入→画面」在三档下都是 45–48 ms，开高不花延迟。\`uitest-mirror\` 的 \`--max-fps\` 默认是 30，23 fps 这一档就是默认体验；看实际效果时别只跑默认值。
+4. **「掉帧」按格子算，不等于丢数据。** 设备把画面渲染在 120 Hz 上，编码器只在内容变化时出帧；一次拖动在 60 Hz 格子里「缺」的帧，可能本来就是没有变化的那几格。帧率也受输入节奏约束——编码器不会凭空造出帧，手指 16 ms 动一次最多出 60 fps。本次上限是 ${frameRate} fps，所以按 120 Hz 格算的掉帧在最好情况下也接近一半——它衡量的是「120 Hz 屏上会不会重复显示同一帧」，不是编码器丢数据。这个数字和 pinky 的 mirrorbench 同一口径，只适合横向比，不适合单独当质量结论。
+5. **「输入→画面」是端到端可见延迟的近似。** 时钟在客户端，起点是手指移动指令发出，终点是第一帧到达客户端；不含显示器扫描出画面的时间。和外部高速相机量的数字不可直接比。
+6. **这是单次运行。** 同一台机多跑几遍，拖动帧率在 59.2–64.1 之间（120 上限）和 32.7–34.8 之间（60 上限）；看量级，不要比小数位。
 
 ## 原始样本
 
 - 首帧：setup ${ff.setupMs} ms，参数集帧 ${ff.firstChunkMs ?? "?"} ms，IDR 画面 ${ff.idrPictureMs ?? "无"}，轻推画面 ${ff.nudgeToPictureMs ?? "未用到"}
-- 拖动：${drag.windowMs} ms / ${drag.frames} 帧 / ${drag.fps} fps；输入 ${drag.moves} 次移动 / ${drag.movesPerSec} 次每秒
+- 拖动：${drag.windowMs} ms / ${drag.frames} 帧 / ${drag.fps} fps；惯性 ${drag.settleWindowMs} ms / ${drag.settleFrames} 帧 / ${drag.settleFps} fps；输入 ${drag.moves} 次移动 / ${drag.movesPerSec} 次每秒
 - 帧间隔：${drag.gapsMs.join(", ")}
 - 输入延迟：${lat.samplesMs.join(", ")} ms
 
@@ -424,7 +462,7 @@ function report(
 
 \`\`\`sh
 unset HDC_SERVER_PORT
-npx tsx scripts/bench-mirror.ts --target <deviceId> --app ${app}
+npx tsx scripts/bench-mirror.ts --target <deviceId> --app ${app} --frame-rate ${frameRate}
 \`\`\`
 `;
 }
@@ -434,11 +472,17 @@ async function main(): Promise<void> {
   if (!deviceId) throw new Error("pass --target <deviceId> or set UITEST_TARGET");
   const transport = (arg("transport", "grpc") as "grpc" | "ws") ?? "grpc";
   const app = arg("app", "settings");
+  const rawRate = arg("frame-rate", "120");
+  const rate = Number(rawRate);
+  if (rate !== 15 && rate !== 30 && rate !== 60 && rate !== 120) {
+    throw new Error(`--frame-rate must be 15, 30, 60 or 120 (got ${rawRate})`);
+  }
+  const frameRate = rate as FrameRate;
   const out = arg("out", join(ROOT, "docs", "benchmarks-mirror.md"));
 
-  console.log(`bench-mirror · ${tagOf(deviceId)} · ${transport} · ${app}`);
-  const { model, results } = await run(deviceId, transport, app);
-  const md = report(deviceId, transport, app, model, results);
+  console.log(`bench-mirror · ${tagOf(deviceId)} · ${transport} · ${app} · ${frameRate} fps`);
+  const { model, results } = await run(deviceId, transport, app, frameRate);
+  const md = report(deviceId, transport, app, model, results, frameRate);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, md);
   console.log(md);

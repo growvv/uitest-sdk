@@ -495,14 +495,16 @@ npx uitest-phone install-skill      # 写 ~/.claude/skills 与 ~/.agents/skills 
           <tbody>
             <tr><td>建流（daemon + fport）</td><td>1.3 s</td><td><code>createCast()</code> 返回所需时间</td></tr>
             <tr><td>首帧（IDR 请求）</td><td>无画面</td><td>静止屏幕下 IDR 只换回 31 B 参数集帧</td></tr>
-            <tr><td>首帧（轻推 20 px）</td><td>68–73 ms</td><td>一次真实内容变化 → 第一帧画面</td></tr>
-            <tr><td>拖动帧率</td><td>43–49 fps</td><td>60 Hz 手指节奏拖动列表</td></tr>
-            <tr><td>输入 → 画面</td><td>中位 45–47 ms</td><td>第一次手指移动 → 它引起的第一帧</td></tr>
-            <tr><td>掉帧（60 Hz 格子）</td><td>12–19 / 69</td><td>帧率上限受输入节奏约束</td></tr>
+            <tr><td>首帧（轻推 20 px）</td><td>68–82 ms</td><td>一次真实内容变化 → 第一帧画面</td></tr>
+            <tr><td>拖动帧率</td><td>59–64 fps</td><td>60 Hz 手指节奏按住拖动列表（不含松手后的惯性）</td></tr>
+            <tr><td>松手后惯性</td><td>112–120 fps</td><td>上限开到 120 时，惯性滚动跑满面板刷新率</td></tr>
+            <tr><td>输入 → 画面</td><td>中位 45–48 ms</td><td>第一次手指移动 → 它引起的第一帧</td></tr>
+            <tr><td>掉帧（60 Hz 格子）</td><td>0–1 / 45</td><td>拖动窗口内按 16.67 ms 一格计</td></tr>
+            <tr><td>帧率上限的影响</td><td>30 → 23 · 60 → 33–35 · 120 → 59–64 fps</td><td>同一台机；上限是硬限制，60 会让拖动帧率掉一半</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="table-note">真机 MLR-AL10，1600×2560，120 Hz 屏，<code>-frameRate 60</code>，gRPC 传输。编码器是脏区驱动的：屏幕不动就没有帧，不是卡住；「掉帧」按 60 Hz 格子算，不等于丢数据。完整说明与原始样本见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks-mirror.md">docs/benchmarks-mirror.md</a>。</p>
+      <p class="table-note">真机 MLR-AL10，1600×2560，120 Hz 屏，<code>-frameRate 120</code>（面板刷新率），gRPC 传输。编码器是脏区驱动的：屏幕不动就没有帧，不是卡住。拖动只算按住期间，松手后的惯性单独一行——旧口径把两段并进一个窗口，把 ~33 fps 的拖动报成了 43–49，已修正。顺带测出 <code>uitest-mirror --max-fps</code> 的默认值 30 会让拖动只有 ~23 fps。完整说明与原始样本见 <a href="https://github.com/growvv/uitest-sdk/blob/master/docs/benchmarks-mirror.md">docs/benchmarks-mirror.md</a>。</p>
     </section>
 
     <section id="compare" class="section compare reveal">
