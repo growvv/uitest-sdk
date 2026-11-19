@@ -2,7 +2,7 @@
   "product": "console",
   "version": "0.1.3",
   "date": "2026-11-19",
-  "commit": "1436469",
+  "commit": "6465df3",
   "devices": [
     {
       "tag": "7544d645",
@@ -25,7 +25,7 @@
       "title": "镜像：真实浏览器里的一帧",
       "device": "7544d645",
       "status": "pass",
-      "detail": "64156 · 0 notes",
+      "detail": "63497 · 0 notes",
       "screenshots": [
         "console-mirror-7544d645.jpg"
       ],
@@ -47,7 +47,7 @@
       "title": "收件箱：Agent 的请求出现在页面上",
       "device": "7544d645",
       "status": "pass",
-      "detail": "1 行 · id 46353f3e8f24",
+      "detail": "1 行 · id 78fedfa6ed0d",
       "screenshots": [
         "console-inbox-pending-7544d645.jpg"
       ],
@@ -58,7 +58,7 @@
       "title": "收件箱：在页面上点允许后 Agent 放行",
       "device": "7544d645",
       "status": "pass",
-      "detail": "replay exit 0 (expect 0) · page row: 46353f3e8f24 tap deletes allowedcom.huawei.hmos.calculator · task tap · device",
+      "detail": "replay exit 0 (expect 0) · page row: 78fedfa6ed0d tap deletes allowedcom.huawei.hmos.calculator · task tap · device",
       "screenshots": [
         "console-inbox-allowed-7544d645.jpg"
       ],

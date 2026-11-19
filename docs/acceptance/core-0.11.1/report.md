@@ -1,6 +1,6 @@
 # uitest-sdk 0.11.1 验收报告
 
-> 本文件由 `scripts/acceptance-core.ts` 生成，请勿手改。生成时间：2026-11-19，提交 `1436469`。
+> 本文件由 `scripts/acceptance-core.ts` 生成，请勿手改。生成时间：2026-11-19，提交 `6465df3`。
 
 ## 设备
 
@@ -16,23 +16,23 @@
 | `viewer-inspect` | 7544d645 | viewer 节点表 | ✅ | 22 node rows |
 | `viewer-privacy` | 7544d645 | viewer 隐私开关 | ✅ | switch on->off->on (was true) · 遮罩在读布局时完成，不覆盖在画面上 |
 | `connect` | 7544d645 | connect() 与会话 | ✅ | com.huawei.hmos.calculator · 1600x2560 |
-| `click` | 7544d645 | act.tap 点击 | ✅ | settled · 1429 ms |
-| `swipe` | 7544d645 | act.swipe 滑动 | ✅ | settled · 2200 ms |
+| `click` | 7544d645 | act.tap 点击 | ✅ | settled · 1217 ms |
+| `swipe` | 7544d645 | act.swipe 滑动 | ✅ | settled · 2219 ms |
 | `touch` | 7544d645 | 触摸协议 down/move/up | ✅ | down/move/up ok |
 | `triggerKey` | 7544d645 | act.key 系统按键 | ✅ | settled · power |
-| `captureLayout` | 7544d645 | observe.layout UI 树 | ✅ | 216 nodes |
-| `captureScreen` | 7544d645 | observe.screenshot 截图 | ✅ | 335 ms · 48655 B |
-| `cropScreen` | 7544d645 | 按 bundle 裁剪截图 | ✅ | com.huawei.hmos.calculator · 68476 B |
-| `streamScreen` | 7544d645 | streamScreen MJPEG 取帧 | ✅ | 12.1 fps |
+| `captureLayout` | 7544d645 | observe.layout UI 树 | ✅ | 219 nodes |
+| `captureScreen` | 7544d645 | observe.screenshot 截图 | ✅ | 229 ms · 48638 B |
+| `cropScreen` | 7544d645 | 按 bundle 裁剪截图 | ✅ | com.huawei.hmos.calculator · 67954 B |
+| `streamScreen` | 7544d645 | streamScreen MJPEG 取帧 | ✅ | 14.0 fps |
 | `createCast` | 7544d645 | cast.open H.264 投流 | ✅ | h264 · 31 B |
-| `createCastRecord` | 7544d645 | cast.record MP4 录制 | ✅ | 219001 B mp4 |
+| `createCastRecord` | 7544d645 | cast.record MP4 录制 | ✅ | 229157 B mp4 |
 | `dualCast` | 7544d645 | 两路并发投流 | ✅ | 31 B / 31 B |
-| `dumpLayout` | 7544d645 | cli.dumpLayout | ✅ | 218 nodes |
-| `queue` | 7544d645 | 并发调用排队 | ✅ | 10 calls · 117 ms |
-| `rpcDuringStream` | 7544d645 | 投流期间调用 RPC | ✅ | 14 ms |
+| `dumpLayout` | 7544d645 | cli.dumpLayout | ✅ | 221 nodes |
+| `queue` | 7544d645 | 并发调用排队 | ✅ | 10 calls · 110 ms |
+| `rpcDuringStream` | 7544d645 | 投流期间调用 RPC | ✅ | 8 ms |
 | `streamUiActions` | 7544d645 | UI 事件流 | ✅ | session opens; synthetic touches are not reported (device behaviour) |
 | `security-origin` | 7544d645 | viewer 来源校验（7 种握手） | ✅ | 7/7 handshakes · origin: 101 |
-| `package` | host | npm 包内容 | ✅ | 161 个文件 · 1054 KB · 无 src/test/bin · 3 个设备扩展 |
+| `package` | host | npm 包内容 | ✅ | 161 个文件 · 1057 KB · 无 src/test/bin · 3 个设备扩展 |
 
 ## 汇总
 

@@ -1,6 +1,6 @@
 # uitest-console 0.1.3 验收报告
 
-> 本文件由 `scripts/acceptance-console.ts` 生成，请勿手改。生成时间：2026-11-19，提交 `1436469`。
+> 本文件由 `scripts/acceptance-console.ts` 生成，请勿手改。生成时间：2026-11-19，提交 `6465df3`。
 
 ## 设备
 
@@ -13,10 +13,10 @@
 | # | 设备 | 结果 | 说明 |
 |---|---|---|---|
 | `package` | host | ✅ | uitest-console-0.1.3.tgz · uitest-console 0.1.3 (uitest-sdk 0.11.1) |
-| `console-mirror` | 7544d645 | ✅ | 64156 · 0 notes |
+| `console-mirror` | 7544d645 | ✅ | 63497 · 0 notes |
 | `console-inspect` | 7544d645 | ✅ | 9 node rows |
-| `console-inbox-pending` | 7544d645 | ✅ | 1 行 · id 46353f3e8f24 |
-| `console-inbox-allow` | 7544d645 | ✅ | replay exit 0 (expect 0) · page row: 46353f3e8f24 tap deletes allowedcom.huawei.hmos.calculator · task tap · device |
+| `console-inbox-pending` | 7544d645 | ✅ | 1 行 · id 78fedfa6ed0d |
+| `console-inbox-allow` | 7544d645 | ✅ | replay exit 0 (expect 0) · page row: 78fedfa6ed0d tap deletes allowedcom.huawei.hmos.calculator · task tap · device |
 | `console-hold` | 7544d645 | ✅ | hold button → Resume · agent observe exit 2 (expect 2) |
 | `console-resume` | 7544d645 | ✅ | button on join → Resume, after click → Resume · agent observe exit 0 (expect 0) |
 | `console-privacy` | 7544d645 | ✅ | privacy on->off->on |
