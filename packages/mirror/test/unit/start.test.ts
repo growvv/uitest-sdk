@@ -261,6 +261,28 @@ describe("startMirror", () => {
   });
 
   /**
+   * Closing the window means waiting for its profile directory to go. That
+   * removal retries while the browser lets go (about 590 ms on Windows), so
+   * `close()` must not resolve before it finishes: the process exits as soon
+   * as `close()` resolves, and the retry would never run — one 20-760 MB
+   * directory left behind per stop.
+   */
+  it("waits for the window's cleanup before it reports the product stopped", async () => {
+    const fake = fakeSession();
+    let finished = false;
+    const run = await startMirror(
+      OPTIONS,
+      async () => fake.session as never,
+      () => ({
+        opened: true,
+        close: () => new Promise<void>((resolve) => setTimeout(() => { finished = true; resolve(); }, 50)),
+      }),
+    );
+    await run.close();
+    expect(finished).toBe(true);
+  });
+
+  /**
    * A failure after the server is listening (a busy agent on the display-size
    * read) used to close the session and leave the viewer server, its cast
    * daemon and its fport running for a command that had already failed.

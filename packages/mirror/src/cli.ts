@@ -261,7 +261,7 @@ export async function startMirror(
       onClose: markWindowClosed,
       profile: true,
     });
-    const closeWindow = (opened as { close?: () => void }).close;
+    const closeWindow = (opened as { close?: () => Promise<void> }).close;
 
     const started = server;
     let closed = false;
@@ -275,8 +275,10 @@ export async function startMirror(
         closed = true;
         await started.close();
         // Stopping for any reason other than the window — stdin, Ctrl+C —
-        // must not leave it showing a page whose server is gone.
-        closeWindow?.();
+        // must not leave it showing a page whose server is gone. Awaited: the
+        // window's profile directory is 20-760 MB, and the process must not
+        // exit while the browser still refuses to let it go.
+        await closeWindow?.();
         if (awake) await awake.restore().catch(() => undefined);
         await session.close();
       },

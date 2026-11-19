@@ -16,6 +16,16 @@ window the product opens is now the window it watches.
   path is now used, and only a process that really ran can report a close.
 - **Stopping for any other reason closes the window**, so Ctrl+C or a closed
   stdin does not leave a page pointing at a server that is gone.
+- **The window's profile is deleted before the process exits.** Removing it
+  right after the kill loses a race with the browser's shutdown (EPERM for
+  about 590 ms on Windows), and the old retry was an unref'd timer the exiting
+  process never reached — one 20–760 MB directory per stop. `close()` now
+  waits for the removal to finish.
+- **A stop releases the cast daemon and its forward.** A frame arriving while
+  the product was shutting down made the viewer drop the cast without
+  disposing it, so the phone kept a `libscreen_casting` daemon and an hdc
+  forward, and the open socket kept this process alive past its own `close()`
+  — the acceptance harness killed it after 20 s. Fixed in core 0.11.1.
 - Runs on core's lifecycle fixes: a second `close()`/`stop()` joins the first
   instead of returning early, and a daemon the reconnect started is cleaned up
   too.

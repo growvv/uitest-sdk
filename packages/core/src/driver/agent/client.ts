@@ -541,6 +541,15 @@ export class AgentClient {
     if (!this.reconnecting) {
       this.reconnecting = (async () => {
         const sock = await this.reconnect!();
+        // `close()` may have run while the reconnect was in flight. It
+        // destroyed the socket it knew about, which was not this one, and
+        // nothing else holds a reference to it — an open TCP socket keeps the
+        // event loop alive, so the product's process never exits. Measured as
+        // a 20-second hang on every mirror stop that raced a reconnect.
+        if (this.disposed) {
+          sock.destroy();
+          throw new AgentConnectionError("agent client closed during reconnect", "ECONN");
+        }
         this.pending = null;
         this.demux.reset();
         this.closed = false;

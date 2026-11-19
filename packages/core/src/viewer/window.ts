@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -96,6 +96,18 @@ export interface OpenWindowOptions {
   print?: (line: string) => void;
   /** Kills a browser this call started; injected by the tests. */
   kill?: (pid: number) => void;
+  /** Removes a profile directory; injected by the tests. */
+  removeDir?: (dir: string) => void | Promise<void>;
+  /** How long to wait between removal attempts; injected by the tests. */
+  wait?: (ms: number) => Promise<void>;
+  /**
+   * Creates the profile directory; injected by the tests.
+   *
+   * The real one is `mkdtemp` under the temp directory, which touches the
+   * disk. A test that asserts *which* directory is removed should not leave a
+   * real one behind for every run.
+   */
+  makeProfile?: () => string;
 }
 
 /** What `openWindow` reports: the window, and a way to close it. */
@@ -108,8 +120,44 @@ export interface OpenWindowResult {
    * A mirror that stops for any reason other than the window — stdin closed,
    * SIGINT — otherwise leaves a window pointing at a server that is gone.
    * Absent when no window opened.
+   *
+   * It resolves once the window's profile directory is gone, so a product
+   * that awaits it does not exit mid-cleanup. See `removeWindowProfile`.
    */
-  close?: () => void;
+  close?: () => Promise<void>;
+}
+
+/**
+ * Deletes a window's profile directory, retrying while the browser lets go.
+ *
+ * Measured on Windows: an Edge profile whose process was just killed refuses
+ * `rmSync` with EPERM for roughly 590 ms while the browser finishes writing.
+ * The first version retried on a `setTimeout(...).unref()`, and an unref'd
+ * timer does not hold the event loop — the product finished closing in 684 ms
+ * and exited before the retry ran, so every mirror stop left its directory
+ * behind. One per run at 20-760 MB filled the machine's disk.
+ *
+ * `remove` is the raw attempt (it throws); `wait` is injected by the tests.
+ */
+export async function removeWindowProfile(
+  dir: string,
+  remove: (dir: string) => void = (d) => rmSync(d, { recursive: true, force: true }),
+  opts: { wait?: (ms: number) => Promise<void>; attempts?: number } = {},
+): Promise<void> {
+  const attempts = opts.attempts ?? 4;
+  // Not unref'd: the caller awaits this, and the wait is the only thing
+  // keeping the process alive until the directory is really gone.
+  const wait = opts.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let i = 0; i < attempts; i++) {
+    try {
+      remove(dir);
+      return;
+    } catch {
+      // Still shutting down; try again in a moment.
+      if (i < attempts - 1) await wait(300 * (i + 1));
+    }
+  }
+  // Left behind; the OS temp cleaner is the backstop.
 }
 
 /**
@@ -165,11 +213,22 @@ function watchClose(
   child: { on(event: string, listener: (...args: never[]) => void): unknown } | undefined,
   onClose: (() => void) | undefined,
   onFailed: (() => void) | undefined,
+  onGone?: () => void,
 ): void {
   if (!child || typeof child.on !== "function") return;
   let launched = false;
   let told = false;
+  let cleaned = false;
+  const clean = (): void => {
+    if (cleaned) return;
+    cleaned = true;
+    onGone?.();
+  };
   const tell = (): void => {
+    // The profile directory goes whenever the browser process does — a real
+    // close, or a launch that never happened — so no directory outlives the
+    // window it belonged to.
+    clean();
     if (!launched || told) return;
     told = true;
     onClose?.();
@@ -209,21 +268,39 @@ export function openWindow(
       return child;
     });
   const print = opts.print ?? ((line: string) => process.stdout.write(`${line}\n`));
+  const wait =
+    opts.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  // The tests inject `removeDir` (they assert the directory is named); in
+  // production it is the retrying removal, because a single `rmSync` right
+  // after the kill loses the race with the browser's shutdown.
+  const removeDir = opts.removeDir ?? ((dir: string) => removeWindowProfile(dir, undefined, { wait }));
   const order: Browser[] = opts.browser ? [opts.browser] : ["edge", "chrome"];
   // One directory per window, so a second mirror never joins the first one's
   // browser — and so the process this call spawned is the one that owns the
   // window. The `mkdtemp` suffix is what keeps two calls from colliding.
-  const profile = opts.profile
-    ? mkdtempSync(join(tmpdir(), "uitest-window-"))
-    : undefined;
+  const makeProfile = opts.makeProfile ?? (() => mkdtempSync(join(tmpdir(), "uitest-window-")));
+  const profile = opts.profile ? makeProfile() : undefined;
 
   for (const browser of order) {
     const { command, args } = appWindowCommand(browser, url, platform, opts.size, profile);
     const exe = resolveBrowserPath(browser, platform, exists);
     try {
       const child = spawnFn(exe, args) as Parameters<typeof watchClose>[0] & { pid?: number };
-      watchClose(child, opts.onClose, () =>
-        print(`open ${url} in a browser (${exe} did not start)`),
+      // The directory is per-window, so it is removed once and by whichever
+      // path gets there first: the browser exiting, or the product closing it.
+      let removed = false;
+      let removing: Promise<void> | undefined;
+      const removeProfile = (): Promise<void> => {
+        if (!profile || removed) return removing ?? Promise.resolve();
+        removed = true;
+        removing = Promise.resolve(removeDir(profile)).catch(() => undefined);
+        return removing;
+      };
+      watchClose(
+        child,
+        opts.onClose,
+        () => print(`open ${url} in a browser (${exe} did not start)`),
+        () => void removeProfile(),
       );
       const pid = child?.pid;
       return {
@@ -231,12 +308,13 @@ export function openWindow(
         command: exe,
         ...(typeof pid === "number"
           ? {
-              close: () => {
+              close: async () => {
                 try {
                   kill(pid);
                 } catch {
                   // Already gone.
                 }
+                await removeProfile();
               },
             }
           : {}),

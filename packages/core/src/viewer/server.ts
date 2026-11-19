@@ -1383,7 +1383,18 @@ export class ViewerServer {
       }
     } finally {
       this.startingCast = false;
-      if (this.cast === cast) this.cast = null;
+      if (this.cast === cast) {
+        this.cast = null;
+        // The loop broke because `closing` was set — a frame from a phone that
+        // is still sending is enough. `finishClose` reads `this.cast` after
+        // awaiting the recording and the input lane, so a cast dropped here
+        // would be one it never sees: the device keeps the daemon and the
+        // forward, and the open socket keeps the process alive past `close()`.
+        // Hand it over through `castDisposal`, which `finishClose` waits for.
+        if (cast && this.closing) {
+          this.castDisposal = cast.dispose().catch(() => undefined);
+        }
+      }
     }
   }
 

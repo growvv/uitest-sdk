@@ -83,6 +83,48 @@ describe("AgentClient", () => {
     c.close();
   });
 
+  /**
+   * A reconnect that lands after `close()` attaches a socket nothing knows
+   * about: `close()` destroyed the old one, and the new one is never closed.
+   * An open TCP socket holds the event loop, so a product whose `close()`
+   * resolved never exits — measured as a 20-second hang on every mirror stop
+   * that raced a reconnect, with the device's forward left behind.
+   */
+  it("destroys a socket that a reconnect attaches after close()", async () => {
+    const other = net.createServer((s) => s.on("data", () => undefined));
+    await new Promise<void>((r) => other.listen(0, "127.0.0.1", r));
+    const otherPort = (other.address() as net.AddressInfo).port;
+    let opened: net.Socket | null = null;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const first = net.createConnection(port, "127.0.0.1");
+    await new Promise((r) => first.once("connect", r));
+    const reconnecting = new AgentClient(first, {
+      reconnect: async () => {
+        // Hold the reconnect open so `close()` lands while it is in flight.
+        await gate;
+        opened = net.createConnection(otherPort, "127.0.0.1");
+        await new Promise((r) => opened!.once("connect", r));
+        return opened;
+      },
+    });
+    // Lose the first transport, then start a call that must reconnect.
+    first.destroy();
+    await new Promise((r) => setTimeout(r, 20));
+    const pending = reconnecting.call("CtrlCmd", { api: "x", args: [] }).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 20));
+    reconnecting.close();
+    release();
+    // The reconnect lands after the close. Nothing awaits the call — it is
+    // still waiting for a reply that never comes — the point is only whether
+    // the socket it attached is still open.
+    void pending;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(opened).not.toBeNull();
+    expect(opened?.destroyed).toBe(true);
+    await new Promise<void>((r) => other.close(() => r()));
+  });
+
   it("does NOT retry non-busy exceptions", async () => {
     let n = 0;
     replyFn = () => { n++; return '{"result":null,"exception":"Invalid params"}\n'; };

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { appWindowCommand, openWindow, resolveBrowserPath } from "../../src/viewer/window.js";
+import {
+  appWindowCommand,
+  openWindow,
+  removeWindowProfile,
+  resolveBrowserPath,
+} from "../../src/viewer/window.js";
 
 describe("appWindowCommand", () => {
   // The platform is always named here. Reading it from the host made this test
@@ -52,12 +57,17 @@ describe("appWindowCommand", () => {
    */
   it("gives each profiled window a different profile directory", () => {
     const profiles: string[] = [];
+    // A fake name per call: the real `mkdtemp` touches the disk, and a test
+    // that only checks the names should not leave directories behind.
+    let n = 0;
+    const makeProfile = () => `C:/tmp/uitest-window-${++n}`;
     for (let i = 0; i < 2; i++) {
       openWindow("http://127.0.0.1:7042/", {
         platform: "win32",
         browser: "edge",
         exists: () => false,
         profile: true,
+        makeProfile,
         spawn: (_command, args) => {
           profiles.push(args.find((a) => a.startsWith("--user-data-dir="))!);
           return { on: () => undefined };
@@ -68,6 +78,98 @@ describe("appWindowCommand", () => {
     expect(profiles).toHaveLength(2);
     expect(profiles[0]).toMatch(/^--user-data-dir=/);
     expect(profiles[0]).not.toBe(profiles[1]);
+  });
+
+  /**
+   * A profile directory is 20 MB to 760 MB of browser cache and it is created
+   * per window. The first version of `profile: true` never removed it: sixty
+   * runs of the mirror acceptance left 65 of them under the temp directory and
+   * filled the machine's disk. It must go when the window does.
+   */
+  it("removes the profile directory when the window closes", async () => {
+    const { EventEmitter } = await import("node:events");
+    const child = new EventEmitter() as unknown as { unref(): void };
+    child.unref = () => undefined;
+    let profile = "";
+    const removed: string[] = [];
+    openWindow("http://127.0.0.1:7042/", {
+      platform: "win32",
+      browser: "edge",
+      exists: () => false,
+      profile: true,
+      makeProfile: () => "C:/tmp/uitest-window-a",
+      spawn: (_command, args) => {
+        profile = args.find((a) => a.startsWith("--user-data-dir="))!.slice("--user-data-dir=".length);
+        return child;
+      },
+      removeDir: (dir) => removed.push(dir),
+      print: () => undefined,
+    });
+    expect(profile).not.toBe("");
+    child.emit("spawn");
+    child.emit("exit", 0, null);
+    expect(removed).toEqual([profile]);
+  });
+
+  it("removes the profile directory when the product closes the window", async () => {
+    let profile = "";
+    const removed: string[] = [];
+    const result = openWindow("http://127.0.0.1:7042/", {
+      platform: "win32",
+      browser: "edge",
+      exists: () => false,
+      profile: true,
+      makeProfile: () => "C:/tmp/uitest-window-b",
+      spawn: (_command, args) => {
+        profile = args.find((a) => a.startsWith("--user-data-dir="))!.slice("--user-data-dir=".length);
+        return { on: () => undefined, pid: 99 };
+      },
+      kill: () => undefined,
+      removeDir: (dir) => removed.push(dir),
+      print: () => undefined,
+    });
+    await result.close?.();
+    expect(removed).toEqual([profile]);
+  });
+
+  /**
+   * Removing the directory right after the kill is not enough. Measured on
+   * Windows: `rmSync` of a just-killed Edge profile fails with EPERM for about
+   * 590 ms, and the retry used to be a `setTimeout(...).unref()` — an unref'd
+   * timer does not hold the event loop, so a product that finishes closing
+   * exits first and the retry never runs. A mirror run therefore left one
+   * profile per stop, 20-760 MB each, and eventually filled the disk.
+   */
+  it("retries a removal that fails while the browser is still shutting down", async () => {
+    const calls: string[] = [];
+    let attempt = 0;
+    await removeWindowProfile(
+      "C:/tmp/p1",
+      (dir) => {
+        attempt += 1;
+        calls.push(dir);
+        if (attempt === 1) {
+          const err = new Error("EPERM: operation not permitted") as NodeJS.ErrnoException;
+          err.code = "EPERM";
+          throw err;
+        }
+      },
+      { wait: async () => undefined },
+    );
+    expect(calls).toEqual(["C:/tmp/p1", "C:/tmp/p1"]);
+  });
+
+  it("gives up after a few attempts instead of retrying forever", async () => {
+    let attempt = 0;
+    await removeWindowProfile(
+      "C:/tmp/p1",
+      () => {
+        attempt += 1;
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      },
+      { wait: async () => undefined },
+    );
+    expect(attempt).toBe(4);
   });
 
   /**
@@ -159,7 +261,7 @@ describe("appWindowCommand", () => {
       kill: (pid) => killed.push(pid),
       print: () => undefined,
     });
-    result.close?.();
+    await result.close?.();
     expect(killed).toEqual([4242]);
   });
 

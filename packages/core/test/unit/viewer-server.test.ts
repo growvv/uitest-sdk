@@ -1694,4 +1694,35 @@ describe("ViewerServer grace-period shutdown", () => {
     await closing;
     expect(h.cast.disposed).toBe(true);
   });
+
+  /**
+   * A live cast must be disposed even when a frame arrives during `close()`.
+   *
+   * The stream loop breaks as soon as `closing` is set, and its `finally`
+   * nulled `this.cast` — but `finishClose` reads that field *after* awaiting
+   * the recording start and the input lane. A frame that lands in that window
+   * (a phone keeps sending them) made the cast `finishClose` was about to
+   * dispose disappear. Measured on a real device: every mirror stop that
+   * raced a frame left one `libscreen_casting` daemon and one hdc forward
+   * behind, and the open socket kept the product's process alive past its own
+   * `close()` — the acceptance harness then killed it after 20 s.
+   */
+  it("disposes a live cast when a frame arrives during close", async () => {
+    const h = await start({ recordOnStart: true, holdStart: true });
+    const c = await connect(h.port);
+    h.cast.push(keyframe());
+    await until(() => c.binaries.length > 0);
+
+    // `close()` awaits the recording that is still starting.
+    const closing = h.server.close();
+    await sleep(30);
+    // The phone keeps sending frames; the loop breaks on this one.
+    h.cast.push(keyframe());
+    await sleep(30);
+    h.releaseStart();
+    await closing;
+
+    expect(h.cast.disposed).toBe(true);
+    c.close();
+  });
 });

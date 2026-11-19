@@ -11,8 +11,8 @@
 ## [0.11.1] — 2026-11-19
 
 第二轮全仓评审（`docs/reviews/codex-architecture-review-2.md`）之后的修正版，
-外加验收 `uitest-mirror` 时暴露的两个窗口缺陷。没有破坏性变更；一处行为变化
-写在下面第一条。
+外加验收 `uitest-mirror` 时暴露的窗口缺陷，以及一个关闭时的投流泄漏。没有
+破坏性变更；一处行为变化写在下面第一条。
 
 - **`openWindow` 不再把「浏览器没启动」当成「窗口被关掉」**。`spawn` 找不到
   可执行文件时不会抛错，而是异步发出 `error` 和退出码为负的 `close`；把那次
@@ -25,6 +25,17 @@
   选项，让进程就是窗口。
 - **`openWindow` 返回 `close()`**：产品因 stdin 关闭或 Ctrl+C 停止时关掉自己开的
   窗口，不留一个指向已停服务的页面。
+- **`ViewerServer.close()` 不再漏掉关闭途中被丢弃的投流**。流循环在
+  `closing` 置位后跳出，`finally` 把 `this.cast` 清空——但 `finishClose` 是在
+  等完录制启动和输入通道之后才读这个字段的。手机只要在这段窗口里送来一帧，
+  那个即将被 `dispose()` 的投流就不见了：设备上的 `libscreen_casting` daemon
+  和 hdc 转发留在原地，那条没关的 socket 还撑住事件循环，产品自己的
+  `close()` 都返回了进程却不退出。实测每次镜像停止都可能漏一个 daemon + 一个
+  转发，验收脚本等 20 秒后强杀。现在 `finally` 在关闭途中丢弃投流时把它交给
+  `castDisposal`，`finishClose` 会等它。
+- **`AgentClient` 的重连落在 `close()` 之后时不再留下 socket**。`close()`
+  销毁的是它认识的那条连接；重连如果正在进行，新 socket 落地后没人关它，
+  同样撑住事件循环。现在重连落地时若已 `disposed` 就直接销毁并报错。
 - **每个 ws 视图有自己的设备端口**：`session.view.open()` 的第二个及以后的视图在
   ws 传输上此前都落到设备端口 5000，第二个页面会接管第一个的 daemon。现在按视图
   序号分配 5000、5002、5004……

@@ -153,9 +153,15 @@ async function startMirror(
  *
  * Closing stdin is the graceful path: the product then closes the page and
  * releases the device, which removes its port forward.
+ *
+ * A stop that times out is a leak: `kill()` on Windows terminates without
+ * running the product's cleanup, so the device keeps the cast daemon and the
+ * hdc forward. It is reported instead of hidden, because a green case that
+ * quietly left a daemon on the phone is not a green case.
  */
-async function stopMirror(p: MirrorProcess): Promise<void> {
+async function stopMirror(p: MirrorProcess, label = "?"): Promise<void> {
   if (p.child.exitCode !== null || p.child.killed) return;
+  const t0 = Date.now();
   p.child.stdin?.end();
   const exited = await new Promise<boolean>((res) => {
     const timer = setTimeout(() => res(false), 20_000);
@@ -164,7 +170,13 @@ async function stopMirror(p: MirrorProcess): Promise<void> {
       res(true);
     });
   });
-  if (!exited) p.child.kill();
+  if (exited) {
+    const ms = Date.now() - t0;
+    if (ms > 8_000) console.log(`  note: ${label} stop took ${ms} ms`);
+    return;
+  }
+  console.log(`  LEAK: ${label} did not stop in ${Date.now() - t0} ms; killing it (its daemon and forward stay)`);
+  p.child.kill();
 }
 
 /** The display size, for the `--max-size` arithmetic. */
@@ -524,7 +536,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
       if (shot.ok) add("window", "窗口打开，画面有帧", "pass", `live at ${p.url}`, [file], "screen", Date.now() - started);
       else add("window", "窗口打开，画面有帧", "fail", `screenshot failed: ${shot.reason}`, [], "log", Date.now() - started);
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "window");
     }
   }
 
@@ -580,7 +592,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
           [file],
         );
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "click");
     }
   }
 
@@ -627,7 +639,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
         add("keyboard", "键盘输入落到设备", "fail", `the phone left the calculator (${after.bundle}) during the capture`, [file]);
       } else add("keyboard", "键盘输入落到设备", "fail", `the device did not receive the text · "${shown.trim().slice(0, 60)}"`, [file]);
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "keyboard");
     }
   }
 
@@ -672,7 +684,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
       else if (moved) add("scroll", "滚轮驱动设备滚动", "pass", "the history list moved (layout comparison; the list holds the person's own sums, so no picture is kept)", [], "log");
       else add("scroll", "滚轮驱动设备滚动", "fail", "the wheel did not move the device's list", [], "log");
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "scroll");
     }
   }
 
@@ -743,7 +755,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
         );
       }
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "keys");
     }
   }
 
@@ -772,7 +784,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
       awake = await screenTimeout(device).catch(() => null);
       await sleep(6000);
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "record");
     }
     const timeoutAfter = await screenTimeout(device).catch(() => null);
     const size = existsSync(file) ? statSync(file).size : 0;
@@ -845,7 +857,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
         shot.ok ? [`max-size-${tag}.jpg`] : [],
       );
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "max-size");
     }
   }
 
@@ -904,7 +916,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
         );
       } else add("no-control", "--no-control 只读", "pass", `no key row; ${injected} left the display unchanged`, [file]);
     } finally {
-      await stopMirror(p);
+      await stopMirror(p, "no-control");
     }
   }
 
@@ -929,7 +941,7 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
         "log",
       );
     } finally {
-      await stopMirror(first);
+      await stopMirror(first, "lease-a");
     }
   }
 
