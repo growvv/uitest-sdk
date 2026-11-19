@@ -31,6 +31,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Device, AppManager } from "uitest-sdk/drivers";
 import { createCast } from "uitest-sdk/cast";
 import { tagOf } from "uitest-sdk";
@@ -498,7 +499,11 @@ async function main(): Promise<void> {
   console.log(md);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Run only when invoked directly. The mirror acceptance imports `run`, and an
+// unconditional `main()` would make that import exit for a missing --target.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

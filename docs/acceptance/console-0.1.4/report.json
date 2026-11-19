@@ -1,0 +1,132 @@
+{
+  "product": "console",
+  "version": "0.1.4",
+  "date": "2026-11-20",
+  "commit": "5089788+dirty",
+  "devices": [
+    {
+      "tag": "7544d645",
+      "model": "MLR-AL10",
+      "resolution": "1600x2560"
+    }
+  ],
+  "cases": [
+    {
+      "id": "package",
+      "title": "npm 包安装与版本",
+      "device": "host",
+      "status": "pass",
+      "detail": "uitest-console-0.1.4.tgz · uitest-console 0.1.4 (uitest-sdk 0.11.2)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "console-mirror",
+      "title": "镜像：真实浏览器里的一帧",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "52277 · 0 notes",
+      "screenshots": [
+        "console-mirror-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-inspect",
+      "title": "节点表：元素行",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "16 node rows",
+      "screenshots": [
+        "console-inspect-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-inbox-pending",
+      "title": "收件箱：Agent 的请求出现在页面上",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "1 行 · id e7ab712d459d",
+      "screenshots": [
+        "console-inbox-pending-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-inbox-allow",
+      "title": "收件箱：在页面上点允许后 Agent 放行",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "replay exit 0 (expect 0) · page row: e7ab712d459d tap deletes allowedcom.huawei.hmos.calculator · task tap · device",
+      "screenshots": [
+        "console-inbox-allowed-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-hold",
+      "title": "Hold：页面拿到设备，Agent 停在 lease_held",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "hold button → Resume · agent observe exit 2 (expect 2)",
+      "screenshots": [
+        "console-held-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-resume",
+      "title": "Resume：交回后 Agent 继续",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "button on join → Resume, after click → Resume · agent observe exit 0 (expect 0)",
+      "screenshots": [
+        "console-resumed-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-privacy",
+      "title": "隐私开关：页面自己的开关",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "privacy on->off->on",
+      "screenshots": [
+        "console-privacy-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-selfcontained",
+      "title": "页面不引用外部资源",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "0 local resources",
+      "screenshots": [
+        "console-selfcontained-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "console-origin",
+      "title": "来源校验沿用库的实现",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "own origin=101 · another site=403 · null origin=403 · DNS rebinding=403",
+      "screenshots": [],
+      "kind": "log"
+    }
+  ],
+  "summary": {
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rerun": [
+    "unset HDC_SERVER_PORT",
+    "npx tsx scripts/acceptance-console.ts --targets <id>[,<id>]",
+    "node scripts/gen-acceptance-pages.mjs"
+  ],
+  "issues": []
+}

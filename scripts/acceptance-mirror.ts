@@ -549,7 +549,11 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
   {
     const started = Date.now();
     try {
-      const bench = await benchMirror(device, "grpc", "calculator", 120);
+      // Settings, not the calculator: the drag leg needs a list that scrolls,
+      // and the calculator's keypad is a fixed grid. This is also the CLI's
+      // own default, so the acceptance measures what a person running
+      // `bench-mirror` would get.
+      const bench = await benchMirror(device, "grpc", "settings", 120);
       const lat = bench.latency.samplesMs;
       const median = lat.length ? [...lat].sort((a, b) => a - b)[Math.floor(lat.length / 2)] : null;
       const firstPicture = bench.firstFrame.nudgeToPictureMs ?? bench.firstFrame.idrPictureMs;

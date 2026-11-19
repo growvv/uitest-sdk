@@ -202,13 +202,23 @@ const COMMAND_CASES: Array<{
     // The calculator has no text field until its display is focused: the
     // keypad is buttons, and `type` correctly reports "a focused input" as
     // not_found. Tap the display first, then type into it.
+    //
+    // The display is cleared first. It is a live expression line, not a blank
+    // form field: a previous case (or a run interrupted mid-task) can leave an
+    // expression in it, and typing into that appends digits into whatever
+    // expression was already there. `type` reads the field back and would then
+    // correctly report `uncertain` — a failure that is the case's fault, not
+    // the product's. `paste` is used for the same reason the skill recommends
+    // it: the expression line reformats digits as they arrive, and per-key
+    // input does not survive that.
     before: (ctx) => {
       const observe = ctx.run(["observe"]);
       const ref = /\[(\d+)\] input /.exec(observe.out)?.[1];
       if (!ref) throw new Error("the calculator screen has no input element to type into");
       ctx.run(["tap", "--ref", ref]);
+      ctx.run(["tap", "--text", "C"]);
     },
-    args: ["type", "--text", "123"],
+    args: ["type", "--text", "123", "--paste"],
     check: (r) => (r.text.includes("typed") ? null : "type did not report typed characters"),
   },
   { id: "cmd-swipe", title: "swipe 滑动", args: ["swipe", "--direction", "up"] },

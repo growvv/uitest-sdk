@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 (2026-11-20)
+
+Runs on `uitest-sdk@0.11.2`. No source changes in this package: the release
+carries the core fixes below and the new `bench` acceptance case.
+
+- The acceptance report now measures the four mirrorbench numbers on the
+  device at acceptance time (first picture, drag fps, input→frame median)
+  instead of only opening a window and photographing it.
+
 ## 0.1.1 (2026-11-19)
 
 Runs on `uitest-sdk@0.11.1`. Fixes what the first acceptance run found: the
