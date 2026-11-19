@@ -10,9 +10,14 @@ const node = (type: string, attrs: Record<string, unknown>, children: UiNode[] =
   children,
 });
 
-const tree = (): UiNode =>
+/**
+ * The screen, with the field's value owned here so `inputText` can change it:
+ * a fake that accepted text without the field reflecting it would now (rightly)
+ * be reported as a failed type.
+ */
+const tree = (value: { text: string }): UiNode =>
   node("Root", { bounds: "[0,0][1000,2000]", bundleName: "com.demo" }, [
-    node("TextInput", { text: "query", bounds: "[100,700][900,800]", focused: "true" }),
+    node("TextInput", { text: value.text, bounds: "[100,700][900,800]", focused: "true" }),
   ]);
 
 interface TextCall {
@@ -25,6 +30,7 @@ interface TextCall {
 /** A device whose only interesting surface is inputText. */
 function fakeDevice() {
   const texts: TextCall[] = [];
+  const value = { text: "query" };
   return {
     texts,
     device: {
@@ -34,7 +40,7 @@ function fakeDevice() {
           return null;
         },
         async captureLayout() {
-          return tree();
+          return tree(value);
         },
         async getDisplaySize() {
           return { width: 1000, height: 2000 };
@@ -52,6 +58,7 @@ function fakeDevice() {
         // The optional mode is the whole point: it must reach the device.
         async inputText(x: number, y: number, text: string, mode?: unknown) {
           texts.push({ x, y, text, mode });
+          value.text = text;
         },
         async triggerKey() {},
       },

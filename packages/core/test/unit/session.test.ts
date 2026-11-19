@@ -36,6 +36,22 @@ function fakeDevice(trees: UiNode[]) {
   let index = 0;
   const calls: Call[] = [];
   const actions: { kind: string; args: unknown[] }[] = [];
+  /**
+   * The value `inputText` wrote, applied to the next layout read. Without it a
+   * fake that accepted text without the field reflecting it would be reported
+   * as a failed type — which is exactly what the read-back is for.
+   */
+  const typed: { text: string } = { text: "" };
+  const applied = (): UiNode[] =>
+    trees.map((tree) => {
+      if (!typed.text) return tree;
+      const patch = (n: UiNode): UiNode => ({
+        ...n,
+        attributes: { ...n.attributes, ...(String(n.attributes.type) === "TextInput" ? { text: typed.text } : {}) },
+        children: (n.children ?? []).map(patch),
+      });
+      return patch(tree);
+    });
   const device = {
     deviceId: "SERIAL0123456789",
     agent: {
@@ -61,7 +77,7 @@ function fakeDevice(trees: UiNode[]) {
         return null;
       },
       async captureLayout() {
-        return trees[Math.min(index, trees.length - 1)]!;
+        return applied()[Math.min(index, trees.length - 1)]!;
       },
       async getDisplaySize() {
         return { width: 1000, height: 2000 };
@@ -87,6 +103,7 @@ function fakeDevice(trees: UiNode[]) {
       },
       async inputText(x: number, y: number, text: string) {
         actions.push({ kind: "inputText", args: [x, y, text] });
+        typed.text = text;
       },
       async triggerKey(code: number) {
         actions.push({ kind: "key", args: [code] });

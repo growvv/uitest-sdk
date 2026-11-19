@@ -33,6 +33,33 @@ import type { InputTextMode, Rect } from "../transport/model.js";
 import type { UiNode } from "../transport/model.js";
 import type { ShellRunner } from "../transport/apps.js";
 
+/**
+ * What a field holds after typing, or null when the app does not render it.
+ *
+ * The ref the caller passed cannot be used: a field's signature includes its
+ * text and its rect, and the dialer changes both as digits arrive, so the ref
+ * names a different element (or none) once the value changed. The resource id
+ * is the one thing that survives — falling back to the original position for
+ * fields that have no id. A field with no `text` attribute at all is
+ * unreadable rather than empty; reporting it as empty would make every such
+ * app look like a failed type.
+ */
+function fieldValue(screen: Screen, field: ScreenElement): string | null {
+  const id = String(field.node?.attributes?.["id"] ?? "");
+  const same = id
+    ? screen.elements.find((e) => e.input && String(e.node?.attributes?.["id"] ?? "") === id)
+    : screen.elements.find(
+        (e) =>
+          e.input &&
+          e.rect.x === field.rect.x &&
+          e.rect.y === field.rect.y &&
+          e.rect.width === field.rect.width &&
+          e.rect.height === field.rect.height,
+      );
+  const raw = same?.node?.attributes?.["text"];
+  return raw === undefined || raw === null ? null : String(raw);
+}
+
 /** The device calls a session needs; `Device` satisfies this. */
 export interface SessionAgent {
   hypium(api: string, thisRef: string, args: unknown[]): Promise<unknown>;
@@ -548,7 +575,24 @@ ${screen.header}`,
       text,
       opts.paste ? { paste: true } : undefined,
     );
-    return this.after("type", { text: "[redacted]", ref: opts.ref }, before);
+    // Per-key input is not reliable on every app: the dialer on the test phone
+    // turns "10086" into "1086" because each digit lands in its own formatting
+    // buffer, and the device's own `uitest uiInput text` corrupts it the same
+    // way. Reporting `settled` without looking lets an agent believe a number
+    // it never entered, so the field's own value is read back and compared.
+    return this.after("type", { text: "[redacted]", ref: opts.ref }, before, (screen) => {
+      const landed = fieldValue(screen, field);
+      if (landed === null || landed === text) return null;
+      return {
+        status: "uncertain",
+        text: `typed ${text.length} characters, but the field holds ${JSON.stringify(landed)}`,
+        extra: {
+          reason: `the field does not hold ${JSON.stringify(text)} after typing`,
+          typed: text,
+          field: landed,
+        },
+      };
+    });
   }
 
   /** Presses a named key (`back`, `home`, `power`, ...) or a numeric key code. */
@@ -1128,13 +1172,26 @@ ${renderFull(screen)}`, {
   }
 
   /** Settles, diffs against the pre-action screen, and records the step. */
-  private async after(command: string, args: unknown, before: Screen): Promise<ActionResult> {
+  private async after(
+    command: string,
+    args: unknown,
+    before: Screen,
+    override?: (screen: Screen) => { status: "uncertain"; text: string; extra: Record<string, unknown> } | null,
+  ): Promise<ActionResult> {
     const result = await settle(this.reader, {
       previousHash: before.hash,
       maxSettleMs: this.settleMs,
     });
     this.lastScreen = result.screen;
     const diff = renderDiff(before, result.screen);
+    const decided = override?.(result.screen);
+    if (decided) {
+      return this.finish(command, args, decided.status, decided.text, {
+        screen: result.screen,
+        diff,
+        ...decided.extra,
+      });
+    }
     if (result.timedOut) {
       return this.finish(command, args, "uncertain", `${diff.text}\nsettle: timeout`, {
         screen: result.screen,

@@ -9,11 +9,11 @@ import { holdDevice, resumeDevice } from "../../src/governance/hold.js";
 import { readLease } from "../../src/governance/lease.js";
 import type { UiNode } from "../../src/transport/model.js";
 
-const page = (text: string): UiNode => ({
+const page = (text: string, field: { text: string }): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },
   children: [
     { attributes: { type: "Button", text, bounds: "[100,200][400,400]", clickable: "true" } },
-    { attributes: { type: "TextInput", text: "q", bounds: "[100,700][900,800]", focused: "true" } },
+    { attributes: { type: "TextInput", text: field.text, bounds: "[100,700][900,800]", focused: "true" } },
   ],
 });
 
@@ -22,7 +22,11 @@ function fakeDevice() {
   const calls: { api: string; args: unknown[] }[] = [];
   /** Every hdc shell command, in order: `launch` reaches the device this way. */
   const shells: string[] = [];
-  const pages = [page("WLAN"), page("WLAN detail")];
+  /** The focused field's value; `inputText` writes it so `type` can read it back. */
+  const field = { text: "q" };
+  // Built per read, not once: the field's value changes as the test types.
+  const pageAt = (i: number): UiNode =>
+    i === 0 ? page("WLAN", field) : page("WLAN detail", field);
   return {
     calls,
     shells,
@@ -46,12 +50,12 @@ function fakeDevice() {
           if (api === "UiWindow.getBundleName") return "com.demo";
           if (api === "UiWindow.isFocused") return true;
           if (api === "Component.getBounds") return { left: 100, top: 200, right: 400, bottom: 400 };
-          if (api === "Component.click") index = Math.min(index + 1, pages.length - 1);
-          if (api === "Driver.triggerKey") index = Math.min(index + 1, pages.length - 1);
+          if (api === "Component.click") index = Math.min(index + 1, 1);
+          if (api === "Driver.triggerKey") index = Math.min(index + 1, 1);
           return null;
         },
         async captureLayout() {
-          return pages[Math.min(index, pages.length - 1)]!;
+          return pageAt(Math.min(index, 1));
         },
         async getDisplaySize() {
           return { width: 1000, height: 2000 };
@@ -65,13 +69,14 @@ function fakeDevice() {
           );
         },
         async click() {
-          index = Math.min(index + 1, pages.length - 1);
+          index = Math.min(index + 1, 1);
         },
         async touchDown() {},
         async touchMove() {},
         async touchUp() {},
-        async inputText(_x: number, _y: number, _text: string, mode?: unknown) {
+        async inputText(_x: number, _y: number, text: string, mode?: unknown) {
           calls.push({ api: "inputText", args: [mode] });
+          field.text = text;
         },
         async triggerKey() {},
       },
