@@ -134,8 +134,12 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
   渲染成 `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`
   这类字符串；`备忘录` 的图标没有可读名字，agent 于是点到了旁边的「笔记」。
   notepad-01 因此失败：它在 hinote 里新建了笔记，判据去 notepad 里找，找不到——agent
-  自述「已新建并保存」，这正是判据要防的那种自信。**待办**（没在本轮修，因为改屏幕输出
-  会让 1000 条跑批分成两种屏幕格式）：图标节点的标签用 `bm dump -a -l` 的名字替换。
+  自述「已新建并保存」，这正是判据要防的那种自信。**notepad-02 在 `launch` 修好之后仍然失败**，
+  原因相同：agent 没试 `launch --app 备忘录`，而是照着首页点图标，而图标上看不出这是哪个应用。
+  所以这条不只是「agent 选错了路径」——首页的屏幕模型本身没把应用名给出来。
+  **待办**（没在本轮修，因为改屏幕输出会让 1000 条跑批分成两种屏幕格式）：
+  `ScreenBuilder` 接一张 `bundle → 桌面名` 的表（`bm dump -a -l` 就有），把含 bundle 名的
+  图标标签换成应用名；修好后用 `--redo` 重跑 notepad 的 50 条，单独报一个数。
 - **skill 把无标签控件指到了错的命令。** SKILL.md 说「拿 `screenshot`，看图上的 ref 编号」，
   但画编号的是 `inspect`，`screenshot` 只存原图。agent 照做会去找根本不存在的数字。
   **已修：** 两处文档改成 `inspect`，`check-skill` 增加一条检查——文档里出现
