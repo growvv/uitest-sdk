@@ -3,6 +3,17 @@
 本文件记录 `uitest-phone` 的公开版本。格式参考 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循语义化版本。
 
+## [Unreleased]
+
+- 运行在 `uitest-sdk@0.11.2` 上。
+
+### 修复
+
+- **`launch --app 天气` 能用了。** 短名会匹配桌面上的应用名，不再只匹配 bundle id。
+  实测 1000 条跑批的前 24 次 `launch` 里 13 次因为中文名失败。
+- **skill 把无标签控件指到了 `inspect`。** 原来写「拿 `screenshot`，看图上的 ref 编号」，
+  但画编号的是 `inspect`。`check-skill` 增加检查，文档再这么写会报错。
+
 ## [0.10.4] — 2026-11-20
 
 - 运行在 `uitest-sdk@0.11.2` 上。

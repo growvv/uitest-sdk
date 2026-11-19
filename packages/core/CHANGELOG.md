@@ -6,6 +6,20 @@
 
 升级前请读「破坏性变更」一节——本项目目前没有，将来有了会写在对应版本的第一行。
 
+## [Unreleased]
+
+### 修复
+
+- **`launch --app 天气` 能用了：短名会匹配桌面上的应用名。** 中文写的任务用桌面上的名字称呼
+  应用（「天气」「微博」「备忘录」），这些字在 bundle id 里一个都没有；此前 `launch` 只匹配
+  bundle id，agent 只好退回「观察桌面 → 点图标」。实测 1000 条跑批的前 24 次 `launch` 里
+  13 次因此失败。现在 bundle id 匹配不到时会读 `bm dump -a -l`，按桌面名匹配；一个名字对应
+  多个 bundle 时报错并列出全部候选。这台机器上 `备忘录` 是 `com.huawei.hmos.notepad`、
+  `笔记` 是 `com.huawei.hmos.hinote`，两个都装了，按名字才分得开。
+- **skill 把无标签控件指到了 `inspect`。** 原来写的是「拿 `screenshot`，看图上的 ref 编号」，
+  但画编号的是 `inspect`；`screenshot` 只存原图。`check-skill` 增加一条检查，文档里再出现
+  「screenshot 上的 ref 编号」就会报错。
+
 ## [0.11.2] — 2026-11-20
 
 四个包同批发布；本版只有修复，无破坏性变更。
