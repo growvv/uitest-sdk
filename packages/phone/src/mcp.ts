@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { COMMANDS, EXIT_CODE } from "uitest-sdk/commands";
 import type { RunResult } from "uitest-sdk/commands";
@@ -157,10 +158,7 @@ export class McpServer {
       data: result.data ?? {},
     };
     return reply(id, {
-      content: [
-        { type: "text", text: result.text },
-        { type: "text", text: JSON.stringify(payload) },
-      ],
+      content: [{ type: "text", text: result.text }, ...imageBlocks(command, result), { type: "text", text: JSON.stringify(payload) }],
       isError: result.status !== "settled",
     });
   }
@@ -178,6 +176,34 @@ export class McpServer {
 
 function reply(id: JsonRpcId, result: unknown): string {
   return JSON.stringify({ jsonrpc: "2.0", id, result });
+}
+
+/** Tools whose result is a picture the model has to look at. */
+const IMAGE_COMMANDS = new Set(["screenshot", "inspect"]);
+
+/**
+ * The picture a command saved, as an MCP image block.
+ *
+ * A path is not an answer to "what is on the screen": the agent cannot open a
+ * file. `screenshot` and `inspect` exist for the cases the layout text cannot
+ * cover — an icon-only button, a chart, a calculator key whose node has no
+ * text at all — so the pixels have to travel with the result.
+ *
+ * A file that is missing is not an error here: the text result already says
+ * what happened, and the tool's own status decides whether the call failed.
+ */
+function imageBlocks(command: string, result: RunResult): { type: "image"; data: string; mimeType: string }[] {
+  if (!IMAGE_COMMANDS.has(command)) return [];
+  // `screenshot` and `inspect` both name the file they wrote `path`.
+  const path = typeof result.data?.["path"] === "string" ? result.data["path"] : null;
+  if (!path) return [];
+  try {
+    const bytes = readFileSync(path);
+    if (bytes.length === 0) return [];
+    return [{ type: "image", data: bytes.toString("base64"), mimeType: "image/jpeg" }];
+  } catch {
+    return [];
+  }
 }
 
 function error(id: JsonRpcId, code: number, message: string): string {

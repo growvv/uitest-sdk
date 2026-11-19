@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { McpServer, toolDefinitions } from "../../src/mcp.js";
 import type { ToolRunner } from "../../src/mcp.js";
 import { DeviceStateError } from "uitest-sdk";
@@ -150,6 +152,70 @@ describe("McpServer", () => {
     );
     expect(reply.result.isError).toBe(true);
     expect(reply.result.content[0].text).toContain("not_found");
+  });
+
+  it("returns a screenshot as an image block, not just a path", async () => {
+    // The skill tells the agent to take a screenshot when the screen text does
+    // not answer the question — an unlabelled calculator key, a chart, an
+    // icon-only button. A path string is useless to a model: it has to see the
+    // pixels. MCP carries them as an image content block, which the client
+    // hands to the model as an attachment.
+    const dir = mkdtempSync(join(tmpdir(), "uitest-mcp-"));
+    const file = join(dir, "shot.jpg");
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    writeFileSync(file, jpeg);
+    const runner = {
+      async run() {
+        return { status: "settled" as const, code: 0, text: `saved: ${file}`, data: { path: file } };
+      },
+    };
+    const server = new McpServer(runner);
+    const reply = JSON.parse(
+      (await server.handle(req("tools/call", { name: "uitest_screenshot", arguments: {} })))!,
+    );
+    const image = reply.result.content.find((c: { type: string }) => c.type === "image");
+    expect(image, "the model must receive the pixels").toBeDefined();
+    expect(image.mimeType).toBe("image/jpeg");
+    expect(Buffer.from(image.data, "base64")).toEqual(jpeg);
+  });
+
+  it("returns an inspect panel as an image block too", async () => {
+    // `inspect` boxes and numbers every element on the frame; the agent reads
+    // the numbers to pick a ref. It is the same kind of answer as a
+    // screenshot, so it travels the same way.
+    const dir = mkdtempSync(join(tmpdir(), "uitest-mcp-"));
+    const file = join(dir, "inspect.jpg");
+    writeFileSync(file, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const server = new McpServer({
+      async run() {
+        return { status: "settled" as const, code: 0, text: `saved: ${file}`, data: { path: file } };
+      },
+    });
+    const reply = JSON.parse(
+      (await server.handle(req("tools/call", { name: "uitest_inspect", arguments: {} })))!,
+    );
+    expect(reply.result.content.some((c: { type: string }) => c.type === "image")).toBe(true);
+  });
+
+  it("does not attach an image for a path that is not there", async () => {
+    // A missing file is a normal outcome (the caller deleted it, the write
+    // failed). The text result still has to arrive; only the attachment goes.
+    const runner = {
+      async run() {
+        return {
+          status: "settled" as const,
+          code: 0,
+          text: "saved: C:/nope/missing.jpg",
+          data: { path: "C:/nope/missing.jpg" },
+        };
+      },
+    };
+    const server = new McpServer(runner);
+    const reply = JSON.parse(
+      (await server.handle(req("tools/call", { name: "uitest_screenshot", arguments: {} })))!,
+    );
+    expect(reply.result.content[0].text).toContain("saved:");
+    expect(reply.result.content.some((c: { type: string }) => c.type === "image")).toBe(false);
   });
 
   it("rejects an unknown tool with a JSON-RPC error", async () => {

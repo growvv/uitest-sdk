@@ -754,6 +754,7 @@ ${r.reason}`,
       code: statusOf(r),
       text: settled ? `${body}${saved}` : `${actionText(r)}${body ? `\n${body}` : ""}`,
       data: {
+        path: settled ? out : null,
         image: settled ? (r.image ?? null) : null,
         html: settled ? (r.html ?? null) : null,
         nodes: r.nodes ?? [],

@@ -83,6 +83,13 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 - The renderer omits the status bar, the bottom navigation bar, structural
   containers and unlabeled inert nodes. If the person asks about something not
   listed, take a `screenshot`.
+- **A control with no readable label needs a `screenshot`.** Some apps draw a
+  symbol instead of setting text: the calculator's `×` and `÷` are nodes with
+  neither text nor description, so the screen lists them as `keyCode 14` and
+  `keyCode 13` — their resource ids. Tapping by position and hoping is how a
+  task burns 80 calls and times out. `screenshot` returns the pixels, so look
+  at the image, match the symbol to the ref number drawn on it, then tap that
+  ref.
 - After an action the CLI prints a diff: `+` added, `-` removed, `~` changed;
   `no change` means nothing changed. It prints the full screen when the app,
   size or rotation changed, or when too much changed.

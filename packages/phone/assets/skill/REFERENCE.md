@@ -392,6 +392,13 @@ ignores the requested scale and returns a fixed frame (measured 608x1344 for a
 measured in the image before using it as a tap coordinate. Credential elements
 are covered with gray in the saved image, matching the masked labels.
 
+Over MCP the image itself is in the result, so the agent sees the pixels rather
+than a path it cannot open. Use it whenever the layout text does not answer the
+question — an icon-only button, a chart, a key drawn as a symbol. The
+calculator's `×` and `÷` have no text and no description; the layout calls them
+`keyCode 14` and `keyCode 13` after their resource ids, and only the picture
+says which is which.
+
 ### inspect
 
 ```
@@ -522,7 +529,6 @@ which is also the only version an agent can obey.
 | `stale` | 4 | The screen changed while the approval waited. |
 
 ## Approvals
-
 The policy classifies the labels of every element under the target:
 
 | Rule | Examples | Default |
