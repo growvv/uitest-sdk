@@ -7,6 +7,12 @@
 
 ### 修复
 
+- **截图通过 MCP 返回图像本身。** skill 让 agent 在屏幕文字回答不了问题时截图，但 MCP 只回
+  一个文件路径——模型打不开文件。计算器的 `×`、`÷` 既没有 text 也没有 description，屏幕
+  模型把它们显示成 `keyCode 14`、`keyCode 13`（资源 id），agent 分不清就靠位置猜，按错、
+  清空、重来：实测两条任务分别用掉 47 和 80 次调用后超时。`screenshot` 与 `inspect` 现在
+  把 JPEG 作为 MCP image 内容块一起返回；`inspect` 也像 `screenshot` 一样在 `path` 里报出
+  写的文件。文件不存在不算错误：文字结果照常返回，调用成败由工具状态决定。
 - **`uitest-phone mcp` 先答握手、再连设备。** 以前先连设备再服务 stdio，设备慢、没插或转发
   冲突时进程在回 `initialize` 之前就退出，MCP 客户端只看到
   `connection closed: initialize response`，agent 只能当工具坏了。现在握手立刻应答，第一次
