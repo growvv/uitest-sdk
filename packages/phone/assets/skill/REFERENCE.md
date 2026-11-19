@@ -544,6 +544,13 @@ Latin words match on word boundaries, so `pay` does not fire inside
 `paypal`; Chinese matches as a substring. `--confirm` moves rules into the
 approval set.
 
+For a tap, a swipe or another gesture, a label only counts when it is shaped
+like a control's name: at most 24 Chinese characters (48 Latin), with the risk
+word within the first four. 发布, 发布笔记 and 立即付款 count; a Zhihu question
+row labelled "鸿蒙 7 开发者 beta 正式发布，此次版本更新带来了哪些功能改进…" does
+not — it is a sentence being read, and opening it must not ask for approval.
+Typing is judged on the raw labels, because the text typed *is* the action.
+
 An approval id is bound to the command, its arguments and the target's
 signature. It is single-use and expires 60 seconds after the step was gated. A
 step whose target moved between approval and execution returns `stale`; a step

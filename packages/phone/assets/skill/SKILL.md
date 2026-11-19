@@ -211,6 +211,12 @@ By default, **payments, finance, deleting and sending** stop at
 leaves, a file is gone, a message has been read. The policy matches the labels
 of every element under the target, plus the app argument for `launch`.
 
+A risk word only counts when the label is shaped like a control's name — short,
+with the verb first, like 发布 / 发布笔记 / 立即付款. A feed row is a sentence
+someone is reading, so a Zhihu question titled "…正式发布…" is not a send
+action; tap it and nothing asks. Do not expect `approval_pending` from a row
+you are only opening.
+
 `commits` (确认 / 保存) is deliberately *not* on the default list: it is the
 label of half the ordinary form buttons on a phone, and asking on every one
 would train the person to approve without reading.

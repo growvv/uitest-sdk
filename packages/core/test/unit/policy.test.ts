@@ -59,6 +59,68 @@ describe("Policy: risk rules", () => {
     expect(policy().check({ action: "tap", labels: ["WLAN"] })).toEqual({ kind: "allow" });
   });
 
+  it("does not fire on a feed row whose label is a sentence", () => {
+    // Zhihu renders a question row as a clickable container, so its label is
+    // the whole question plus the excerpt. The word 发布 there is content the
+    // person is reading, not an action the tap performs. Tapping the row
+    // stopped the task on a send approval nobody asked for.
+    const p = policy();
+    expect(
+      p.check({
+        action: "tap",
+        labels: [
+          "鸿蒙 7 开发者 beta 正式发布，此次版本更新带来了哪些功能改进与技术突破？, 酱紫君：在过去，做操作系统一直被认为是九死一生的苦差事",
+        ],
+      }),
+    ).toEqual({ kind: "allow" });
+    expect(
+      p.check({ action: "tap", labels: ["如何评价某公司发布的新一代产品？", "关注", "1203 个回答"] }),
+    ).toEqual({ kind: "allow" });
+  });
+
+  it("does not fire on a social-proof count", () => {
+    // "35人付款" and "1101万人购买过" sit inside a product card. They are
+    // short and carry the verb early, so the shape test alone would call them
+    // controls; a leading count of people is a statistic, not an instruction.
+    const p = policy();
+    for (const label of ["35人付款", "400+人付款", "1101万人购买过", "2万+人付款", "10万+人付款"]) {
+      expect(p.check({ action: "tap", labels: [label] }), label).toEqual({ kind: "allow" });
+    }
+  });
+
+  it("still fires on a short control whose label starts with a number", () => {
+    // A count of people is a statistic; "1 键发布" is a button.
+    expect(policy().check({ action: "tap", labels: ["1 键发布"] })).toMatchObject({ kind: "approval", rule: "sends" });
+  });
+
+  it("finds a Latin verb anywhere in a short control label", () => {
+    // Accessibility labels are assembled from resource ids: "Button:search
+    // history delete button" is the delete control, and its verb is not at the
+    // front. Latin words have boundaries, so the position does not matter.
+    expect(policy().check({ action: "tap", labels: ["Button:search history delete button"] })).toMatchObject({
+      kind: "approval",
+      rule: "deletes",
+    });
+  });
+
+  it("still fires on a control that would publish", () => {
+    expect(policy().check({ action: "tap", labels: ["发布"] })).toMatchObject({ kind: "approval", rule: "sends" });
+  });
+
+  it("still fires on a publish control whose label names the action", () => {
+    // Xiaohongshu and Weibo put the action inside a short label.
+    expect(policy().check({ action: "tap", labels: ["发布笔记"] })).toMatchObject({ kind: "approval", rule: "sends" });
+    expect(policy().check({ action: "tap", labels: ["发送给朋友"] })).toMatchObject({ kind: "approval", rule: "sends" });
+  });
+
+  it("keeps firing when a short control label carries a price", () => {
+    // A control label may hold a number; only sentences are content.
+    expect(policy().check({ action: "tap", labels: ["确认支付，¥199"] })).toMatchObject({
+      kind: "approval",
+      rule: "payments",
+    });
+  });
+
   it("does not classify an empty label set", () => {
     expect(policy().check({ action: "tap", labels: [] })).toEqual({ kind: "allow" });
   });
