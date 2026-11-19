@@ -22,6 +22,7 @@ import { connect, tagOf } from "uitest-sdk";
 import { resolveCastScale } from "uitest-sdk/cast";
 import { capturePage } from "./screenshot.mjs";
 import { assertCapturable, assertShadeClosed, captureOrFail, gitHead } from "./acceptance.js";
+import { run as benchMirror } from "./bench-mirror.js";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PRODUCT = "mirror";
@@ -537,6 +538,36 @@ async function mirrorCases(device: string, stateDir: string): Promise<{ cases: C
       else add("window", "窗口打开，画面有帧", "fail", `screenshot failed: ${shot.reason}`, [], "log", Date.now() - started);
     } finally {
       await stopMirror(p, "window");
+    }
+  }
+
+  // ---- bench: the four mirrorbench numbers, measured in this run ---------
+  // A window that opens is not the same as a picture that keeps up. The
+  // numbers come from the same stream the viewer uses, measured on this
+  // device at acceptance time rather than copied from an old document, so a
+  // regression shows up in the report that ships with the release.
+  {
+    const started = Date.now();
+    try {
+      const bench = await benchMirror(device, "grpc", "calculator", 120);
+      const lat = bench.latency.samplesMs;
+      const median = lat.length ? [...lat].sort((a, b) => a - b)[Math.floor(lat.length / 2)] : null;
+      const firstPicture = bench.firstFrame.nudgeToPictureMs ?? bench.firstFrame.idrPictureMs;
+      // Thresholds are what the viewer needs to feel live, not a copy of the
+      // best run: 2 s to a first picture, 20 fps while dragging, 200 ms from
+      // finger to frame. Measured values are recorded whether or not they pass.
+      const fails: string[] = [];
+      if (firstPicture === null) fails.push("no first picture");
+      else if (firstPicture > 2000) fails.push(`first picture ${firstPicture} ms > 2000 ms`);
+      if (bench.drag.fps < 20) fails.push(`drag ${bench.drag.fps} fps < 20`);
+      if (median === null) fails.push("no latency samples");
+      else if (median > 200) fails.push(`input→frame ${median} ms > 200 ms`);
+      const detail =
+        `first picture ${firstPicture ?? "-"} ms · drag ${bench.drag.fps} fps ` +
+        `(${bench.drag.frames}/${bench.drag.slots60} 60 Hz slots) · input→frame median ${median ?? "-"} ms`;
+      add("bench", "投屏四项指标在阈值内", fails.length ? "fail" : "pass", fails.length ? `${detail} · ${fails.join(" · ")}` : detail, [], "log", Date.now() - started);
+    } catch (e) {
+      add("bench", "投屏四项指标在阈值内", "fail", (e as Error).message.slice(0, 200), [], "log", Date.now() - started);
     }
   }
 

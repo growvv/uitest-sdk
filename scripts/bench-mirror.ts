@@ -158,7 +158,7 @@ async function stageList(
   );
 }
 
-interface FirstFrame {
+export interface FirstFrame {
   /** Daemon start plus the hdc forward. */
   setupMs: number;
   /** First chunk of any size (usually the 31-byte SPS/PPS). */
@@ -169,7 +169,7 @@ interface FirstFrame {
   nudgeToPictureMs: number | null;
 }
 
-interface DragResult {
+export interface DragResult {
   /** Finger down → finger up, the window pinky calls "during the drag". */
   windowMs: number;
   frames: number;
@@ -186,8 +186,16 @@ interface DragResult {
   movesPerSec: number;
 }
 
-interface LatencyResult {
+export interface LatencyResult {
   samplesMs: number[];
+}
+
+/** The four mirrorbench numbers for one device, as the acceptance report reads them. */
+export interface MirrorBench {
+  model: string;
+  firstFrame: FirstFrame;
+  drag: DragResult;
+  latency: LatencyResult;
 }
 
 /**
@@ -198,7 +206,7 @@ interface LatencyResult {
  * fresh cast, before any drag has warmed the encoder — that is the number a
  * person opening a mirror actually waits for.
  */
-async function run(deviceId: string, transport: "grpc" | "ws", app: string, frameRate: FrameRate) {
+export async function run(deviceId: string, transport: "grpc" | "ws", app: string, frameRate: FrameRate): Promise<MirrorBench> {
   const device = await Device.connect({ deviceId });
   const model = await modelOf(device);
   const results: { firstFrame?: FirstFrame; drag?: DragResult; latency?: LatencyResult } = {};
@@ -394,7 +402,9 @@ async function run(deviceId: string, transport: "grpc" | "ws", app: string, fram
   } finally {
     await device.dispose();
   }
-  return { model, results };
+  // Every stage sets its own result before reaching here, so a partial run
+  // throws above rather than returning half a benchmark.
+  return { model, firstFrame: results.firstFrame!, drag: results.drag!, latency: results.latency! };
 }
 
 function report(
@@ -481,8 +491,8 @@ async function main(): Promise<void> {
   const out = arg("out", join(ROOT, "docs", "benchmarks-mirror.md"));
 
   console.log(`bench-mirror · ${tagOf(deviceId)} · ${transport} · ${app} · ${frameRate} fps`);
-  const { model, results } = await run(deviceId, transport, app, frameRate);
-  const md = report(deviceId, transport, app, model, results, frameRate);
+  const { model, firstFrame, drag, latency } = await run(deviceId, transport, app, frameRate);
+  const md = report(deviceId, transport, app, model, { firstFrame, drag, latency }, frameRate);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, md);
   console.log(md);
