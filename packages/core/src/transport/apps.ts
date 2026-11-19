@@ -101,6 +101,7 @@ function missionBlocks(output: string): string[] {
  */
 export class AppManager {
   private cache: string[] | null = null;
+  private labels: { bundle: string; label: string }[] | null = null;
 
   constructor(private readonly hdc: ShellRunner) {}
 
@@ -113,6 +114,53 @@ export class AppManager {
       .filter((line) => BUNDLE_RE.test(line));
     this.cache = [...new Set(bundles)].sort();
     return [...this.cache];
+  }
+
+  /**
+   * Installed bundles with the name the launcher shows under each icon.
+   *
+   * `bm dump -a` lists ids only, which is not what an agent has to go on: a
+   * task written in Chinese names the app the way the launcher does ("天气",
+   * "微博"), and those names appear nowhere in a bundle id. Measured on the
+   * test phone, 13 of the first 24 `launch` calls failed this way.
+   */
+  async labelsOf(): Promise<{ bundle: string; label: string }[]> {
+    if (this.labels) return this.labels;
+    const out = await this.hdc.shell("bm dump -a -l");
+    const start = out.indexOf("[");
+    if (start < 0) return (this.labels = []);
+    let parsed: { bundleName?: unknown; label?: unknown }[];
+    try {
+      parsed = JSON.parse(out.slice(start)) as typeof parsed;
+    } catch {
+      return (this.labels = []);
+    }
+    const rows: { bundle: string; label: string }[] = [];
+    for (const row of Array.isArray(parsed) ? parsed : []) {
+      const bundle = typeof row?.bundleName === "string" ? row.bundleName : "";
+      const label = typeof row?.label === "string" ? row.label.trim() : "";
+      // A label that is still a resource reference (`$string:app_name`) says
+      // nothing to a person, so it is not a name to match on.
+      if (bundle && label && !label.startsWith("$")) rows.push({ bundle, label });
+    }
+    return (this.labels = rows);
+  }
+
+  /** Bundles whose launcher label is exactly `name`. */
+  async byLabel(name: string): Promise<string[]> {
+    const needle = name.trim();
+    if (!needle) return [];
+    const rows = await this.labelsOf();
+    const exact = rows.filter((r) => r.label === needle).map((r) => r.bundle);
+    if (exact.length) return exact;
+    // Case-insensitive, then a label that contains the name — the launcher
+    // truncates long names, so "美团外卖" may read "美团外…".
+    const lower = needle.toLowerCase();
+    const folded = rows.filter((r) => r.label.toLowerCase() === lower).map((r) => r.bundle);
+    if (folded.length) return folded;
+    return rows
+      .filter((r) => r.label.toLowerCase().includes(lower) || lower.includes(r.label.toLowerCase()))
+      .map((r) => r.bundle);
   }
 
   /**
@@ -168,10 +216,26 @@ export class AppManager {
     const matches = await this.find(raw);
     if (matches.length === 1) return matches[0]!;
     if (matches.length === 0) {
+      // Not part of any bundle id — try the name the launcher shows, which is
+      // what a task written in Chinese names the app by.
+      const byLabel = await this.byLabel(raw);
+      if (byLabel.length === 1) return byLabel[0]!;
+      if (byLabel.length > 1) {
+        throw new AppNotFoundError(
+          `not_found: "${raw}" is ambiguous; candidates: ${byLabel.join(", ")}. Pass the full bundle id.`,
+          "EAMBIGUOUS",
+        );
+      }
       throw new AppNotFoundError(
         `not_found: no installed app matches "${raw}". Run apps to list bundles.`,
         "ENOAPP",
       );
+    }
+    // More than one bundle id matched. A display-name match narrows it: "笔记"
+    // is not a substring of any bundle id, but it is the label of exactly one.
+    if (matches.length > 1) {
+      const byLabel = (await this.byLabel(raw)).filter((b) => matches.includes(b));
+      if (byLabel.length === 1) return byLabel[0]!;
     }
     throw new AppNotFoundError(
       `not_found: "${raw}" is ambiguous; candidates: ${matches.join(", ")}. Pass the full bundle id.`,

@@ -43,17 +43,48 @@ function compare(file, expected, actual, out) {
   }
 }
 
+/**
+ * The command that numbers its output — `inspect`.
+ *
+ * `screenshot` saves the plain frame; `inspect` draws a ref number next to each
+ * element. A doc that tells the agent to read a ref off a screenshot sends it
+ * looking for numbers that were never drawn, so it falls back to guessing
+ * coordinates — measured on the calculator, whose operator keys have no text:
+ * 182 calls across eight tasks, three of them over 250 s.
+ */
+const REF_ON_IMAGE = /screenshot[^.]{0,160}(?:ref number|numbers? drawn|drawn on it)/i;
+
+/**
+ * Flags a sentence that sends the agent to `screenshot` for ref numbers.
+ *
+ * Sentences, not lines or paragraphs: the claim wraps across lines in the
+ * skill's bullet style, and a bullet list is one paragraph — a paragraph-level
+ * check would be silenced by any neighbouring bullet that names `inspect`.
+ * A sentence that also names `inspect` is describing the right command (the
+ * skill's own warning reads "needs `inspect`, not `screenshot`").
+ */
+function checkRefClaims(text, out) {
+  for (const sentence of text.replace(/\s+/g, " ").split(/(?<=[.。])\s+/)) {
+    if (!REF_ON_IMAGE.test(sentence)) continue;
+    if (sentence.includes("`inspect`")) continue;
+    out.push("SKILL.md: screenshot does not draw ref numbers; use inspect");
+    return;
+  }
+}
+
 /** Violations for the docs in `dir`; an empty array means they agree. */
 export function checkSkill(dir) {
   const expected = COMMANDS.map((command) => command.name).sort();
   const out = [];
-  compare("SKILL.md", expected, skillCommands(readFileSync(join(dir, "SKILL.md"), "utf8")), out);
+  const skill = readFileSync(join(dir, "SKILL.md"), "utf8");
+  compare("SKILL.md", expected, skillCommands(skill), out);
   compare(
     "REFERENCE.md",
     expected,
     referenceCommands(readFileSync(join(dir, "REFERENCE.md"), "utf8")),
     out,
   );
+  checkRefClaims(skill, out);
   return out.sort();
 }
 

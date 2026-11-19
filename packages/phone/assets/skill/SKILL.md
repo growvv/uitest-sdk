@@ -83,13 +83,14 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 - The renderer omits the status bar, the bottom navigation bar, structural
   containers and unlabeled inert nodes. If the person asks about something not
   listed, take a `screenshot`.
-- **A control with no readable label needs a `screenshot`.** Some apps draw a
-  symbol instead of setting text: the calculator's `×` and `÷` are nodes with
-  neither text nor description, so the screen lists them as `keyCode 14` and
-  `keyCode 13` — their resource ids. Tapping by position and hoping is how a
-  task burns 80 calls and times out. `screenshot` returns the pixels, so look
-  at the image, match the symbol to the ref number drawn on it, then tap that
-  ref.
+- **A control with no readable label needs `inspect`, not `screenshot`.** Some
+  apps draw a symbol instead of setting text: the calculator's `×` and `÷` are
+  nodes with neither text nor description, so the screen lists them as
+  `keyCode 14` and `keyCode 13` — their resource ids. Tapping by position and
+  hoping is how a task burns 80 calls and times out. `inspect` boxes every
+  element and draws its ref number on the image, so you can match the symbol
+  you see to the ref you tap. `screenshot` does not draw numbers — it is only
+  useful when the person asked what the screen looks like.
 - After an action the CLI prints a diff: `+` added, `-` removed, `~` changed;
   `no change` means nothing changed. It prints the full screen when the app,
   size or rotation changed, or when too much changed.
@@ -126,12 +127,14 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Read a whole list | `read-list --ref 20` |
 | Scroll until visible | `scroll-until --text "About"` |
 | Open an app | `launch --app settings` or `--app com.example.app` |
+| Open an app by its on-screen name | `launch --app 天气` (the launcher's label) |
 | Find a bundle id | `apps --query wechat` |
 | App in front | `apps --current` |
 | Is this installed | `apps --has com.example.app` |
 | Inspect a window | `window --bundle com.example.app` |
 | Save a screenshot | `screenshot --out shot.jpg` |
-| See where each element is | `inspect --html panel.html` |
+| Find the ref for an unlabelled control | `inspect` (numbers every element on the image) |
+| See where each element is, as a page | `inspect --html panel.html` |
 | Watch the phone in a browser | `uitest-console` (a separate product for people) |
 | Write a report | `report --title "WLAN check"` |
 | Session info | `status` |

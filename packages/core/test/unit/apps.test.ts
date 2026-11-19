@@ -137,6 +137,61 @@ describe("AppManager", () => {
     expect(await apps.resolveBundle("com.demo.notes")).toBe("com.demo.notes");
   });
 
+  // Measured on the test phone: an agent given a task in Chinese launches the
+  // app by the name the task used ("天气", "微博"), and 13 of the first 24
+  // launch calls failed because only bundle ids were matched. The launcher
+  // shows the app's label, so that is the name an agent has to go on.
+  it("resolves the app's own display name to its bundle", async () => {
+    const hdc = fakeHdc({
+      "bm dump -a -l": JSON.stringify([
+        { bundleName: "com.huawei.hmsapp.totemweather", label: "天气" },
+        { bundleName: "com.huawei.hmos.notepad", label: "备忘录" },
+        { bundleName: "com.huawei.hmos.hinote", label: "笔记" },
+        { bundleName: "com.sina.weibo.stage", label: "微博" },
+      ]),
+    });
+    const apps = new AppManager(hdc);
+    expect(await apps.resolveBundle("天气")).toBe("com.huawei.hmsapp.totemweather");
+    expect(await apps.resolveBundle("微博")).toBe("com.sina.weibo.stage");
+  });
+
+  it("keeps the two Notes apps apart by label", async () => {
+    // 备忘录 and 笔记 are different apps with different bundle ids. A suffix
+    // match cannot tell them apart; the label can.
+    const apps = new AppManager(
+      fakeHdc({
+        "bm dump -a -l": JSON.stringify([
+          { bundleName: "com.huawei.hmos.notepad", label: "备忘录" },
+          { bundleName: "com.huawei.hmos.hinote", label: "笔记" },
+        ]),
+      }),
+    );
+    expect(await apps.resolveBundle("备忘录")).toBe("com.huawei.hmos.notepad");
+    expect(await apps.resolveBundle("笔记")).toBe("com.huawei.hmos.hinote");
+  });
+
+  it("names both candidates when a display name is shared", async () => {
+    const apps = new AppManager(
+      fakeHdc({
+        "bm dump -a -l": JSON.stringify([
+          { bundleName: "com.a.music", label: "音乐" },
+          { bundleName: "com.b.music", label: "音乐" },
+        ]),
+      }),
+    );
+    const err = await apps.resolveBundle("音乐").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppNotFoundError);
+    expect((err as Error).message).toContain("com.a.music");
+    expect((err as Error).message).toContain("com.b.music");
+  });
+
+  it("still reports not_found for a name nothing carries", async () => {
+    const apps = new AppManager(
+      fakeHdc({ "bm dump -a -l": JSON.stringify([{ bundleName: "com.a.music", label: "音乐" }]) }),
+    );
+    await expect(apps.resolveBundle("不存在的应用")).rejects.toThrow(/not_found/);
+  });
+
   it("reads the entry ability in both full and short forms", async () => {
     const apps = new AppManager(fakeHdc());
     expect(await apps.entryAbility("com.huawei.hmos.settings"))

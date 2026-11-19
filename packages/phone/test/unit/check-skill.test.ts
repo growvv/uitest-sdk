@@ -40,4 +40,22 @@ describe("skill command index", () => {
 
     expect(checkSkill(dir)).toContain("SKILL.md: extra bogus");
   });
+
+  // `screenshot` saves the plain frame; only `inspect` numbers the elements.
+  // A doc that sends the agent to `screenshot` to find a ref sends it looking
+  // for numbers that were never drawn — the exact loop that burned 80 calls on
+  // the calculator's unlabelled operator keys.
+  it("fails when a doc says a screenshot carries ref numbers", () => {
+    const dir = copySkill();
+    const path = join(dir, "SKILL.md");
+    const text = readFileSync(path, "utf8");
+    // The sentence this release removed, verbatim.
+    const old =
+      "`screenshot` returns the pixels, so look at the image, match the symbol to the ref number drawn on it, then tap that ref.";
+    const at = text.indexOf("`inspect` boxes every");
+    expect(at).toBeGreaterThan(-1);
+    writeFileSync(path, text.slice(0, at) + old + text.slice(text.indexOf(".", at) + 1));
+
+    expect(checkSkill(dir)).toContain("SKILL.md: screenshot does not draw ref numbers; use inspect");
+  });
 });

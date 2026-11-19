@@ -347,12 +347,18 @@ launch --app settings
 launch --app com.example.app --ability EntryAbility
 ```
 
-Resolves a short name through the alias table, then against installed bundles;
-an ambiguous name is an error that lists the candidates. The entry ability is
-read from `bm dump` — Settings declares
+Resolves a short name through the alias table, then against installed bundles,
+then against the name the launcher shows under each icon — so `--app 天气` and
+`--app 备忘录` work. An ambiguous name is an error that lists the candidates.
+The entry ability is read from `bm dump` — Settings declares
 `com.huawei.hmos.settings.MainAbility`, Calculator declares
 `CalculatorAbility` — and an `aa start` failure is surfaced rather than
 reported as success.
+
+Two apps can share a display name; then the error lists both bundle ids and you
+pass one. `备忘录` and `笔记` are different apps on this device
+(`com.huawei.hmos.notepad` and `com.huawei.hmos.hinote`), and each resolves to
+its own.
 
 Aliases: `settings`, `launcher`/`home`, `camera`, `photos`/`gallery`, `clock`,
 `calendar`, `calculator`.
@@ -400,11 +406,9 @@ measured in the image before using it as a tap coordinate. Credential elements
 are covered with gray in the saved image, matching the masked labels.
 
 Over MCP the image itself is in the result, so the agent sees the pixels rather
-than a path it cannot open. Use it whenever the layout text does not answer the
-question — an icon-only button, a chart, a key drawn as a symbol. The
-calculator's `×` and `÷` have no text and no description; the layout calls them
-`keyCode 14` and `keyCode 13` after their resource ids, and only the picture
-says which is which.
+than a path it cannot open. Use it when the person asked what the screen looks
+like. It does **not** draw ref numbers — for that use `inspect` below, which is
+the command that answers "which ref is the `×` key?".
 
 ### inspect
 
@@ -416,6 +420,11 @@ Draws a box around every element on the screenshot and numbers it; **the number
 is the ref**, so `tap --ref 3` works directly. Boxes are coloured by role
 (text, button, input, list, ...), and a masked element is greyed out before its
 box is drawn — the outline never replaces redaction.
+
+This is the command for a control with no readable label. The calculator's `×`
+and `÷` have no text and no description, so the layout calls them `keyCode 14`
+and `keyCode 13` after their resource ids; the numbers drawn on the inspected
+image say which ref is which symbol.
 
 `--html` also writes a single self-contained panel: the same frame with CSS
 overlays plus the node table, and hovering a row highlights its box. Useful
