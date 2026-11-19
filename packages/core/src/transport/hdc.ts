@@ -44,6 +44,12 @@ export class HdcRunner {
   private readonly timeoutMs: number;
   /** Local port → remote rule, so `fportRemove` can issue the full rm command. */
   private readonly forwards = new Map<number, string>();
+  /**
+   * Ports whose forward already existed and was reused. They are not this
+   * process's to remove: a second session may be sharing the tunnel, and a
+   * leftover from a killed process is harmless — the next run reuses it too.
+   */
+  private readonly reused = new Set<number>();
 
   constructor(opts: HdcOptions = {}) {
     this.hdcPath = opts.hdcPath ?? this.resolveHdcPath();
@@ -147,12 +153,27 @@ export class HdcRunner {
   /**
    * Forwards a local TCP port to a device endpoint, walking forward from
    * `localPort` while the port is taken. Returns the port actually used.
+   *
+   * An existing forward to the same endpoint is reused rather than duplicated.
+   * A client killed without cleanup — an MCP server killed by its host, a
+   * crashed agent — leaves its forward behind, and adding one more per task
+   * leaks a port until `hdc fport` refuses to add any. Reusing is also correct
+   * for a live peer: the tunnel is to the same daemon either way.
    */
   async fportAdd(localPort: number, remote: string): Promise<number> {
+    const existing = await this.listForwards().catch(() => new Map<number, string>());
+    for (const [port, target] of existing) {
+      if (target === remote) {
+        this.reused.add(port);
+        return port;
+      }
+    }
     const maxAttempts = 20;
     let lastDetail = "";
     for (let i = 0; i < maxAttempts; i++) {
       const port = localPort + i;
+      // A port taken by a different endpoint is not ours to reclaim.
+      if (existing.has(port)) continue;
       try {
         const { stdout, stderr } = await this.exec(
           ["fport", `tcp:${port}`, remote],
@@ -176,12 +197,29 @@ export class HdcRunner {
     );
   }
 
+  /** The forwards that exist for this target, as local port → remote rule. */
+  async listForwards(): Promise<Map<number, string>> {
+    const { stdout } = await this.exec(["fport", "ls"], "fport ls");
+    const out = new Map<number, string>();
+    for (const line of stdout.split(/\r?\n/)) {
+      const m = /^\s*(\S+)\s+tcp:(\d+)\s+(\S+)\s+\[Forward\]/.exec(line);
+      if (!m) continue;
+      if (this.deviceId && m[1] !== this.deviceId) continue;
+      out.set(Number(m[2]), m[3]!);
+    }
+    return out;
+  }
+
   /**
    * Removes a forward. `hdc fport rm` needs both the local and remote rules, so
    * the remote is remembered from `fportAdd`; callers that passed a different
    * remote can supply it explicitly.
+   *
+   * A reused forward is left in place: this process did not create it, and
+   * removing it would cut a tunnel a peer may be using.
    */
   async fportRemove(localPort: number, remote?: string): Promise<void> {
+    if (this.reused.delete(localPort)) return;
     const target = remote ?? this.forwards.get(localPort);
     const args = target
       ? ["fport", "rm", `tcp:${localPort}`, target]
