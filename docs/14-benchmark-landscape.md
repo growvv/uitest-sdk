@@ -121,6 +121,26 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
 评测口径的教训：只比「答案里有没有句号/温度字」这类结构判据会把成功率抬高。规模版把判据分成
 内容、设备、结构三档，结构判据单独统计。
 
+## 1000 条跑批：前 20 条暴露的两个问题（2026-11-20）
+
+- **`launch --app 天气` 失败：短名只匹配 bundle id，不匹配桌面上的名字。** 中文写的任务
+  用桌面的名字称呼应用（「天气」「微博」「备忘录」），这些字在 bundle id 里一个都没有。
+  前 24 次 `launch` 调用里 13 次失败，agent 只好退回「观察桌面 → 点图标」。
+  **已修：** `AppManager` 读 `bm dump -a -l`（bundle → 桌面名），bundle id 匹配不到时按
+  桌面名匹配；一个名字对应多个 bundle 时报错并列出全部候选。
+  这台机器上正好有一对：`备忘录` 是 `com.huawei.hmos.notepad`，`笔记` 是
+  `com.huawei.hmos.hinote`——两个都装了、都是笔记应用，按名字才分得开。
+- **桌面图标的标签是 bundle 转储，不是应用名。** 同一个首页上 38 个 `AppIcon` 节点里 19 个
+  渲染成 `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`
+  这类字符串；`备忘录` 的图标没有可读名字，agent 于是点到了旁边的「笔记」。
+  notepad-01 因此失败：它在 hinote 里新建了笔记，判据去 notepad 里找，找不到——agent
+  自述「已新建并保存」，这正是判据要防的那种自信。**待办**（没在本轮修，因为改屏幕输出
+  会让 1000 条跑批分成两种屏幕格式）：图标节点的标签用 `bm dump -a -l` 的名字替换。
+- **skill 把无标签控件指到了错的命令。** SKILL.md 说「拿 `screenshot`，看图上的 ref 编号」，
+  但画编号的是 `inspect`，`screenshot` 只存原图。agent 照做会去找根本不存在的数字。
+  **已修：** 两处文档改成 `inspect`，`check-skill` 增加一条检查——文档里出现
+  「screenshot 上的 ref 编号」就报错。
+
 ## 我们的位置
 
 `docs/benchmarks.md`（动作时延，对比 hdc CLI 与官方路径）：
