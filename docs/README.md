@@ -21,6 +21,7 @@
 | [12-findings-classified.md](12-findings-classified.md) | **本轮全部结论的分类汇总（版本/签名/投流/录屏/能力/性能/踩坑）** |
 | [13-stage-log.md](13-stage-log.md) | **阶段记录：0.3.0 → 0.4.0 的交付、发布、架构实测与待办** |
 | [14-benchmark-landscape.md](14-benchmark-landscape.md) | **外部基准调研：mobile agent 论文基准清单、pinky 的自测方法、我们的位置与后续可做** |
+| [15-agent-eval.md](15-agent-eval.md) | **agent 任务成功率评测：口径、任务库设计、三档判据与防作弊、20 条与 1000 条两轮** |
 
 ## 一句话结论
 
