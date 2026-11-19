@@ -34,6 +34,20 @@ import type { UiNode } from "../transport/model.js";
 import type { ShellRunner } from "../transport/apps.js";
 
 /**
+ * Whether the field's rendering carries what was typed.
+ *
+ * Exact match, or the same characters once formatting is set aside: an amount
+ * field shows "1,000" for "1000", and a phone field may space or dash the
+ * digits. Only separators and whitespace are ignored, so a mangled value
+ * ("108" for "10086") still counts as wrong.
+ */
+function sameText(landed: string, typed: string): boolean {
+  if (landed === typed) return true;
+  const bare = (s: string) => s.replace(/[\s,.\-–—/()]/g, "");
+  return bare(landed) === bare(typed);
+}
+
+/**
  * What a field holds after typing, or null when the app does not render it.
  *
  * The ref the caller passed cannot be used: a field's signature includes its
@@ -582,16 +596,13 @@ ${screen.header}`,
     // it never entered, so the field's own value is read back and compared.
     return this.after("type", { text: "[redacted]", ref: opts.ref }, before, (screen) => {
       const landed = fieldValue(screen, field);
-      if (landed === null || landed === text) return null;
-      return {
-        status: "uncertain",
-        text: `typed ${text.length} characters, but the field holds ${JSON.stringify(landed)}`,
-        extra: {
-          reason: `the field does not hold ${JSON.stringify(text)} after typing`,
-          typed: text,
-          field: landed,
-        },
-      };
+      if (landed === null || sameText(landed, text)) return null;
+      // The reason is the only part `actionText` surfaces, so the observed
+      // value goes here. A password's value is never repeated, even on failure.
+      const reason = field.state.includes("password")
+        ? `the password field does not hold what was typed`
+        : `the field holds ${JSON.stringify(landed)} after typing ${JSON.stringify(text)}`;
+      return { status: "uncertain", text: reason, extra: { reason } };
     });
   }
 

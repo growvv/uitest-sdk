@@ -118,6 +118,7 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Zoom in or out | `pinch --ref 20 --scale 2` |
 | Type into the focused field | `type --text "hello"` |
 | Type into a field | `type --ref 7 --text "hello"` |
+| Type where per-key input mangles it | `type --ref 7 --text "10086" --paste` |
 | Scroll a list | `swipe --direction up --ref 20` |
 | Swipe by points | `swipe --from 600,1800 --to 600,600` |
 | System key | `key --key back` (also `home`, `power`, `enter`) |

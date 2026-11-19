@@ -161,4 +161,29 @@ describe("Session.type: reads the field back", () => {
       expect(r.status).toBe("uncertain");
     });
   });
+
+  it("accepts a field that formats what it was given", async () => {
+    // An amount field renders "1,000" for "1000"; the digits all arrived, so
+    // this is a success, not a failed type.
+    const fake = fakeDevice({ initial: "", after: "1,000" });
+    await withSession(fake, async (s) => {
+      expect((await s.type("1000")).status).toBe("settled");
+    });
+  });
+
+  it("never puts a password into a failure message", async () => {
+    // A password field is refused before any keystroke, so it can never reach
+    // the read-back. If that gate is ever loosened, the read-back must still
+    // not echo the value — this pins both halves.
+    const fake = fakeDevice({
+      initial: "",
+      after: "hunter2x",
+      extra: { textInputType: "Password" },
+    });
+    await withSession(fake, async (s) => {
+      const r = await s.type("hunter2");
+      expect(r.status).toBe("blocked");
+      expect(JSON.stringify(r)).not.toContain("hunter2");
+    });
+  });
 });

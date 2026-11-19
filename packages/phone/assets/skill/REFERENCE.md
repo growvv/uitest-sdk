@@ -210,6 +210,13 @@ Chinese and emoji work. A password field is refused before any keystroke.
 instead of one key per character: on a 36-character string it took 1.3 s
 against 2.8 s for per-key input, and the text arrives intact.
 
+`type` reads the field back afterwards. If the value is not what you asked for,
+the step is `uncertain` and the message says what the field actually holds —
+for example the phone app's dialer turns `10086` into `1086`, because each digit
+lands in its own formatting buffer. Retry that field with `--paste`; do not
+assume the text went in. Formatting alone (`1,000` for `1000`) still counts as
+success.
+
 ### swipe
 
 ```
