@@ -128,6 +128,10 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
 ## 后续可做（按性价比）
 
 1. ~~照搬 mirrorbench 四项指标~~ —— 已完成，`scripts/bench-mirror.ts`。
-2. 把 `bench-mirror.ts` 接进发布流程：每版跑一次，数字进验收报告。**未做**
+2. ~~把 `bench-mirror.ts` 接进发布流程：每版跑一次，数字进验收报告~~ —— 已完成。mirror 验收新增
+   `bench` 用例，导入 `bench-mirror.ts` 的 `run()`，每版在真机上实测首帧、拖动帧率、输入→画面三项
+   （60/120 Hz 掉帧格子留在独立脚本里，验收不跑）。0.1.2 实测：首帧 597 ms、拖动 63.8 fps、
+   输入→画面中位 47.4 ms，写在 `docs/acceptance/mirror-0.1.2/report.json` 的 `bench` 用例里。
+   拖动腿要求可滚动的列表，所以用的是「设置」而不是「计算器」。
 3. 挑 Mobile-Bench 或 AndroidWorld 的一个子集，写 HarmonyOS 适配层，报成功率。**未做**
 4. 不要拿 scrcpy README 的 35–70 ms 当基准比：那是非正式宣称，且 scrcpy 帧率随内容变化，不可比。**已记录**
