@@ -2,7 +2,7 @@
   "product": "mirror",
   "version": "0.1.1",
   "date": "2026-11-19",
-  "commit": "3ae6a42+dirty",
+  "commit": "e52c86b+dirty",
   "devices": [
     {
       "tag": "7544d645",
@@ -25,12 +25,12 @@
       "title": "窗口打开，画面有帧",
       "device": "7544d645",
       "status": "pass",
-      "detail": "live at http://127.0.0.1:64424/",
+      "detail": "live at http://127.0.0.1:60165/",
       "screenshots": [
         "window-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 7465
+      "ms": 4468
     },
     {
       "id": "click",
@@ -80,7 +80,7 @@
       "title": "录制产出 MP4，--stay-awake 生效并复原",
       "device": "7544d645",
       "status": "pass",
-      "detail": "216412 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed",
+      "detail": "224138 B · ftyp ok · picture live · stay-awake override 3600000 ms · override removed",
       "screenshots": [
         "record-live-7544d645.jpg"
       ],

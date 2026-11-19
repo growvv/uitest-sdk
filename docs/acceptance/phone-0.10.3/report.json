@@ -1,0 +1,388 @@
+{
+  "product": "phone",
+  "version": "0.10.3",
+  "date": "2026-11-19",
+  "commit": "1436469",
+  "devices": [
+    {
+      "tag": "7544d645",
+      "model": "MLR-AL10",
+      "resolution": "1600x2560"
+    }
+  ],
+  "cases": [
+    {
+      "id": "package",
+      "title": "npm 包安装与版本",
+      "device": "host",
+      "status": "pass",
+      "detail": "uitest-phone-0.10.3.tgz · uitest-phone 0.10.3 (uitest-sdk 0.11.1) · --help exit 2",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "cmd-launch",
+      "title": "launch 启动应用",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 5330 ms",
+      "screenshots": [
+        "cmd-launch-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5330
+    },
+    {
+      "id": "cmd-observe",
+      "title": "observe 读屏",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 4016 ms",
+      "screenshots": [
+        "cmd-observe-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 4016
+    },
+    {
+      "id": "cmd-tap",
+      "title": "tap 点击",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 5630 ms",
+      "screenshots": [
+        "cmd-tap-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5630
+    },
+    {
+      "id": "cmd-type",
+      "title": "type 输入",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 14889 ms",
+      "screenshots": [
+        "cmd-type-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 14889
+    },
+    {
+      "id": "cmd-swipe",
+      "title": "swipe 滑动",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 6003 ms",
+      "screenshots": [
+        "cmd-swipe-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 6003
+    },
+    {
+      "id": "cmd-double-click",
+      "title": "double-click 双击",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 5574 ms",
+      "screenshots": [
+        "cmd-double-click-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5574
+    },
+    {
+      "id": "cmd-drag",
+      "title": "drag 拖拽",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 6255 ms",
+      "screenshots": [
+        "cmd-drag-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 6255
+    },
+    {
+      "id": "cmd-fling",
+      "title": "fling 快滑",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 5903 ms",
+      "screenshots": [
+        "cmd-fling-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5903
+    },
+    {
+      "id": "cmd-pinch",
+      "title": "pinch 双指缩放",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 6450 ms",
+      "screenshots": [
+        "cmd-pinch-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 6450
+    },
+    {
+      "id": "cmd-wait-for",
+      "title": "wait-for 等 UI",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 24226 ms",
+      "screenshots": [
+        "cmd-wait-for-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 24226
+    },
+    {
+      "id": "cmd-read-list",
+      "title": "read-list 读列表",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 8042 ms",
+      "screenshots": [
+        "cmd-read-list-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 8042
+    },
+    {
+      "id": "cmd-scroll-until",
+      "title": "scroll-until 滚到目标",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 9454 ms",
+      "screenshots": [
+        "cmd-scroll-until-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 9454
+    },
+    {
+      "id": "cmd-key",
+      "title": "key 系统按键",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 5892 ms",
+      "screenshots": [
+        "cmd-key-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 5892
+    },
+    {
+      "id": "cmd-apps",
+      "title": "apps 应用管理",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled",
+      "screenshots": [],
+      "kind": "log",
+      "ms": 3281
+    },
+    {
+      "id": "cmd-window",
+      "title": "window 窗口",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled",
+      "screenshots": [],
+      "kind": "log",
+      "ms": 3910
+    },
+    {
+      "id": "cmd-doctor",
+      "title": "doctor 自检",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · doctor",
+      "screenshots": [],
+      "kind": "log",
+      "ms": 3623
+    },
+    {
+      "id": "cmd-screenshot",
+      "title": "screenshot 截图",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 49 KB",
+      "screenshots": [
+        "cmd-screenshot-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 4954
+    },
+    {
+      "id": "cmd-inspect",
+      "title": "inspect 布局检查",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · 156 KB",
+      "screenshots": [
+        "cmd-inspect-7544d645.jpg"
+      ],
+      "kind": "screen",
+      "ms": 4266
+    },
+    {
+      "id": "cmd-report",
+      "title": "report 步骤报告",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled",
+      "screenshots": [],
+      "kind": "log",
+      "ms": 5612
+    },
+    {
+      "id": "cmd-status",
+      "title": "status 会话状态",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "settled · connected",
+      "screenshots": [],
+      "kind": "log",
+      "ms": 3240
+    },
+    {
+      "id": "cmd-handoff",
+      "title": "handoff 交给人 · resume 交回",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "handoff exit 0 · resume exit 0",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "approval-pending",
+      "title": "审批：先要人点头",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "approval_pending · id b948e4275bf7 · 60 s",
+      "screenshots": [
+        "approval-pending-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "approval-unanswered",
+      "title": "审批：没回答时重放仍等待",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "replay without a decision → exit 3 (expect 3)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "approval-agent-cannot-answer",
+      "title": "审批：Agent 拿到 id 也不能自己批准",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "after an unanswered replay the approval b948e4275bf7 holds 0 decision file(s) (expect 0)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "approval-deny",
+      "title": "审批：人说不",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "denied b948e4275bf7",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "approval-denied-replay",
+      "title": "审批：被拒绝后重放被挡",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "exit 4 (expect 4) · acceptance: deny path",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "approval-allow",
+      "title": "审批：人点头后放行",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "allow exit 0 · replay exit 0 (expect 0)",
+      "screenshots": [
+        "approval-allowed-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "approval-single-use",
+      "title": "审批：一个 id 只能用一次",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "replay of the used id → exit 4 (expect 4)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "hold-blocks-agent",
+      "title": "hold：Agent 命令停在 lease_held",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "hold exit 0 · observe exit 2 (expect 2)",
+      "screenshots": [
+        "hold-blocked-7544d645.jpg"
+      ],
+      "kind": "screen"
+    },
+    {
+      "id": "resume-releases",
+      "title": "resume：交回后 Agent 继续",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "resume exit 0 · observe exit 0 (expect 0)",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "mcp",
+      "title": "MCP：tools/list 与一次 tools/call",
+      "device": "7544d645",
+      "status": "pass",
+      "detail": "21 个工具 · uitest_observe → screen 1600x2560 · app: com.huawei.hmos.calculator · rotatio",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "skill-install",
+      "title": "Skill 安装、拒绝覆盖、--force 更新",
+      "device": "host",
+      "status": "pass",
+      "detail": "install 0 · marker 0.10.3 · 再装 2（期望非 0）· --force 0",
+      "screenshots": [],
+      "kind": "log"
+    },
+    {
+      "id": "live-moved",
+      "title": "live 迁移提示",
+      "device": "host",
+      "status": "pass",
+      "detail": "live moved to uitest-console · npm i -g uitest-console · uitest-console",
+      "screenshots": [],
+      "kind": "log"
+    }
+  ],
+  "summary": {
+    "passed": 34,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rerun": [
+    "unset HDC_SERVER_PORT",
+    "npx tsx scripts/acceptance-phone.ts --targets <id>[,<id>]",
+    "node scripts/gen-acceptance-pages.mjs"
+  ],
+  "issues": []
+}

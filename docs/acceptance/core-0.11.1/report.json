@@ -2,7 +2,7 @@
   "product": "core",
   "version": "0.11.1",
   "date": "2026-11-19",
-  "commit": "3ae6a42+dirty",
+  "commit": "1436469",
   "devices": [
     {
       "tag": "7544d645",
@@ -54,31 +54,31 @@
         "connect-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 1422
+      "ms": 1332
     },
     {
       "id": "click",
       "title": "act.tap 点击",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 1250 ms",
+      "detail": "settled · 1429 ms",
       "screenshots": [
         "click-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 2368
+      "ms": 2723
     },
     {
       "id": "swipe",
       "title": "act.swipe 滑动",
       "device": "7544d645",
       "status": "pass",
-      "detail": "settled · 1968 ms",
+      "detail": "settled · 2200 ms",
       "screenshots": [
         "swipe-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 3171
+      "ms": 3542
     },
     {
       "id": "touch",
@@ -90,7 +90,7 @@
         "touch-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 977
+      "ms": 1233
     },
     {
       "id": "triggerKey",
@@ -102,43 +102,43 @@
         "triggerKey-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 5763
+      "ms": 5612
     },
     {
       "id": "captureLayout",
       "title": "observe.layout UI 树",
       "device": "7544d645",
       "status": "pass",
-      "detail": "224 nodes",
+      "detail": "216 nodes",
       "screenshots": [
         "captureLayout-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 2769
+      "ms": 1408
     },
     {
       "id": "captureScreen",
       "title": "observe.screenshot 截图",
       "device": "7544d645",
       "status": "pass",
-      "detail": "118 ms · 48996 B",
+      "detail": "335 ms · 48655 B",
       "screenshots": [
         "captureScreen-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 371
+      "ms": 752
     },
     {
       "id": "cropScreen",
       "title": "按 bundle 裁剪截图",
       "device": "7544d645",
       "status": "pass",
-      "detail": "com.huawei.hmos.calculator · 68500 B",
+      "detail": "com.huawei.hmos.calculator · 68476 B",
       "screenshots": [
         "cropScreen-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 1755
+      "ms": 1996
     },
     {
       "id": "streamScreen",
@@ -150,7 +150,7 @@
         "streamScreen-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 1769
+      "ms": 1797
     },
     {
       "id": "createCast",
@@ -162,19 +162,19 @@
         "createCast-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 2556
+      "ms": 2539
     },
     {
       "id": "createCastRecord",
       "title": "cast.record MP4 录制",
       "device": "7544d645",
       "status": "pass",
-      "detail": "219129 B mp4",
+      "detail": "219001 B mp4",
       "screenshots": [
         "createCastRecord-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 8470
+      "ms": 8684
     },
     {
       "id": "dualCast",
@@ -186,43 +186,43 @@
         "dualCast-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 4424
+      "ms": 4198
     },
     {
       "id": "dumpLayout",
       "title": "cli.dumpLayout",
       "device": "7544d645",
       "status": "pass",
-      "detail": "226 nodes",
+      "detail": "218 nodes",
       "screenshots": [
         "dumpLayout-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 2098
+      "ms": 1977
     },
     {
       "id": "queue",
       "title": "并发调用排队",
       "device": "7544d645",
       "status": "pass",
-      "detail": "10 calls · 98 ms",
+      "detail": "10 calls · 117 ms",
       "screenshots": [
         "queue-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 866
+      "ms": 789
     },
     {
       "id": "rpcDuringStream",
       "title": "投流期间调用 RPC",
       "device": "7544d645",
       "status": "pass",
-      "detail": "6 ms",
+      "detail": "14 ms",
       "screenshots": [
         "rpcDuringStream-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 1045
+      "ms": 927
     },
     {
       "id": "streamUiActions",
@@ -234,7 +234,7 @@
         "streamUiActions-7544d645.jpg"
       ],
       "kind": "screen",
-      "ms": 1242
+      "ms": 1290
     },
     {
       "id": "security-origin",
@@ -249,7 +249,7 @@
       "id": "package",
       "title": "npm 包内容",
       "status": "pass",
-      "detail": "161 个文件 · 1051 KB · 无 src/test/bin · 3 个设备扩展",
+      "detail": "161 个文件 · 1054 KB · 无 src/test/bin · 3 个设备扩展",
       "screenshots": [],
       "kind": "log",
       "device": "host"

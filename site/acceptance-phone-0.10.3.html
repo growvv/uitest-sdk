@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uitest-phone 0.10.3 验收报告 · uitest-sdk</title>
+  <meta name="description" content="uitest-phone 0.10.3 的验收记录：34 个用例、2026-11-19、提交 1436469，画面类用例都带设备或浏览器截图。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="index.html#hero">uitest-sdk</a>
+    <div class="nav-links">
+      <a href="index.html#packages">四个包</a>
+      <a href="index.html#features">能力</a>
+      <a href="index.html#cli">命令行</a>
+      <a href="index.html#showcase">实拍</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">文档</a>
+      <a href="acceptance.html" aria-current="page">验收</a>
+      <a href="changelog.html">更新</a>
+      <a href="https://github.com/growvv/uitest-sdk">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <aside class="doc-toc" aria-label="目录">
+      <a href="#summary">一页结论</a>
+      <a href="#devices">设备</a>
+      <a href="#cases">用例与截图</a>
+      <a href="#issues">问题</a>
+      <a href="#rerun">自己复现</a>
+      <a href="acceptance.html">全部产品的验收</a>
+    </aside>
+
+    <article class="doc-body">
+      <h1>uitest-phone 0.10.3 验收报告</h1>
+      <p class="doc-meta"><strong>uitest-phone</strong> 0.10.3 · 2026-11-19 · 提交 <code>1436469</code></p>
+
+      <p>本页由 <code>scripts/gen-acceptance-pages.mjs</code> 从 <code>docs/acceptance/phone-0.10.3/report.json</code> 生成，请勿手改。每条用例都是在这一版代码上现场跑出来的；画面类用例的截图由被测程序自己产出，只验命令行或日志的用例没有截图，报告中逐条标出。</p>
+
+      <h2 id="summary">一页结论</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>用例</th><th>通过</th><th>失败</th><th>跳过</th></tr></thead>
+          <tbody>
+            <tr><td>34</td><td>34</td><td>0</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="devices">设备</h2>
+      <p class="note">设备只以序列号哈希后的 8 位标签出现，原序列号不进入仓库，也不进入本页。</p>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>标签</th><th>型号</th><th>分辨率</th></tr></thead>
+          <tbody>
+            <tr><td><code>7544d645</code></td><td>MLR-AL10</td><td>1600x2560</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="cases">用例与截图</h2>
+      <div class="doc-table">
+        <table>
+          <thead><tr><th>#</th><th>用例</th><th>结果</th><th>截图</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>package</code></td>
+              <td>npm 包安装与版本<br><span class="cell-detail">uitest-phone-0.10.3.tgz · uitest-phone 0.10.3 (uitest-sdk 0.11.1) · --help exit 2</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-launch</code></td>
+              <td>launch 启动应用<br><span class="cell-detail">settled · 5330 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-launch-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-launch-7544d645.jpg" alt="launch 启动应用" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-observe</code></td>
+              <td>observe 读屏<br><span class="cell-detail">settled · 4016 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-observe-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-observe-7544d645.jpg" alt="observe 读屏" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-tap</code></td>
+              <td>tap 点击<br><span class="cell-detail">settled · 5630 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-tap-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-tap-7544d645.jpg" alt="tap 点击" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-type</code></td>
+              <td>type 输入<br><span class="cell-detail">settled · 14889 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-type-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-type-7544d645.jpg" alt="type 输入" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-swipe</code></td>
+              <td>swipe 滑动<br><span class="cell-detail">settled · 6003 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-swipe-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-swipe-7544d645.jpg" alt="swipe 滑动" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-double-click</code></td>
+              <td>double-click 双击<br><span class="cell-detail">settled · 5574 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-double-click-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-double-click-7544d645.jpg" alt="double-click 双击" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-drag</code></td>
+              <td>drag 拖拽<br><span class="cell-detail">settled · 6255 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-drag-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-drag-7544d645.jpg" alt="drag 拖拽" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-fling</code></td>
+              <td>fling 快滑<br><span class="cell-detail">settled · 5903 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-fling-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-fling-7544d645.jpg" alt="fling 快滑" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-pinch</code></td>
+              <td>pinch 双指缩放<br><span class="cell-detail">settled · 6450 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-pinch-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-pinch-7544d645.jpg" alt="pinch 双指缩放" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-wait-for</code></td>
+              <td>wait-for 等 UI<br><span class="cell-detail">settled · 24226 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-wait-for-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-wait-for-7544d645.jpg" alt="wait-for 等 UI" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-read-list</code></td>
+              <td>read-list 读列表<br><span class="cell-detail">settled · 8042 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-read-list-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-read-list-7544d645.jpg" alt="read-list 读列表" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-scroll-until</code></td>
+              <td>scroll-until 滚到目标<br><span class="cell-detail">settled · 9454 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-scroll-until-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-scroll-until-7544d645.jpg" alt="scroll-until 滚到目标" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-key</code></td>
+              <td>key 系统按键<br><span class="cell-detail">settled · 5892 ms</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-key-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-key-7544d645.jpg" alt="key 系统按键" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-apps</code></td>
+              <td>apps 应用管理<br><span class="cell-detail">settled</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-window</code></td>
+              <td>window 窗口<br><span class="cell-detail">settled</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-doctor</code></td>
+              <td>doctor 自检<br><span class="cell-detail">settled · doctor</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-screenshot</code></td>
+              <td>screenshot 截图<br><span class="cell-detail">settled · 49 KB</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-screenshot-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-screenshot-7544d645.jpg" alt="screenshot 截图" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-inspect</code></td>
+              <td>inspect 布局检查<br><span class="cell-detail">settled · 156 KB</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/cmd-inspect-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/cmd-inspect-7544d645.jpg" alt="inspect 布局检查" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-report</code></td>
+              <td>report 步骤报告<br><span class="cell-detail">settled</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-status</code></td>
+              <td>status 会话状态<br><span class="cell-detail">settled · connected</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>cmd-handoff</code></td>
+              <td>handoff 交给人 · resume 交回<br><span class="cell-detail">handoff exit 0 · resume exit 0</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-pending</code></td>
+              <td>审批：先要人点头<br><span class="cell-detail">approval_pending · id b948e4275bf7 · 60 s</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/approval-pending-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/approval-pending-7544d645.jpg" alt="审批：先要人点头" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-unanswered</code></td>
+              <td>审批：没回答时重放仍等待<br><span class="cell-detail">replay without a decision → exit 3 (expect 3)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-agent-cannot-answer</code></td>
+              <td>审批：Agent 拿到 id 也不能自己批准<br><span class="cell-detail">after an unanswered replay the approval b948e4275bf7 holds 0 decision file(s) (expect 0)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-deny</code></td>
+              <td>审批：人说不<br><span class="cell-detail">denied b948e4275bf7</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-denied-replay</code></td>
+              <td>审批：被拒绝后重放被挡<br><span class="cell-detail">exit 4 (expect 4) · acceptance: deny path</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-allow</code></td>
+              <td>审批：人点头后放行<br><span class="cell-detail">allow exit 0 · replay exit 0 (expect 0)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/approval-allowed-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/approval-allowed-7544d645.jpg" alt="审批：人点头后放行" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>approval-single-use</code></td>
+              <td>审批：一个 id 只能用一次<br><span class="cell-detail">replay of the used id → exit 4 (expect 4)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>hold-blocks-agent</code></td>
+              <td>hold：Agent 命令停在 lease_held<br><span class="cell-detail">hold exit 0 · observe exit 2 (expect 2)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+              <a href="assets/acceptance/phone-0.10.3/hold-blocked-7544d645.jpg"><img src="assets/acceptance/phone-0.10.3/hold-blocked-7544d645.jpg" alt="hold：Agent 命令停在 lease_held" loading="lazy"></a>
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>resume-releases</code></td>
+              <td>resume：交回后 Agent 继续<br><span class="cell-detail">resume exit 0 · observe exit 0 (expect 0)</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>mcp</code></td>
+              <td>MCP：tools/list 与一次 tools/call<br><span class="cell-detail">21 个工具 · uitest_observe → screen 1600x2560 · app: com.huawei.hmos.calculator · rotatio</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>skill-install</code></td>
+              <td>Skill 安装、拒绝覆盖、--force 更新<br><span class="cell-detail">install 0 · marker 0.10.3 · 再装 2（期望非 0）· --force 0</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+            <tr>
+              <td><code>live-moved</code></td>
+              <td>live 迁移提示<br><span class="cell-detail">live moved to uitest-console · npm i -g uitest-console · uitest-console</span></td>
+              <td><span class="status status-pass">通过</span></td>
+              <td><div class="shot-strip">
+
+              </div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="issues">问题</h2>
+      <ul>
+            <li>无</li>
+      </ul>
+
+      <h2 id="rerun">自己复现</h2>
+      <pre class="cli-code"><code>unset HDC_SERVER_PORT</code><br><code>npx tsx scripts/acceptance-phone.ts --targets &lt;id&gt;[,&lt;id&gt;]</code><br><code>node scripts/gen-acceptance-pages.mjs</code></pre>
+      <p class="note">重跑会覆盖本页引用的截图。截图进入官网之前必须逐张看过：通知栏、账户信息、聊天与第三方个人资料都不能出现在这里。</p>
+    </article>
+  </main>
+  <script src="main.js" defer></script>
+</body>
+</html>
