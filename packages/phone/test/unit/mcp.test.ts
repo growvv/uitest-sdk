@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { McpServer, toolDefinitions } from "../../src/mcp.js";
+import type { ToolRunner } from "../../src/mcp.js";
+import { DeviceStateError } from "uitest-sdk";
 import { COMMANDS } from "uitest-sdk/commands";
 
 /** The version in package.json — the one source of truth for a release. */
@@ -26,6 +28,19 @@ function fakeRunner() {
 
 const req = (method: string, params?: unknown, id: number | string = 1) =>
   JSON.stringify({ jsonrpc: "2.0", id, method, ...(params ? { params } : {}) });
+
+/**
+ * A runner whose device is not up yet. `handle` must answer the handshake and
+ * only then wait for it, so this class is the whole test: if `initialize`
+ * blocks on `ready`, the server is connecting before it is listening.
+ */
+class PendingRunner {
+  constructor(private readonly ready: Promise<ToolRunner>) {}
+  async run(name: string, args: Record<string, unknown>) {
+    return (await this.ready).run(name, args);
+  }
+}
+
 
 describe("toolDefinitions", () => {
   it("exposes every command as a tool with a JSON schema", () => {
@@ -64,6 +79,44 @@ describe("McpServer", () => {
     // A client shows this version, so it must be the version actually
     // published — not a literal that drifts from package.json.
     expect(reply.result.serverInfo.version).toBe(packageVersion());
+  });
+
+  it("answers initialize while the device is still being connected", async () => {
+    // The MCP client sends `initialize` the moment the process starts, long
+    // before a phone could be ready. A server that connects first and answers
+    // second makes the client report "connection closed: initialize response"
+    // and every tool is then unusable — an agent reads that as a broken tool
+    // and starts working around it.
+    let release!: (runner: ToolRunner) => void;
+    const ready = new Promise<ToolRunner>((r) => (release = r));
+    const server = new McpServer(() => ready);
+    const out = await Promise.race([
+      server.handle(req("initialize", { protocolVersion: "2024-11-05" })),
+      new Promise<null>((r) => setTimeout(() => r(null), 500)),
+    ]);
+    expect(out, "initialize must not wait for the device").not.toBeNull();
+    expect(JSON.parse(out!).result.serverInfo.name).toBe("uitest-phone");
+    release(fakeRunner());
+  });
+
+  it("reports a device that cannot be connected as a tool error, not a dead server", async () => {
+    // With no phone attached the process must stay up: the agent gets the
+    // device state as the result of its first tool call, which is something it
+    // can report and stop on. Exiting instead leaves the client with a closed
+    // connection and no reason.
+    const server = new McpServer(async () => {
+      throw new DeviceStateError("device_offline", "device_offline · no phone attached", "ENODEVICE");
+    });
+    expect(await server.handle(req("initialize", { protocolVersion: "2024-11-05" }))).toContain(
+      "uitest-phone",
+    );
+    const reply = JSON.parse(
+      (await server.handle(req("tools/call", { name: "uitest_observe", arguments: {} })))!,
+    );
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content.map((c: { text: string }) => c.text).join("\n")).toMatch(
+      /device_offline/,
+    );
   });
 
   it("lists tools", async () => {

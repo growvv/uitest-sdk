@@ -67,9 +67,20 @@ interface JsonRpcRequest {
  * no reply. A tool that returns a non-settled status is an *error result*
  * (`isError: true`) rather than a protocol error: the agent needs to see the
  * status and reason, not a transport failure.
+ *
+ * The runner is a factory, not an instance, because connecting a phone takes
+ * seconds and the client sends `initialize` immediately. Connecting first made
+ * the process exit before it answered, which a client reports as
+ * "connection closed: initialize response" — with no reason the agent can act
+ * on. The device is connected on the first tool call instead, and a device that
+ * cannot be connected comes back as that call's error result.
  */
 export class McpServer {
-  constructor(private readonly runner: ToolRunner) {}
+  private readonly runner: ToolRunner | Promise<ToolRunner>;
+
+  constructor(runner: ToolRunner | Promise<ToolRunner> | (() => ToolRunner | Promise<ToolRunner>)) {
+    this.runner = typeof runner === "function" ? runner() : runner;
+  }
 
   /** Handles one line of input; returns the response line, or null. */
   async handle(line: string): Promise<string | null> {
@@ -121,7 +132,10 @@ export class McpServer {
     const args = (params["arguments"] ?? {}) as Record<string, unknown>;
     let result;
     try {
-      result = await this.runner.run(command, args);
+      // Awaited here, not in the constructor: the handshake must not wait for
+      // a phone. A connection that fails is this call's answer, so the agent
+      // reads `device_offline` and stops instead of losing the server.
+      result = await (await this.runner).run(command, args);
     } catch (e) {
       // A phone that is locked, unauthorized or unplugged is a task outcome,
       // not a protocol failure: the agent must see the status word and stop.

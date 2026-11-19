@@ -57,6 +57,12 @@ async function run(argv: string[]): Promise<number> {
  * tool calls, and reconnecting the device per call would pay the agent startup
  * and lease churn on every step. Global flags on this subcommand configure the
  * session (`uitest-phone mcp --device 123 --read-only`).
+ *
+ * The connection is lazy on purpose. A client sends `initialize` the instant
+ * the process starts; connecting first means a slow or missing phone makes the
+ * process exit before it answers, and the client sees only "connection closed".
+ * Handing the server a factory answers the handshake at once and connects on
+ * the first tool call, where a failure is a result the agent can read.
  */
 async function mcpMain(argv: string[]): Promise<number> {
   const parsed = parseArgv(argv);
@@ -75,24 +81,43 @@ async function mcpMain(argv: string[]): Promise<number> {
   await refreshSkillQuietly();
 
   const stateDir = parsed.options.stateDir ?? ".uitest-phone";
-  const session = await connect({
-    deviceId: parsed.options.device,
-    task: parsed.options.task ?? "mcp",
-    stateDir,
-    policy: {
-      readOnly: parsed.options.readOnly,
-      confirm: parsed.options.confirm,
-      apps: parsed.options.apps?.split(",").map((s) => s.trim()).filter(Boolean),
-    },
-    settleMs: parsed.options.settleMs,
-    traceShots: parsed.options.traceShots,
-  });
+  let session: Awaited<ReturnType<typeof connect>> | undefined;
+  let closed = false;
+  const closeSession = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    await session?.close().catch(() => undefined);
+  };
+  // A killed MCP client sends no goodbye, and a process that dies without
+  // cleanup leaves the agent's fport and the lease behind — over a long batch
+  // that is one leaked forward per task.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.once(signal, () => {
+      void closeSession().finally(() => process.exit(0));
+    });
+  }
+
+  const openSession = async (): Promise<CommandRunner> => {
+    session ??= await connect({
+      deviceId: parsed.options.device,
+      task: parsed.options.task ?? "mcp",
+      stateDir,
+      policy: {
+        readOnly: parsed.options.readOnly,
+        confirm: parsed.options.confirm,
+        apps: parsed.options.apps?.split(",").map((s) => s.trim()).filter(Boolean),
+      },
+      settleMs: parsed.options.settleMs,
+      traceShots: parsed.options.traceShots,
+    });
+    return new CommandRunner(session.core, { stateDir, device: session.device });
+  };
+
   try {
-    const runner = new CommandRunner(session.core, { stateDir, device: session.device });
-    await new McpServer(runner).serve();
+    await new McpServer(openSession).serve();
     return 0;
   } finally {
-    await session.close();
+    await closeSession();
   }
 }
 
