@@ -20,6 +20,7 @@
 | [11-deveco-capability-inventory.md](11-deveco-capability-inventory.md) | **hypium 118 个公开方法的逐项对账与 SDK 支持规划（P0~P3）** |
 | [12-findings-classified.md](12-findings-classified.md) | **本轮全部结论的分类汇总（版本/签名/投流/录屏/能力/性能/踩坑）** |
 | [13-stage-log.md](13-stage-log.md) | **阶段记录：0.3.0 → 0.4.0 的交付、发布、架构实测与待办** |
+| [14-benchmark-landscape.md](14-benchmark-landscape.md) | **外部基准调研：mobile agent 论文基准清单、pinky 的自测方法、我们的位置与后续可做** |
 
 ## 一句话结论
 
