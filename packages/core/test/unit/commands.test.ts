@@ -10,19 +10,28 @@ import { holdDevice, resumeDevice } from "../../src/governance/hold.js";
 import { readLease } from "../../src/governance/lease.js";
 import type { UiNode } from "../../src/transport/model.js";
 
-const page = (text: string, field: { text: string }, fieldId: string | null = "search_input"): UiNode => ({
+const page = (
+  text: string,
+  field: { text: string },
+  fieldId: string | null = "search_input",
+  withField = true,
+): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },
   children: [
     { attributes: { type: "Button", text, bounds: "[100,200][400,400]", clickable: "true" } },
-    {
-      attributes: {
-        type: "TextInput",
-        ...(fieldId === null ? {} : { id: fieldId }),
-        text: field.text,
-        bounds: "[100,700][900,800]",
-        focused: "true",
-      },
-    },
+    ...(withField
+      ? [
+          {
+            attributes: {
+              type: "TextInput",
+              ...(fieldId === null ? {} : { id: fieldId }),
+              text: field.text,
+              bounds: "[100,700][900,800]",
+              focused: "true",
+            },
+          },
+        ]
+      : []),
   ],
 });
 
@@ -33,12 +42,18 @@ function fakeDevice(fieldId: string | null = "search_input") {
   const shells: string[] = [];
   /** The focused field's value; `inputText` writes it so `type` can read it back. */
   const field = { text: "q" };
+  /** How many of the next reads leave the field out, to model an animation. */
+  let hideField = 0;
   // Built per read, not once: the field's value changes as the test types.
   const pageAt = (i: number): UiNode =>
     i === 0 ? page("WLAN", field, fieldId) : page("WLAN detail", field, fieldId);
   return {
     calls,
     shells,
+    /** Omits the input from the next `n` layout reads, as a mid-animation one does. */
+    hideFieldFor(n: number) {
+      hideField = n;
+    },
     device: {
       deviceId: "SERIAL",
       agent: {
@@ -49,6 +64,7 @@ function fakeDevice(fieldId: string | null = "search_input") {
           if (api === "Driver.findComponent") return "Component#0";
           if (api === "Driver.waitForComponent") return "Component#0";
           if (api === "PointerMatrix.create") return "PointerMatrix#0";
+          if (api === "Component.inputText") field.text = String(args[0] ?? "");
           if (api === "Driver.findWindow") {
             // Only a window for com.demo exists; anything else is not_found.
             return (args[0] as { bundleName?: string } | undefined)?.bundleName === "com.gone"
@@ -64,6 +80,10 @@ function fakeDevice(fieldId: string | null = "search_input") {
           return null;
         },
         async captureLayout() {
+          if (hideField > 0) {
+            hideField -= 1;
+            return page("WLAN detail", field, fieldId, false);
+          }
           return pageAt(Math.min(index, 1));
         },
         async getDisplaySize() {
@@ -411,10 +431,15 @@ describe("CommandRunner", () => {
   it("clears the field before typing when --clear is set", async () => {
     await withRunner(async (runner, _dir, fake) => {
       expect((await runner.run("type", { text: "hello", clear: true })).status).toBe("settled");
+      // Both steps address the field itself. After the device clears a field
+      // it can drop focus, and a coordinate `Driver.inputText` then types into
+      // the page: books-05 and settings-05 came back with the field empty
+      // after `--clear`, which is how a cleared field reads when the text
+      // landed nowhere. The handle does not depend on focus or position.
       const order = fake.calls
         .map((c) => c.api)
-        .filter((a) => a === "Component.clearText" || a === "inputText");
-      expect(order).toEqual(["Component.clearText", "inputText"]);
+        .filter((a) => a === "Component.clearText" || a === "Component.inputText" || a === "inputText");
+      expect(order).toEqual(["Component.clearText", "Component.inputText"]);
       // The clear targets the field by its resource id, not by a coordinate:
       // the id is the one attribute that survives the value change.
       const byId = fake.calls.find((c) => c.api === "On.id");
@@ -422,16 +447,37 @@ describe("CommandRunner", () => {
     });
   });
 
-  it("reports not_found rather than guessing when the field has no id", async () => {
+  it("still types when --clear is asked for a field with no id", async () => {
+    // A field with no resource id cannot be addressed through a component
+    // handle. Refusing the whole call leaves the agent with nothing; typing
+    // and reading the value back says exactly what the field now holds.
     await withRunner(
       async (runner, _dir, fake) => {
         const result = await runner.run("type", { text: "hello", clear: true });
-        expect(result.status).toBe("not_found");
+        expect(result.status).toBe("settled");
         expect(fake.calls.filter((c) => c.api === "Component.clearText")).toHaveLength(0);
+        expect(textModes(fake)).toEqual([undefined]);
       },
       {},
       null,
     );
+  });
+
+  // A ref is read from one layout capture and acted on in the next. When a tap
+  // moves focus, the keyboard slides in and the window beneath it is still
+  // animating, the next capture can come back without the field -- so a ref
+  // the agent was handed one second earlier reads as missing. zhihu-07 was told
+  // `not_found · ref 29407` three times for a ref its own observe had printed,
+  // and the identical call a moment later succeeded. One settled look before
+  // the miss becomes the answer.
+  it("looks again once the screen settles before calling a ref gone", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      const observed = await runner.run("observe", {});
+      const ref = Number(String(observed.text).match(/\[(\d+)\] input/)?.[1]);
+      expect(ref, observed.text).toBeGreaterThan(0);
+      fake.hideFieldFor(1);
+      expect((await runner.run("type", { text: "hello", ref })).status).toBe("settled");
+    });
   });
 
   it("does not clear the field when --clear is absent", async () => {

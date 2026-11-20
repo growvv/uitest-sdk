@@ -14,11 +14,19 @@
   再搜一次就变成两个词拼在一起，回读如实报 `uncertain`，agent 只剩逐字删一条路——而搜索框
   每删一个字就重跑一次查询。实测 meituan-05 在一个框上花了 21 次 tap 和 3 次 backspace，
   然后 485 s 超时。`--clear` 先调设备的 `Component.clearText`（一次调用，任意长度）再输入。
-  输入框没有资源 id 时不做猜测，直接报 `not_found`：清空错的那个框比不清更糟。
   73 次 `type` 调用里有 26 次回读不一致，其中 14 次就是这种追加。
 
 ### 修复
 
+- **`type --clear` 清空之后改用同一个句柄输入。** 设备清空输入框会丢掉焦点，接着按坐标的
+  `Driver.inputText` 就输到了页面上——回读看到的是一个空的输入框，正是「字哪儿也没去」的
+  样子。books-05、settings-05 都是这样。现在清空和输入都走 `Component.clearText` /
+  `Component.inputText`，同一个句柄，不依赖焦点和坐标。输入框没有资源 id 时清空做不了，
+  但输入照做、回读照报——以前整条命令报 `not_found`，把一次能做成的输入直接废掉了。
+- **`type` 的 ref 查不到时先等屏幕稳定再看一次。** ref 是在一次布局抓取里读的，下一次调用
+  再去用；一次 tap 刚移动焦点、键盘还在滑入时，第二次抓取可能拿不到那个输入框，于是 agent
+  刚看到的 ref 被报成不存在。zhihu-07 对自己的 `observe` 刚打印的 ref 29407 连收三次
+  `not_found`，一秒后一模一样的调用却成功了。现在失配后先 `settle` 再查一遍，仍是失配才报。
 - **`observe --out` 只给了路径，没给图。** 它会写一张 JPEG，但 MCP 层只把 `screenshot`
   和 `inspect` 的图像附在结果里，`observe --out` 的图从来没到过模型手上。拨号盘是代价：
   十二个按键既没有 text、也没有 description、也没有 id（`accessibilityId` 在真机 dump 里

@@ -558,9 +558,23 @@ ${screen.header}`,
    * field is refused by the policy before any keystroke is sent.
    */
   async type(text: string, opts: TypeOptions = {}): Promise<ActionResult> {
-    const before = await this.reader.read();
+    let before = await this.reader.read();
     this.lastScreen = before;
-    const field = opts.ref !== undefined ? findElement(before, opts.ref) : before.elements.find((e) => e.focused && e.input);
+    let field = this.fieldIn(before, opts.ref);
+    if (!field) {
+      // A ref is read from one layout capture and acted on in the next. When a
+      // tap has just moved focus, the keyboard is still sliding in and the
+      // window beneath it still animating, that capture can come back without
+      // the field — so a ref the agent was handed a second earlier reads as
+      // missing. zhihu-07 was told `not_found · ref 29407` three times for a
+      // ref its own observe had printed, and the identical call a moment later
+      // succeeded. The miss has to be checked against a settled screen before
+      // it becomes the answer.
+      const retry = await settle(this.reader, { previousHash: before.hash, maxSettleMs: this.settleMs });
+      this.lastScreen = retry.screen;
+      field = this.fieldIn(retry.screen, opts.ref);
+      before = retry.screen;
+    }
     if (!field) {
       const query = opts.ref !== undefined ? `ref ${opts.ref}` : "a focused input";
       return this.finish("type", { text: "[redacted]", ref: opts.ref }, "not_found", `not_found · ${query}`, {
@@ -589,32 +603,32 @@ ${screen.header}`,
     // path this method uses (it only appends through `Component.inputText`),
     // and offering a flag that silently does nothing is worse than not having
     // it. Omitting the mode entirely selects the default path.
-    if (opts.clear) {
-      // `inputText` appends to whatever the field already holds. A search box
-      // keeps its previous query, so typing "汉堡" into one holding
-      // "营养又健康的快餐盒饭汉堡火锅" leaves both, and the read-back below
-      // correctly reports `uncertain` -- leaving the agent one backspace per
-      // character, on a box that re-runs the query after every press. meituan-05
-      // spent 21 taps and 3 backspaces on one field and then timed out.
-      // `Component.clearText` is the device's own clear: one call, any length.
-      const handle = await this.componentOf(field);
-      if (!handle) {
-        return this.finish(
-          "type",
-          { text: "[redacted]", ref: opts.ref },
-          "not_found",
-          `not_found · ref ${field.ref} cannot be addressed to clear it`,
-          { screen: before, query: `ref ${field.ref}` },
-        );
-      }
+    // `inputText` appends to whatever the field already holds. A search box
+    // keeps its previous query, so typing "汉堡" into one holding
+    // "营养又健康的快餐盒饭汉堡火锅" leaves both, and the read-back below
+    // correctly reports `uncertain` -- leaving the agent one backspace per
+    // character, on a box that re-runs the query after every press. meituan-05
+    // spent 21 taps and 3 backspaces on one field and then timed out.
+    // `Component.clearText` is the device's own clear: one call, any length.
+    const handle = opts.clear ? await this.componentOf(field) : null;
+    if (handle) {
       await handle.clearText();
+      // Type through the same handle. Clearing can drop the field's focus, and
+      // a coordinate `Driver.inputText` then types into the page instead: the
+      // read-back finds the cleared field empty, which is how "the text went
+      // nowhere" looks. books-05 and settings-05 both hit it. The handle names
+      // the field itself, so it needs neither focus nor a fresh position.
+      await handle.inputText(text, opts.paste ? { paste: true } : undefined);
+    } else {
+      // A field with no resource id cannot be addressed through a handle; it
+      // still gets the text, and the read-back says what the field now holds.
+      await this.device.agent.inputText(
+        field.center.x,
+        field.center.y,
+        text,
+        opts.paste ? { paste: true } : undefined,
+      );
     }
-    await this.device.agent.inputText(
-      field.center.x,
-      field.center.y,
-      text,
-      opts.paste ? { paste: true } : undefined,
-    );
     // Per-key input is not reliable on every app: the dialer on the test phone
     // turns "10086" into "1086" because each digit lands in its own formatting
     // buffer, and the device's own `uitest uiInput text` corrupts it the same
@@ -1052,6 +1066,12 @@ ${renderFull(screen)}`, {
    * may already be stale by the time the device looks, and clearing the wrong
    * input is worse than not clearing at all.
    */
+  /** The field a `type` call means: the ref it named, or the focused input. */
+  private fieldIn(screen: Screen, ref?: number): ScreenElement | null {
+    if (ref !== undefined) return findElement(screen, ref);
+    return screen.elements.find((e) => e.focused && e.input) ?? null;
+  }
+
   private async componentOf(field: ScreenElement): Promise<ComponentHandle | null> {
     const id = String(field.node?.attributes?.["id"] ?? "");
     if (!id) return null;
