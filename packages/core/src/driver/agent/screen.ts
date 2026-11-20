@@ -205,12 +205,14 @@ function hasIconDump(tree: UiNode): boolean {
   const stack: UiNode[] = [tree];
   while (stack.length) {
     const node = stack.pop()!;
-    for (const key of ["text", "description", "hint"]) {
+    for (const key of ["text", "description", "hint", "id"]) {
       // Not `startsWith`: the raw attribute may carry a leading space, and the
-      // home screen's outer icon node reads "Container AppIcon Image …". The
-      // printed label is trimmed, so a strict prefix check on the raw value
-      // called the whole launcher "nothing to do" and every icon kept its
-      // bundle dump (measured on notepad-08 after the fix was built).
+      // home screen's outer icon node reads "Container AppIcon Image …".
+      // `id` is the one that matters on the launcher itself: the icon node has
+      // no text at all — its id is `id_AppIcon_Image_…_undefined_1`, which
+      // `labelOf`'s `idLabel` fallback turns into the printed dump. Looking
+      // only at text/description/hint meant the name table was never fetched
+      // (measured on camera-08, 14:20).
       if (attr(node, key).includes("AppIcon")) return true;
     }
     for (const child of node.children ?? []) stack.push(child);
@@ -295,7 +297,7 @@ export class ScreenBuilder {
 
   /** Launcher names by bundle, once `prepare` has loaded them. */
   private appNames: Map<string, string> | null = null;
-  /** One load attempt per builder: a failed dump is not retried every screen. */
+  /** Set once a non-empty name table is in hand; an empty answer stays retryable. */
   private appNamesLoaded = false;
   private readonly loadAppNames?: () => Promise<Map<string, string>>;
 

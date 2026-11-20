@@ -268,6 +268,27 @@ describe("launcher icons", () => {
     expect(screen.elements.find((e) => e.role === "button")!.label).toContain("AppIcon");
   });
 
+  it("reads the dump from the icon's id, which is where the launcher puts it", async () => {
+    // Measured on the phone (camera-08, 14:20): the icon node has no
+    // text/description/hint at all. Its id is
+    // `id_AppIcon_Image_com.huawei…_undefined_1`, and `labelOf` falls back to
+    // `idLabel`, which turns that into the dump the agent sees. The guard only
+    // looked at the first three attributes, so `bm dump -a -l` was never
+    // called — three rounds of this fix did nothing on the real launcher.
+    const tree = node({ bundleName: "com.ohos.sceneboard", bounds: "[0,0][400,1200]" }, [
+      node({
+        type: "Button",
+        clickable: "true",
+        id: "id_AppIcon_Image_com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0_undefined_1",
+        bounds: "[0,200][200,400]",
+      }),
+    ]);
+    const builder = new ScreenBuilder(null, { loadAppNames: async () => names() });
+    await builder.prepare(tree);
+    const screen = builder.build(tree, { display, rotation: 0 });
+    expect(screen.elements.find((e) => e.role === "button")!.label).toBe("笔记");
+  });
+
   it("recognises a dump the launcher indents or wraps in a container", async () => {
     // The raw attribute is not always the printed label with a clean start:
     // the home screen's outer icon node says "Container AppIcon Image …", and
