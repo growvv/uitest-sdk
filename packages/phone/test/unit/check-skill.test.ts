@@ -70,4 +70,15 @@ describe("skill command index", () => {
 
     expect(text).toContain("com.ohos.contacts");
   });
+
+  // `type` appends. The agent's only recourse before `--clear` was one
+  // backspace per character, on a search box that re-runs its query after every
+  // press: meituan-05 spent 21 taps and 3 backspaces on one field and then hit
+  // the 480 s timeout. The flag is useless if the skill never mentions it.
+  it("tells the agent to clear a field instead of deleting it character by character", () => {
+    const dir = copySkill();
+    const text = readFileSync(join(dir, "SKILL.md"), "utf8");
+
+    expect(text).toContain("--clear");
+  });
 });

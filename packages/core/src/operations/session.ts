@@ -138,6 +138,12 @@ export interface TypeOptions {
    * survives intact.
    */
   paste?: boolean;
+  /**
+   * Empty the field through the device's own `Component.clearText` before
+   * typing. Without it `inputText` appends, so a search box that kept its
+   * previous query ends up holding both strings.
+   */
+  clear?: boolean;
 }
 
 export interface InspectOptions {
@@ -583,6 +589,26 @@ ${screen.header}`,
     // path this method uses (it only appends through `Component.inputText`),
     // and offering a flag that silently does nothing is worse than not having
     // it. Omitting the mode entirely selects the default path.
+    if (opts.clear) {
+      // `inputText` appends to whatever the field already holds. A search box
+      // keeps its previous query, so typing "汉堡" into one holding
+      // "营养又健康的快餐盒饭汉堡火锅" leaves both, and the read-back below
+      // correctly reports `uncertain` -- leaving the agent one backspace per
+      // character, on a box that re-runs the query after every press. meituan-05
+      // spent 21 taps and 3 backspaces on one field and then timed out.
+      // `Component.clearText` is the device's own clear: one call, any length.
+      const handle = await this.componentOf(field);
+      if (!handle) {
+        return this.finish(
+          "type",
+          { text: "[redacted]", ref: opts.ref },
+          "not_found",
+          `not_found · ref ${field.ref} cannot be addressed to clear it`,
+          { screen: before, query: `ref ${field.ref}` },
+        );
+      }
+      await handle.clearText();
+    }
     await this.device.agent.inputText(
       field.center.x,
       field.center.y,
@@ -1016,6 +1042,21 @@ ${renderFull(screen)}`, {
   }
 
   // --------------------------------------------------------------- helpers
+
+  /**
+   * The device-side handle for a field the screen model already found.
+   *
+   * `ScreenElement` carries the layout node but no device reference, so the
+   * handle is rebuilt from the resource id — the one attribute that survives a
+   * value change. A field with no id cannot be addressed safely: the position
+   * may already be stale by the time the device looks, and clearing the wrong
+   * input is worse than not clearing at all.
+   */
+  private async componentOf(field: ScreenElement): Promise<ComponentHandle | null> {
+    const id = String(field.node?.attributes?.["id"] ?? "");
+    if (!id) return null;
+    return this.components.find(On.id(id));
+  }
 
   private async resolveTarget(target: Target): Promise<ResolvedTarget> {
     if (typeof target === "number") return this.resolveRef(target);

@@ -78,6 +78,17 @@ describe("toolDefinitions", () => {
     expect(launch.description).toMatch(/on-screen name/i);
     expect(launch.inputSchema.properties.app!.description).toMatch(/on-screen name/i);
   });
+
+  // `type` appends, so a second search into a box that kept the first query
+  // holds both. The agent's recourse before `--clear` was one backspace per
+  // character on a box that re-runs its query on every press -- meituan-05
+  // burned 21 taps and 3 backspaces that way and timed out. Same rule as
+  // above: the tool description is what every agent sees.
+  it("offers a clear flag and says typing appends", () => {
+    const type = toolDefinitions().find((t) => t.name === "uitest_type")!;
+    expect(type.inputSchema.properties.clear).toBeDefined();
+    expect(type.inputSchema.properties.clear!.description).toMatch(/append/i);
+  });
 });
 
 describe("McpServer", () => {

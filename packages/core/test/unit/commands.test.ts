@@ -9,15 +9,23 @@ import { holdDevice, resumeDevice } from "../../src/governance/hold.js";
 import { readLease } from "../../src/governance/lease.js";
 import type { UiNode } from "../../src/transport/model.js";
 
-const page = (text: string, field: { text: string }): UiNode => ({
+const page = (text: string, field: { text: string }, fieldId: string | null = "search_input"): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },
   children: [
     { attributes: { type: "Button", text, bounds: "[100,200][400,400]", clickable: "true" } },
-    { attributes: { type: "TextInput", text: field.text, bounds: "[100,700][900,800]", focused: "true" } },
+    {
+      attributes: {
+        type: "TextInput",
+        ...(fieldId === null ? {} : { id: fieldId }),
+        text: field.text,
+        bounds: "[100,700][900,800]",
+        focused: "true",
+      },
+    },
   ],
 });
 
-function fakeDevice() {
+function fakeDevice(fieldId: string | null = "search_input") {
   let index = 0;
   const calls: { api: string; args: unknown[] }[] = [];
   /** Every hdc shell command, in order: `launch` reaches the device this way. */
@@ -26,7 +34,7 @@ function fakeDevice() {
   const field = { text: "q" };
   // Built per read, not once: the field's value changes as the test types.
   const pageAt = (i: number): UiNode =>
-    i === 0 ? page("WLAN", field) : page("WLAN detail", field);
+    i === 0 ? page("WLAN", field, fieldId) : page("WLAN detail", field, fieldId);
   return {
     calls,
     shells,
@@ -128,9 +136,10 @@ function textModes(fake: ReturnType<typeof fakeDevice>): unknown[] {
 async function withRunner<T>(
   fn: (runner: CommandRunner, dir: string, fake: ReturnType<typeof fakeDevice>) => Promise<T>,
   opts: Record<string, unknown> = {},
+  fieldId: string | null = "search_input",
 ): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-cmd-"));
-  const fake = fakeDevice();
+  const fake = fakeDevice(fieldId);
   const session = await Session.open(fake.device, {
     // The same `<state-dir>/leases` the hold commands write, so the test can
     // take the device away from a live session the way a person does.
@@ -369,6 +378,45 @@ describe("CommandRunner", () => {
     await withRunner(async (runner, _dir, fake) => {
       expect((await runner.run("type", { text: "hello", paste: true })).status).toBe("settled");
       expect(textModes(fake)).toEqual([{ paste: true }]);
+    });
+  });
+
+  // `type` appends. A search box that already holds the previous query ends up
+  // with both, the read-back correctly says `uncertain`, and the agent's only
+  // recourse was one backspace per character -- on a search box that re-runs
+  // the query on every press. meituan-05 spent 21 taps and 3 backspaces on one
+  // field, then timed out at 485 s. `--clear` empties the field through the
+  // device's own `Component.clearText` first.
+  it("clears the field before typing when --clear is set", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      expect((await runner.run("type", { text: "hello", clear: true })).status).toBe("settled");
+      const order = fake.calls
+        .map((c) => c.api)
+        .filter((a) => a === "Component.clearText" || a === "inputText");
+      expect(order).toEqual(["Component.clearText", "inputText"]);
+      // The clear targets the field by its resource id, not by a coordinate:
+      // the id is the one attribute that survives the value change.
+      const byId = fake.calls.find((c) => c.api === "On.id");
+      expect(byId?.args).toEqual(["search_input", 0]);
+    });
+  });
+
+  it("reports not_found rather than guessing when the field has no id", async () => {
+    await withRunner(
+      async (runner, _dir, fake) => {
+        const result = await runner.run("type", { text: "hello", clear: true });
+        expect(result.status).toBe("not_found");
+        expect(fake.calls.filter((c) => c.api === "Component.clearText")).toHaveLength(0);
+      },
+      {},
+      null,
+    );
+  });
+
+  it("does not clear the field when --clear is absent", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      expect((await runner.run("type", { text: "hello" })).status).toBe("settled");
+      expect(fake.calls.filter((c) => c.api === "Component.clearText")).toHaveLength(0);
     });
   });
 

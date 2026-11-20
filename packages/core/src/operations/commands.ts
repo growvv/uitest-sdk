@@ -58,6 +58,11 @@ export const COMMANDS: CommandSpec[] = [
       text: { type: "string", description: "Text to type.", required: true },
       ref: { type: "number", description: "Input element ref; defaults to the focused field." },
       paste: { type: "boolean", description: "Paste in one go instead of typing each character." },
+      clear: {
+        type: "boolean",
+        description:
+          "Empty the field first. Without this, typing appends to what the field already holds — a search box keeps its previous query, so search twice and you get both words.",
+      },
       approvalId: { type: "string", description: "Approval id for this exact step." },
       approvalScope: { type: "string", description: "With approvalId: once (default), task, or always." },
     },
@@ -373,6 +378,7 @@ export class CommandRunner {
           approvalScope: asScope(raw.approvalScope),
           ref: asNumber(raw.ref),
           paste: raw.paste === true || raw.paste === "true",
+          clear: raw.clear === true || raw.clear === "true",
         });
         return this.result(r, `typed ${String(raw.text).length} characters`);
       }

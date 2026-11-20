@@ -120,6 +120,7 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Type into the focused field | `type --text "hello"` |
 | Type into a field | `type --ref 7 --text "hello"` |
 | Type where per-key input mangles it | `type --ref 7 --text "10086" --paste` |
+| Replace what a field already holds | `type --ref 7 --text "汉堡" --clear` |
 | Scroll a list | `swipe --direction up --ref 20` |
 | Swipe by points | `swipe --from 600,1800 --to 600,600` |
 | System key | `key --key back` (also `home`, `power`, `enter`) |
@@ -158,6 +159,11 @@ that owns the UI.
 
 - Prefer `--ref` or `--text`; use `--x/--y` only when the element has no label,
   and take the numbers from the screen output.
+- `type` appends. A search box keeps its previous query, so typing a second
+  search into one leaves both words and the read-back says `uncertain`. Pass
+  `--clear` to empty the field first, in one device call — do not delete it
+  character by character, because a search box re-runs its query on every
+  backspace.
 - `launch` returns whatever page the app resumes on. Settings may reopen a
   previous subpage; press `back` until the expected page is on screen, or use
   `wait-for`.
