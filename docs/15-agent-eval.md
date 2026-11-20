@@ -52,6 +52,14 @@
 进程，那时加载的代码就是它整条用的代码。jd-07 就是一个例子——12:02 开始、12:10 结束，
 看起来在 E 段，实际用的全是 D 段代码。
 
+**19:46–20:07 还出过一次设备休眠事故。** 手机在 10 分钟无输入后休眠（`hidumper -s
+PowerManagerService -a -s` 显示 `Current State: SLEEP`），之后 captureLayout 返回空，
+jd-12、pdd-12 报 `Transport closed`，meituan-12 报「控制通道持续中断」。`power-shell wakeup`
+加 `power-shell timeout -o 3600000` 后恢复。这四条（含 tmall-12）作废，收批后重跑。
+产品侧记一条待修：**MCP 会话没有持有屏幕常亮**；屏幕一睡，抓屏为空、传输关闭，进程内不能
+自愈。修法候选是会话建立时用 core 已有的 `keepAwake()`，以及在 `ScreenReader.read()` 拿到
+空树时先唤醒再重试一次。跑批期间靠宿主机看门狗每 5 分钟重设 override 兜底。
+
 **16:30 之后还叠了一层环境降速，I 段内也要再分。** 用 MCP 进程的 trace
 （`.uitest-phone/traces/*.jsonl`，每条调用都带 `at`）量相邻调用的间隔：05:36–08:19Z
 中位 11–16 s，08:35Z 之后升到 22–30 s（最大 125 s），而这一段的任务恰好多为 14–22 次调用，
