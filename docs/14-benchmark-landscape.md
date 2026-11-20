@@ -121,7 +121,7 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
 评测口径的教训：只比「答案里有没有句号/温度字」这类结构判据会把成功率抬高。规模版把判据分成
 内容、设备、结构三档，结构判据单独统计。
 
-## 1000 条跑批：前 20 条暴露的两个问题（2026-11-20）
+## 1000 条跑批：前 65 条暴露的问题（2026-11-20）
 
 - **`launch --app 天气` 失败：短名只匹配 bundle id，不匹配桌面上的名字。** 中文写的任务
   用桌面的名字称呼应用（「天气」「微博」「备忘录」），这些字在 bundle id 里一个都没有。
@@ -133,13 +133,31 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
 - **桌面图标的标签是 bundle 转储，不是应用名。** 同一个首页上 38 个 `AppIcon` 节点里 19 个
   渲染成 `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`
   这类字符串；`备忘录` 的图标没有可读名字，agent 于是点到了旁边的「笔记」。
-  notepad-01 因此失败：它在 hinote 里新建了笔记，判据去 notepad 里找，找不到——agent
-  自述「已新建并保存」，这正是判据要防的那种自信。**notepad-02 在 `launch` 修好之后仍然失败**，
-  原因相同：agent 没试 `launch --app 备忘录`，而是照着首页点图标，而图标上看不出这是哪个应用。
-  所以这条不只是「agent 选错了路径」——首页的屏幕模型本身没把应用名给出来。
-  **待办**（没在本轮修，因为改屏幕输出会让 1000 条跑批分成两种屏幕格式）：
-  `ScreenBuilder` 接一张 `bundle → 桌面名` 的表（`bm dump -a -l` 就有），把含 bundle 名的
-  图标标签换成应用名；修好后用 `--redo` 重跑 notepad 的 50 条，单独报一个数。
+  **2026-11-20 复核：这条诊断不成立，作废。** 三条 notepad 失败都发生在 08:22/08:24
+  重建 `dist/` 之前，跑的是旧代码；notepad-01 读到的 SKILL.md 是 07:04 之前的那一版
+  （日志里 14249 字节，没有「on-screen name」那一行）。也就是说，它们根本没有走到
+  `launch --app 备忘录` 这条新路径——`resolveBundle("备忘录")` 现在直接返回
+  `com.huawei.hmos.notepad`，`entryAbility` 返回 `MainAbility`，两者都对。
+  真正的问题在别处：**这三条里 agent 一次都没调用 `launch`**（notepad-01/03 全程
+  只是 `tap` + `observe`，notepad-02 最后才 `launch --app com.huawei.hmos.hinote`），
+  它从桌面上找图标，而桌面上没有「备忘录」——`bm dump -a -l` 说 notepad 的 label
+  就是「备忘录」，它也声明了 `action.system.home`，但它的图标不在第一页。
+  agent 在首页看到的是 dock 里的 `hinote`，于是打开了「笔记」。
+  所以这不是「标签渲染坏了」，是**首页上没有这个图标**，agent 也没试 `launch`。
+  待办仍然是让 agent 优先用 `launch --app <名字>`（skill 已写），并考虑在
+  `observe` 的首页输出里附一行「这些应用不在桌面上，用 launch 打开」。
+- **`launch --app 图库` 打开的是投屏页，不是图库。** `entryAbility` 依次试
+  `mainAbility`、它的最后一段、任意 PAGE ability。图库声明的是裸词 `MainAbility`，
+  真正能被桌面图标启动的是全限定的 `com.huawei.hmos.photos.MainAbility`，而且排在
+  `CastAbility`、`GalleryCleanupAbility` 之后——第三条规则于是选中 `CastAbility`。
+  **已修：** 优先选声明了 `action.system.home` 的 ability，它才是桌面图标启动的那个。
+  20 个应用的 bundle 全部扫过：每个都落到自己的 launcher ability，原来对的没变。
+- **`launch --app 电话` 报 10103001，这不是我们能修的。** `com.ohos.callui` 的 label
+  是「电话」，但它五个 PAGE ability 没有一个声明 `action.system.home`，也都不 exported；
+  `aa start -b com.ohos.callui` 不带 `-a` 报 10103101。拨号盘实际是
+  `com.ohos.contacts` 里的一个页面（contacts-03 最后就是点屏幕上的拨号键完成的，
+  任务仍然通过）。**记录，不改：** 这是系统应用的导出配置，工具侧只能照实报错。
+  skill 里可以补一句「电话走 `com.ohos.contacts`」。
 - **skill 把无标签控件指到了错的命令。** SKILL.md 说「拿 `screenshot`，看图上的 ref 编号」，
   但画编号的是 `inspect`，`screenshot` 只存原图。agent 照做会去找根本不存在的数字。
   **已修：** 两处文档改成 `inspect`，`check-skill` 增加一条检查——文档里出现

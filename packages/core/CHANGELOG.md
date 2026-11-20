@@ -19,6 +19,12 @@
 - **skill 把无标签控件指到了 `inspect`。** 原来写的是「拿 `screenshot`，看图上的 ref 编号」，
   但画编号的是 `inspect`；`screenshot` 只存原图。`check-skill` 增加一条检查，文档里再出现
   「screenshot 上的 ref 编号」就会报错。
+- **`launch --app 图库` 打开的是投屏页，不是图库。** 选入口 ability 时依次试
+  `mainAbility`、它的最后一段、任意 PAGE ability。图库声明的是裸词 `MainAbility`，
+  真正由桌面图标启动的是全限定的 `com.huawei.hmos.photos.MainAbility`，而且排在
+  `CastAbility`、`GalleryCleanupAbility` 之后，于是第三条规则选中了投屏页。现在优先选
+  声明了 `action.system.home` 的 ability——它就是桌面图标启动的那个。20 个应用的
+  bundle 全部扫过，每个都落到自己的 launcher ability，原来对的没变。
 
 ## [0.11.2] — 2026-11-20
 

@@ -149,6 +149,13 @@ Launch aliases: `settings`, `launcher`/`home`, `camera`, `photos`/`gallery`,
 installed bundles; a bundle id is used directly. `--ability NAME` overrides the
 declared entry ability.
 
+Not every launcher icon has a launchable bundle behind it. The dialer is the
+one that bites: `电话` resolves to `com.ohos.callui`, whose page abilities are
+none of them exported, so `aa start` refuses with `10103001`. Open the dialer
+through `launch --app com.ohos.contacts` instead. A `launch` that fails this
+way is not a wrong name — tap the icon on the home screen, or use the bundle
+that owns the UI.
+
 - Prefer `--ref` or `--text`; use `--x/--y` only when the element has no label,
   and take the numbers from the screen output.
 - `launch` returns whatever page the app resumes on. Settings may reopen a

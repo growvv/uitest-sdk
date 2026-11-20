@@ -58,4 +58,16 @@ describe("skill command index", () => {
 
     expect(checkSkill(dir)).toContain("SKILL.md: screenshot does not draw ref numbers; use inspect");
   });
+
+  // The dialer's bundle (`com.ohos.callui`, label 电话) declares five page
+  // abilities and not one is exported, so `aa start` refuses every one of them
+  // with 10103001. An agent that reads "Open an app by its on-screen name" and
+  // tries 电话 burns a call on a launch that cannot succeed on any device. The
+  // skill has to say where the dialer actually lives.
+  it("names the bundle that opens the dialer", () => {
+    const dir = copySkill();
+    const text = readFileSync(join(dir, "SKILL.md"), "utf8");
+
+    expect(text).toContain("com.ohos.contacts");
+  });
 });
