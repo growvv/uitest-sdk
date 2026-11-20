@@ -52,13 +52,20 @@
 进程，那时加载的代码就是它整条用的代码。jd-07 就是一个例子——12:02 开始、12:10 结束，
 看起来在 E 段，实际用的全是 D 段代码。
 
-**19:46–20:07 还出过一次设备休眠事故。** 手机在 10 分钟无输入后休眠（`hidumper -s
-PowerManagerService -a -s` 显示 `Current State: SLEEP`），之后 captureLayout 返回空，
-jd-12、pdd-12 报 `Transport closed`，meituan-12 报「控制通道持续中断」。`power-shell wakeup`
-加 `power-shell timeout -o 3600000` 后恢复。这四条（含 tmall-12）作废，收批后重跑。
-产品侧记一条待修：**MCP 会话没有持有屏幕常亮**；屏幕一睡，抓屏为空、传输关闭，进程内不能
-自愈。修法候选是会话建立时用 core 已有的 `keepAwake()`，以及在 `ScreenReader.read()` 拿到
-空树时先唤醒再重试一次。跑批期间靠宿主机看门狗每 5 分钟重设 override 兜底。
+**19:46–20:14 这一段是两件事叠在一起。** 先是设备休眠：手机 10 分钟无输入后
+（`hidumper -s PowerManagerService -a -s` 显示 `Current State: SLEEP`）抓屏变空、daemon
+不再监听，tmall-12 的控制通道断了。`power-shell wakeup` 加 `power-shell timeout -o 3600000`
+把屏幕恢复后，真正的持续阻断才露出来：tmall-12 在系统弹窗上调用过 `uitest_handoff`，在跑批的
+state dir 里留下一条 `held by a person` 的租约（`hold:true`）。**此后每个 MCP 会话都拒绝操作
+设备，agent 把它报成「传输关闭/通道不可用」——jd-12、pdd-12、meituan-12、amap-12、
+notepad-12 的 blocked 全部由此而来，不是代码、也不是模型。**
+`uitest-phone resume --state-dir .work-bench/eval-scale/.uitest-phone` 释放后恢复。
+这六条作废，收批后重跑。
+
+两条产品侧结论：一是 **MCP 会话没有持有屏幕常亮**，屏幕一睡就抓屏为空、通道断开，进程内不能
+自愈（修法候选：会话建立时用 core 已有的 `keepAwake()`，以及 `ScreenReader.read()` 拿到空树时
+先唤醒重试）；二是 **跑批脚本遇到 hold 租约应立即停下并报告**，而不是让后续任务继续空跑——
+这次连空跑了 5 条才发现。
 
 **16:30 之后还叠了一层环境降速，I 段内也要再分。** 用 MCP 进程的 trace
 （`.uitest-phone/traces/*.jsonl`，每条调用都带 `at`）量相邻调用的间隔：05:36–08:19Z
@@ -253,6 +260,7 @@ npx tsx .work-bench/eval-scale/report.ts
 | files-05 | agent 在页面上找一个不存在的字段；看新版会不会更快放弃 |
 | weather-08、books-08、contacts-08、mms-08 | 加诊断时把 codex 的 MCP 配置写坏，四条 0 次调用空跑；与 agent、工具都无关，必须重跑 |
 | dianping-05 | 页面 settle 超时 + 路线绕远，不含已修的缺陷，重跑确认是否稳定复现 |
+| tmall-12、jd-12、pdd-12、meituan-12、amap-12、notepad-12 | tmall-12 的 handoff 留下 `held by a person` 租约，后续五条全部被挡；释放后重跑（tmall-12 本身也因系统弹窗与休眠作废） |
 
 clock-05 不用重跑：它答对了，是判分器判错（已修），在报告里按通过计。
 
