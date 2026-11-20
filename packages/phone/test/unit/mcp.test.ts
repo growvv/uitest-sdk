@@ -67,6 +67,17 @@ describe("toolDefinitions", () => {
     expect(handoff.inputSchema.required).toEqual(["reason"]);
     expect(handoff.description).toMatch(/person/i);
   });
+
+  // The tool description is the only guidance an agent gets when it does not
+  // open SKILL.md -- and in the 1000-task batch, 43 of 78 tasks never did. Four
+  // notepad tasks failed because the agent tapped a home-screen icon whose
+  // label is a bundle dump instead of calling `launch --app 备忘录`, which
+  // resolves the name correctly. The description has to say so.
+  it("tells the agent to launch by the on-screen name", () => {
+    const launch = toolDefinitions().find((t) => t.name === "uitest_launch")!;
+    expect(launch.description).toMatch(/on-screen name/i);
+    expect(launch.inputSchema.properties.app!.description).toMatch(/on-screen name/i);
+  });
 });
 
 describe("McpServer", () => {

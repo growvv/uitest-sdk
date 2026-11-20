@@ -130,22 +130,22 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
   桌面名匹配；一个名字对应多个 bundle 时报错并列出全部候选。
   这台机器上正好有一对：`备忘录` 是 `com.huawei.hmos.notepad`，`笔记` 是
   `com.huawei.hmos.hinote`——两个都装了、都是笔记应用，按名字才分得开。
-- **桌面图标的标签是 bundle 转储，不是应用名。** 同一个首页上 38 个 `AppIcon` 节点里 19 个
-  渲染成 `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`
-  这类字符串；`备忘录` 的图标没有可读名字，agent 于是点到了旁边的「笔记」。
-  **2026-11-20 复核：这条诊断不成立，作废。** 三条 notepad 失败都发生在 08:22/08:24
-  重建 `dist/` 之前，跑的是旧代码；notepad-01 读到的 SKILL.md 是 07:04 之前的那一版
-  （日志里 14249 字节，没有「on-screen name」那一行）。也就是说，它们根本没有走到
-  `launch --app 备忘录` 这条新路径——`resolveBundle("备忘录")` 现在直接返回
-  `com.huawei.hmos.notepad`，`entryAbility` 返回 `MainAbility`，两者都对。
-  真正的问题在别处：**这三条里 agent 一次都没调用 `launch`**（notepad-01/03 全程
-  只是 `tap` + `observe`，notepad-02 最后才 `launch --app com.huawei.hmos.hinote`），
-  它从桌面上找图标，而桌面上没有「备忘录」——`bm dump -a -l` 说 notepad 的 label
-  就是「备忘录」，它也声明了 `action.system.home`，但它的图标不在第一页。
-  agent 在首页看到的是 dock 里的 `hinote`，于是打开了「笔记」。
-  所以这不是「标签渲染坏了」，是**首页上没有这个图标**，agent 也没试 `launch`。
-  待办仍然是让 agent 优先用 `launch --app <名字>`（skill 已写），并考虑在
-  `observe` 的首页输出里附一行「这些应用不在桌面上，用 launch 打开」。
+- **桌面图标的标签是 bundle 转储，不是应用名——这条成立，我一度判错。** 同一个首页上
+  38 个 `AppIcon` 节点里 19 个渲染成
+  `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`
+  这类字符串。`备忘录` 的图标在首页上不存在（label 对、也声明了 `action.system.home`，
+  就是不在第一页），dock 里能点的是 `hinote`，标签也是上面那串 bundle 转储。
+  **过程记录：** 我先看到 notepad-01/02/03 都跑在 08:22/08:24 重建 `dist/` 之前，
+  就写下「这条诊断不成立、作废」。**这个判断是错的**——notepad-04 在 09:03 结束，
+  跑的是新二进制，仍然失败，而且失败方式一模一样：6 次 `tap`、0 次 `launch`，
+  点到 `[16780] button "AppIcon Image com.huawei.hmos.hinote…"`，打开的是「笔记」。
+  真因是**agent 根本没读 skill**：78 条任务里只有 35 条读了 SKILL.md（45%），
+  notepad-04 没读，于是它只看到 MCP 工具描述，而 `launch` 当时的描述只有一句
+  「Start an app by name or bundle id.」——没告诉它「可以用桌面上的名字」。
+  **已修：** `launch` 的工具描述改成「按屏幕上的名字或 bundle id 启动；优先用它，
+  不要点桌面图标——图标标签可能是 bundle 转储」。这是 55% 不读 skill 的 agent
+  唯一看得到的指引。skill 里的说明保留，两条路径都覆盖。
+  跑批的分界点：**09:07 之后的条目**用的是新描述，之前的是旧描述，报告里要分开看。
 - **`launch --app 图库` 打开的是投屏页，不是图库。** `entryAbility` 依次试
   `mainAbility`、它的最后一段、任意 PAGE ability。图库声明的是裸词 `MainAbility`，
   真正能被桌面图标启动的是全限定的 `com.huawei.hmos.photos.MainAbility`，而且排在
@@ -189,5 +189,6 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
    拖动腿要求可滚动的列表，所以用的是「设置」而不是「计算器」。
 3. 挑 Mobile-Bench 或 AndroidWorld 的一个子集，写 HarmonyOS 适配层，报成功率。**未做**
 4. 不要拿 scrcpy README 的 35–70 ms 当基准比：那是非正式宣称，且 scrcpy 帧率随内容变化，不可比。**已记录**
-5. ~~notepad 的 50 条修好后 `--redo` 单独报一个数~~ —— **作废**：notepad 失败与桌面标签无关，
-   是那三条跑在修好之前的二进制上。跑批走完即可，不需要单独重跑。
+5. ~~notepad 的 50 条修好后 `--redo` 单独报一个数~~ —— **改成**：等跑批走完，用
+   `--redo` 重跑 notepad 全部 50 条，对比「agent 读 skill 的比例」与「用 launch 的比例」。
+   09:07 前 notepad 的 4 条全失败，都是同一个原因（没读 skill、点 dock 图标）。

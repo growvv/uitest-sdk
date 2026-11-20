@@ -25,6 +25,11 @@
   `CastAbility`、`GalleryCleanupAbility` 之后，于是第三条规则选中了投屏页。现在优先选
   声明了 `action.system.home` 的 ability——它就是桌面图标启动的那个。20 个应用的
   bundle 全部扫过，每个都落到自己的 launcher ability，原来对的没变。
+- **`launch` 的工具描述说清了怎么用。** 原来只有一句「Start an app by name or bundle id.」，
+  没提桌面上的名字。1000 条跑批里 78 条任务只有 35 条读了 skill（45%），其余只看到
+  MCP 工具描述——四条 notepad 任务因此去点 dock 里那个标签是 bundle 转储的图标，
+  打开的是「笔记」而不是「备忘录」。现在描述写明「按屏幕上的名字启动，优先用它，
+  不要点桌面图标」。
 
 ## [0.11.2] — 2026-11-20
 

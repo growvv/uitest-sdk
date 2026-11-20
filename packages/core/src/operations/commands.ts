@@ -156,9 +156,14 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "launch",
-    description: "Start an app by name or bundle id.",
+    description:
+      "Start an app by its on-screen name (天气, 备忘录) or bundle id. Prefer this over tapping a home-screen icon: the icon's label can be an unreadable bundle dump, and a name here is resolved against the launcher's own list.",
     args: {
-      app: { type: "string", description: "App name or bundle id.", required: true },
+      app: {
+        type: "string",
+        description: "App name as the launcher shows it (the on-screen name), or a bundle id.",
+        required: true,
+      },
       ability: { type: "string", description: "Ability name, when the resolved entry is not the one you want." },
     },
   },
