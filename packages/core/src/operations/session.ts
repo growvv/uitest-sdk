@@ -610,24 +610,38 @@ ${screen.header}`,
     // character, on a box that re-runs the query after every press. meituan-05
     // spent 21 taps and 3 backspaces on one field and then timed out.
     // `Component.clearText` is the device's own clear: one call, any length.
-    const handle = opts.clear ? await this.componentOf(field) : null;
-    if (handle) {
-      await handle.clearText();
-      // Type through the same handle. Clearing can drop the field's focus, and
-      // a coordinate `Driver.inputText` then types into the page instead: the
-      // read-back finds the cleared field empty, which is how "the text went
-      // nowhere" looks. books-05 and settings-05 both hit it. The handle names
-      // the field itself, so it needs neither focus nor a fresh position.
-      await handle.inputText(text, opts.paste ? { paste: true } : undefined);
-    } else {
-      // A field with no resource id cannot be addressed through a handle; it
-      // still gets the text, and the read-back says what the field now holds.
-      await this.device.agent.inputText(
-        field.center.x,
-        field.center.y,
-        text,
-        opts.paste ? { paste: true } : undefined,
-      );
+    const mode = opts.paste ? { paste: true } : undefined;
+    // Every device call here can lose the widget between the lookup and the
+    // call: meituan's search box carries a dynamic id (1795148153645), rebuilt
+    // on the next layout pass, and `Component.clearText` then answers "does not
+    // exist on current UI!(NoCandidates)" — which arrived as a thrown error
+    // that failed the whole call. A lost widget means the clear did not happen;
+    // the text still has to be typed, and the read-back below says what the
+    // field holds. So this path is best-effort, never a reason to fail.
+    let typedThroughHandle = false;
+    if (opts.clear) {
+      try {
+        const handle = await this.componentOf(field);
+        if (handle) {
+          await handle.clearText();
+          // Type through the same handle. Clearing can drop the field's focus,
+          // and a coordinate `Driver.inputText` then types into the page
+          // instead: the read-back finds the cleared field empty, which is how
+          // "the text went nowhere" looks. books-05 and settings-05 both hit
+          // it. The handle names the field itself, so it needs neither focus
+          // nor a fresh position.
+          await handle.inputText(text, mode);
+          typedThroughHandle = true;
+        }
+      } catch {
+        // Fall through: the field may still hold its old text, and the
+        // read-back reports exactly that.
+      }
+    }
+    if (!typedThroughHandle) {
+      // The coordinate path, and what a field with no id (or a lost widget)
+      // gets: the text, with the field's own value read back afterwards.
+      await this.device.agent.inputText(field.center.x, field.center.y, text, mode);
     }
     // Per-key input is not reliable on every app: the dialer on the test phone
     // turns "10086" into "1086" because each digit lands in its own formatting

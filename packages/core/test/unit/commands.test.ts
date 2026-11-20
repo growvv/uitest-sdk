@@ -49,6 +49,9 @@ function fakeDevice(fieldId: string | null = "search_input") {
   let hideField = 0;
   /** The same for the button, when the ref that goes missing is not a field. */
   let hideButton = 0;
+  /** Device calls that fail once, the way a stale component handle does. */
+  let failClear = false;
+  let failComponentInput = false;
   // Built per read, not once: the field's value changes as the test types.
   const pageAt = (i: number): UiNode =>
     i === 0 ? page("WLAN", field, fieldId) : page("WLAN detail", field, fieldId);
@@ -62,6 +65,12 @@ function fakeDevice(fieldId: string | null = "search_input") {
     hideButtonFor(n: number) {
       hideButton = n;
     },
+    failNextClear() {
+      failClear = true;
+    },
+    failNextComponentInput() {
+      failComponentInput = true;
+    },
     device: {
       deviceId: "SERIAL",
       agent: {
@@ -72,7 +81,19 @@ function fakeDevice(fieldId: string | null = "search_input") {
           if (api === "Driver.findComponent") return "Component#0";
           if (api === "Driver.waitForComponent") return "Component#0";
           if (api === "PointerMatrix.create") return "PointerMatrix#0";
-          if (api === "Component.inputText") field.text = String(args[0] ?? "");
+          if (api === "Component.clearText" && failClear) {
+            failClear = false;
+            throw new Error(
+              "Widget: {selfMatcher=[{attrName:visible; value:true}, {attrName:id; value:1795148153645}]} does not exist on current UI!(NoCandidates)",
+            );
+          }
+          if (api === "Component.inputText") {
+            if (failComponentInput) {
+              failComponentInput = false;
+              throw new Error("Widget: does not exist on current UI!(NoCandidates)");
+            }
+            field.text = String(args[0] ?? "");
+          }
           if (api === "Driver.findWindow") {
             // Only a window for com.demo exists; anything else is not_found.
             return (args[0] as { bundleName?: string } | undefined)?.bundleName === "com.gone"
@@ -456,6 +477,28 @@ describe("CommandRunner", () => {
       // the id is the one attribute that survives the value change.
       const byId = fake.calls.find((c) => c.api === "On.id");
       expect(byId?.args).toEqual(["search_input", 0]);
+    });
+  });
+
+  // meituan's search box carries a dynamic id (`1795148153645`): by the time
+  // `Component.clearText` runs, the widget behind the handle has been rebuilt
+  // and the device answers "does not exist on current UI!(NoCandidates)". That
+  // arrived as a thrown JSON-RPC error, so the whole call failed with nothing
+  // the agent could act on. A lost widget means the clear did not happen; the
+  // text still has to be typed, and the read-back says what the field holds.
+  it("types anyway when the device loses the field between find and clear", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      fake.failNextClear();
+      expect((await runner.run("type", { text: "hello", clear: true })).status).toBe("settled");
+      expect(textModes(fake)).toEqual([undefined]);
+    });
+  });
+
+  it("falls back to a coordinate when the handle cannot take the text", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      fake.failNextComponentInput();
+      expect((await runner.run("type", { text: "hello", clear: true })).status).toBe("settled");
+      expect(textModes(fake)).toEqual([undefined]);
     });
   });
 

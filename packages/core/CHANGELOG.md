@@ -18,6 +18,11 @@
 
 ### 修复
 
+- **`type --clear` 在设备丢掉控件时照样输入。** 美团的搜索框用的是动态 id
+  （`1795148153645`），下一次布局就重建：`Component.clearText` 拿到的是上一帧的控件，
+  设备回 `does not exist on current UI!(NoCandidates)`。它是作为异常抛出来的，整条
+  MCP 调用失败，agent 只看到 `-32603`，没有任何可操作的信息。清空本来就是尽力而为——
+  控件没了就按坐标输入，回读照旧报出框里现在是什么。
 - **`type --clear` 清空之后改用同一个句柄输入。** 设备清空输入框会丢掉焦点，接着按坐标的
   `Driver.inputText` 就输到了页面上——回读看到的是一个空的输入框，正是「字哪儿也没去」的
   样子。books-05、settings-05 都是这样。现在清空和输入都走 `Component.clearText` /
