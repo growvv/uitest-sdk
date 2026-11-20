@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
@@ -365,6 +366,26 @@ describe("CommandRunner", () => {
   it("rejects a tap with no target", async () => {
     await withRunner(async (runner) => {
       await expect(runner.run("tap", {})).rejects.toThrow(/ref|text|selector/);
+    });
+  });
+
+  it("reports the file it wrote when observe is given --out", async () => {
+    // The MCP layer attaches an image by looking for `data.path`. `observe
+    // --out` wrote the JPEG and reported it only under `shot`, so the agent
+    // got a path back and never the pixels -- exactly what it needs for a
+    // control whose node has no text at all, like the dialer's twelve keys.
+    await withRunner(async (runner, dir) => {
+      const out = join(dir, "obs.jpg");
+      const result = await runner.run("observe", { out });
+      expect(result.data?.path).toBe(out);
+      expect(readFileSync(out).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("has no path when observe was not asked for a picture", async () => {
+    await withRunner(async (runner) => {
+      const result = await runner.run("observe", {});
+      expect(result.data?.path).toBeUndefined();
     });
   });
 

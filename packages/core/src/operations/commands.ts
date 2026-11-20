@@ -33,7 +33,11 @@ export const COMMANDS: CommandSpec[] = [
     name: "observe",
     description: "Read what is on screen: one line per element with a ref, role, label and position.",
     args: {
-      out: { type: "string", description: "Save a JPEG screenshot to this path." },
+      out: {
+        type: "string",
+        description:
+          "Also save a JPEG of this screen, returned to you as an image. Use it when a control has no readable text.",
+      },
       waitMs: { type: "number", description: "Wait up to this long for the screen to change first." },
     },
   },
@@ -551,6 +555,9 @@ export class CommandRunner {
         firstRef: screen?.elements[0]?.ref,
         hash: screen?.hash,
         shot: out ?? null,
+        // The written file, under the key every image-returning command uses:
+        // a caller that asked for the picture gets the picture, not a path.
+        ...(out ? { path: r.shot ?? null } : {}),
       },
     };
   }

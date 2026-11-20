@@ -52,9 +52,11 @@ describe("skill command index", () => {
     // The sentence this release removed, verbatim.
     const old =
       "`screenshot` returns the pixels, so look at the image, match the symbol to the ref number drawn on it, then tap that ref.";
-    const at = text.indexOf("`inspect` boxes every");
+    const at = text.indexOf("`observe --out shot.jpg`");
     expect(at).toBeGreaterThan(-1);
-    writeFileSync(path, text.slice(0, at) + old + text.slice(text.indexOf(".", at) + 1));
+    // Inserted, not sliced: the anchor contains a dot in "shot.jpg", and
+    // cutting at the next "." would land inside the file name.
+    writeFileSync(path, text.slice(0, at) + old + " " + text.slice(at));
 
     expect(checkSkill(dir)).toContain("SKILL.md: screenshot does not draw ref numbers; use inspect");
   });

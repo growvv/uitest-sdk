@@ -201,8 +201,34 @@ describe("McpServer", () => {
     expect(Buffer.from(image.data, "base64")).toEqual(jpeg);
   });
 
-  it("returns an inspect panel as an image block too", async () => {
-    // `inspect` boxes and numbers every element on the frame; the agent reads
+  // `observe --out` writes a JPEG of the same screen it just described. The
+  // dialer keypad is why it matters: its twelve keys carry no text, no
+  // description and no id, so the layout text says only "button @960,1690".
+  // contacts-05 asked for a picture ten times that way and never got one --
+  // `observe` was not in the image list -- then spent 36 calls and 412 s
+  // pressing keys until it guessed the mapping. The file is already written;
+  // it just has to travel with the result.
+  it("returns the picture `observe --out` wrote", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "uitest-mcp-"));
+    const file = join(dir, "observe.jpg");
+    writeFileSync(file, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const server = new McpServer({
+      async run() {
+        return {
+          status: "settled" as const,
+          code: 0,
+          text: `screen 1600x2560\nsaved: ${file}`,
+          data: { path: file },
+        };
+      },
+    });
+    const reply = JSON.parse(
+      (await server.handle(req("tools/call", { name: "uitest_observe", arguments: { out: "observe.jpg" } })))!,
+    );
+    expect(reply.result.content.some((c: { type: string }) => c.type === "image")).toBe(true);
+  });
+
+  it("returns an inspect panel as an image block too", async () => {    // `inspect` boxes and numbers every element on the frame; the agent reads
     // the numbers to pick a ref. It is the same kind of answer as a
     // screenshot, so it travels the same way.
     const dir = mkdtempSync(join(tmpdir(), "uitest-mcp-"));

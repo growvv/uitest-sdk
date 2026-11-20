@@ -178,8 +178,18 @@ function reply(id: JsonRpcId, result: unknown): string {
   return JSON.stringify({ jsonrpc: "2.0", id, result });
 }
 
-/** Tools whose result is a picture the model has to look at. */
-const IMAGE_COMMANDS = new Set(["screenshot", "inspect"]);
+/**
+ * Tools whose result is a picture the model has to look at.
+ *
+ * `observe --out` belongs here too: it writes the same frame it describes, and
+ * the frame is the only way to read a control that has no text at all. The
+ * dialer keypad is the case that proved it — twelve keys with no text, no
+ * description and no id, so the layout says only "button @960,1690".
+ * contacts-05 asked for a picture ten times through `observe --out` and got a
+ * path back, then spent 36 calls and 412 s pressing keys until it guessed the
+ * mapping.
+ */
+const IMAGE_COMMANDS = new Set(["screenshot", "inspect", "observe"]);
 
 /**
  * The picture a command saved, as an MCP image block.

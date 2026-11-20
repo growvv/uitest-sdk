@@ -16,6 +16,10 @@
 
 ### 修复
 
+- **`observe --out` 的图现在会随结果返回。** 它一直会写 JPEG，但 MCP 层只把 `screenshot`
+  和 `inspect` 的图像附上，所以 `observe --out` 的图从没到过模型手里。拨号盘十二个按键
+  没有任何文字（`accessibilityId` 只是节点序号），contacts-05 要了十次图都只拿到路径，
+  靠试按猜键位，36 次调用、412 秒。现在一次 `observe --out` 同时给文字和像素。
 - **`launch --app 天气` 能用了。** 短名会匹配桌面上的应用名，不再只匹配 bundle id。
   实测 1000 条跑批的前 24 次 `launch` 里 13 次因为中文名失败。
 - **skill 把无标签控件指到了 `inspect`。** 原来写「拿 `screenshot`，看图上的 ref 编号」，

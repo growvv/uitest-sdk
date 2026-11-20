@@ -83,14 +83,17 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 - The renderer omits the status bar, the bottom navigation bar, structural
   containers and unlabeled inert nodes. If the person asks about something not
   listed, take a `screenshot`.
-- **A control with no readable label needs `inspect`, not `screenshot`.** Some
-  apps draw a symbol instead of setting text: the calculator's `×` and `÷` are
-  nodes with neither text nor description, so the screen lists them as
-  `keyCode 14` and `keyCode 13` — their resource ids. Tapping by position and
-  hoping is how a task burns 80 calls and times out. `inspect` boxes every
-  element and draws its ref number on the image, so you can match the symbol
-  you see to the ref you tap. `screenshot` does not draw numbers — it is only
-  useful when the person asked what the screen looks like.
+- **A control with no readable label needs the picture.** Some apps draw a symbol
+  instead of setting text: the calculator's `×` and `÷` are nodes with neither
+  text nor description, so the screen lists them as `keyCode 14` and
+  `keyCode 13` — their resource ids. The dialer's twelve keys are worse: no
+  text, no description and no id at all, so all twelve read `button @960,1690`.
+  `observe --out shot.jpg` adds the pixels to the reading you already get, and
+  `inspect` draws every element's ref number on the image. Tapping by position
+  and hoping is how a task burns 36 calls and 400 seconds, or 80 calls and a
+  timeout. `screenshot` alone only saves a file when the person asked what the
+  screen looks like — prefer `observe --out`, which answers both questions at
+  once.
 - After an action the CLI prints a diff: `+` added, `-` removed, `~` changed;
   `no change` means nothing changed. It prints the full screen when the app,
   size or rotation changed, or when too much changed.
