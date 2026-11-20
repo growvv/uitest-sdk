@@ -60,6 +60,7 @@ function assertBundle(bundle: string): string {
 interface AbilityInfo {
   name?: string;
   type?: number;
+  skills?: { actions?: string[]; entities?: string[] }[];
 }
 
 interface ModuleInfo {
@@ -257,11 +258,30 @@ export class AppManager {
     const tail = main.includes(".") ? main.slice(main.lastIndexOf(".") + 1) : main;
     const byTail = abilities.find((a) => a.name === tail);
     if (byTail?.name) return byTail.name;
+    // `mainAbility` can name nothing at all: Gallery declares the bare word
+    // "MainAbility" while its launcher ability is the fully-qualified
+    // `com.huawei.hmos.photos.MainAbility`, declared after two other page
+    // abilities. Falling straight through to "any page ability" picked
+    // CastAbility and launched a casting screen instead of the gallery.
+    // The ability that declares action.system.home is the one the home-screen
+    // icon starts, which is exactly what `launch` means.
+    const home = abilities.find((a) =>
+      (a.skills ?? []).some((s) => (s?.actions ?? []).includes("action.system.home")),
+    );
+    if (home?.name) return home.name;
     const page = abilities.find((a) => a.type === 1);
     if (page?.name) return page.name;
     for (const module of modules) {
       const list = (module?.abilityInfos ?? []).filter((a) => a?.name);
-      if (list.length) return (list.find((a) => a.type === 1) ?? list[0])!.name!;
+      if (list.length) {
+        const pick =
+          list.find((a) =>
+            (a.skills ?? []).some((s) => (s?.actions ?? []).includes("action.system.home")),
+          ) ??
+          list.find((a) => a.type === 1) ??
+          list[0];
+        return pick!.name!;
+      }
     }
     return null;
   }

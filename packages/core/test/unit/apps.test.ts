@@ -37,6 +37,34 @@ const CALC_DUMP = `com.huawei.hmos.calculator:
   ]
 }`;
 
+/**
+ * Gallery, as the test phone declares it. `mainAbility` is the *short* name
+ * `MainAbility`, but no ability carries that name: the launcher one is the
+ * fully-qualified `com.huawei.hmos.photos.MainAbility`, and it is declared
+ * after two other page abilities.
+ */
+const PHOTOS_DUMP = `com.huawei.hmos.photos:
+{
+  "entryModuleName": "phone_photos",
+  "hapModuleInfos": [
+    {
+      "name": "phone_photos",
+      "mainAbility": "MainAbility",
+      "abilityInfos": [
+        { "name": "CastAbility", "type": 1, "skills": [] },
+        { "name": "GalleryCleanupAbility", "type": 1, "skills": [] },
+        {
+          "name": "com.huawei.hmos.photos.MainAbility",
+          "type": 1,
+          "skills": [
+            { "actions": ["action.system.home", "ohos.want.action.photoPicker"], "entities": ["entity.system.home"] }
+          ]
+        }
+      ]
+    }
+  ]
+}`;
+
 function fakeHdc(extra: Record<string, string> = {}) {
   const calls: string[] = [];
   return {
@@ -48,6 +76,7 @@ function fakeHdc(extra: Record<string, string> = {}) {
       if (command.startsWith("bm dump -n com.huawei.hmos.settings")) return SETTINGS_DUMP;
       if (command.startsWith("bm dump -n com.huawei.hmos.calculator")) return CALC_DUMP;
       if (command.startsWith("bm dump -n com.demo.calculator")) return CALC_DUMP;
+      if (command.startsWith("bm dump -n com.huawei.hmos.photos")) return PHOTOS_DUMP;
       if (command.startsWith("aa start")) return "start ability successfully.";
       if (command.startsWith("aa force-stop")) return "";
       if (command.startsWith("bm uninstall")) return "uninstall successfully.";
@@ -197,6 +226,18 @@ describe("AppManager", () => {
     expect(await apps.entryAbility("com.huawei.hmos.settings"))
       .toBe("com.huawei.hmos.settings.MainAbility");
     expect(await apps.entryAbility("com.huawei.hmos.calculator")).toBe("CalculatorAbility");
+  });
+
+  it("prefers the ability the launcher opens over any other page ability", async () => {
+    // Gallery's declared `mainAbility` is the bare word "MainAbility", which no
+    // ability carries; the entry module also declares CastAbility and
+    // GalleryCleanupAbility, both page abilities. Falling through to "any page
+    // ability" picked CastAbility, and `aa start` launched a casting screen
+    // instead of the gallery. The ability that declares action.system.home is
+    // the one the home-screen icon starts, which is what `launch` means.
+    const apps = new AppManager(fakeHdc());
+    expect(await apps.entryAbility("com.huawei.hmos.photos"))
+      .toBe("com.huawei.hmos.photos.MainAbility");
   });
 
   it("launches with the resolved bundle and ability", async () => {
