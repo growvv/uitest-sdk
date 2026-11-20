@@ -191,6 +191,12 @@ meituan-06 因此超时（484 s）：它读到「堂食店 无明厨亮灶 满28
   而且点开的是「笔记」。现在屏幕模型把这类 `AppIcon Image com.…` 转储替换成桌面上
   的名字（一次 `bm dump -a -l`，只在屏幕上有转储时取），agent 看到的直接是
   「笔记」「备忘录」，不用先知道该用 `launch`。`launch` 的别名逻辑保持不变。
+  **再补记（14:21 第三次才在设备上生效）：** 前两版判定都没命中——真实的桌面图标
+  节点没有 `text`/`description`，转储串在 `id` 上（`id_AppIcon_Image_…_undefined_1`，
+  经 `idLabel` 变成可读标签）。camera-08 的临时诊断日志抓到这一点；把 `id` 纳入判定后，
+  music-08 首次读桌面即 `loaded 286`，ref 表出现 `button|备忘录|`。全过程见 `docs/15`。
+  修好后 notepad-09 仍失败，但原因是 agent 在只有「笔记」图标的那一屏点了它——
+  工具侧已经正确。
 - **`launch --app 图库` 打开的是投屏页，不是图库。** `entryAbility` 依次试
   `mainAbility`、它的最后一段、任意 PAGE ability。图库声明的是裸词 `MainAbility`，
   真正能被桌面图标启动的是全限定的 `com.huawei.hmos.photos.MainAbility`，而且排在
