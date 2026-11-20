@@ -38,7 +38,22 @@ const page = (
   ],
 });
 
-function fakeDevice(fieldId: string | null = "search_input") {
+/** The launcher as the test phone renders it: an icon labelled by its bundle. */
+const homeTree = (): UiNode => ({
+  attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.ohos.sceneboard" },
+  children: [
+    {
+      attributes: {
+        type: "Button",
+        clickable: "true",
+        description: "AppIcon Image com.demoHiNotePcMainAbilityHiNotePc0 undefined 1",
+        bounds: "[100,200][300,400]",
+      },
+    },
+  ],
+});
+
+function fakeDevice(fieldId: string | null = "search_input", home = false) {
   let index = 0;
   const calls: { api: string; args: unknown[] }[] = [];
   /** Every hdc shell command, in order: `launch` reaches the device this way. */
@@ -117,6 +132,7 @@ function fakeDevice(fieldId: string | null = "search_input") {
             hideButton -= 1;
             return page("WLAN detail", field, fieldId, true, false);
           }
+          if (home) return homeTree();
           return pageAt(Math.min(index, 1));
         },
         async getDisplaySize() {
@@ -146,6 +162,12 @@ function fakeDevice(fieldId: string | null = "search_input") {
         async shell(command: string) {
           shells.push(command);
           if (command === "bm dump -a") return "com.demo\ncom.hidden.app";
+          if (command === "bm dump -a -l") {
+            return JSON.stringify([
+              { bundleName: "com.demo", label: "演示应用" },
+              { bundleName: "com.hidden.app", label: "隐藏应用" },
+            ]);
+          }
           if (command.startsWith("bm dump -n ")) {
             const bundle = command.slice("bm dump -n ".length);
             return JSON.stringify({
@@ -191,9 +213,10 @@ async function withRunner<T>(
   fn: (runner: CommandRunner, dir: string, fake: ReturnType<typeof fakeDevice>) => Promise<T>,
   opts: Record<string, unknown> = {},
   fieldId: string | null = "search_input",
+  home = false,
 ): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "uitest-cmd-"));
-  const fake = fakeDevice(fieldId);
+  const fake = fakeDevice(fieldId, home);
   const session = await Session.open(fake.device, {
     // The same `<state-dir>/leases` the hold commands write, so the test can
     // take the device away from a live session the way a person does.
@@ -232,6 +255,24 @@ describe("COMMANDS", () => {
 });
 
 describe("CommandRunner", () => {
+  // The wiring, not just the builder: on the test phone half the home-screen
+  // icons read as `AppIcon Image com.huawei.hmos.hinoteHiNotePc…`. An agent
+  // told to open 备忘录 taps the dump that happens to be 笔记 and writes there;
+  // six notepad tasks in the batch died that way. The screen now shows the
+  // launcher's own name, which costs one `bm dump -a -l` and only when a dump
+  // is actually on screen.
+  it("names a launcher icon the way the launcher does", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      const r = await runner.run("observe", {});
+      expect(String(r.text)).toContain("演示应用");
+      expect(String(r.text)).not.toContain("AppIcon Image");
+      expect(fake.shells.filter((s) => s === "bm dump -a -l")).toHaveLength(1);
+      // A second read reuses the names; the phone is asked once.
+      await runner.run("observe", {});
+      expect(fake.shells.filter((s) => s === "bm dump -a -l")).toHaveLength(1);
+    }, {}, "search_input", true);
+  });
+
   it("runs observe", async () => {
     await withRunner(async (runner) => {
       const r = await runner.run("observe", {});

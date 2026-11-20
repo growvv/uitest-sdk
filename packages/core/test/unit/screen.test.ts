@@ -233,3 +233,53 @@ describe("ScreenBuilder", () => {
     expect(renderFull(screen)).toContain("••••••");
   });
 });
+
+describe("launcher icons", () => {
+  // On the test phone the launcher renders half its icons as a bundle dump:
+  // `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`.
+  // An agent told to open 备忘录 has no way to tell that string from 笔记, so it
+  // taps `hinote` and writes the note into the wrong app: six notepad tasks in
+  // the 1000-task batch died this way (notepad-01..05, 07).
+  const iconTree = (): UiNode =>
+    node({ bundleName: "com.ohos.sceneboard", bounds: "[0,0][400,1200]" }, [
+      node({
+        type: "Button",
+        clickable: "true",
+        description: "AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1",
+        bounds: "[0,200][200,400]",
+      }),
+    ]);
+  const names = (): Map<string, string> =>
+    new Map([
+      ["com.huawei.hmos.hinote", "笔记"],
+      ["com.huawei.hmos.notepad", "备忘录"],
+    ]);
+
+  it("shows the launcher's name for an icon instead of its bundle dump", async () => {
+    const builder = new ScreenBuilder(null, { loadAppNames: async () => names() });
+    const tree = iconTree();
+    await builder.prepare(tree);
+    const screen = builder.build(tree, { display, rotation: 0 });
+    expect(screen.elements.find((e) => e.role === "button")!.label).toBe("笔记");
+  });
+
+  it("leaves the dump as it is when no names are available", () => {
+    const screen = new ScreenBuilder().build(iconTree(), { display, rotation: 0 });
+    expect(screen.elements.find((e) => e.role === "button")!.label).toContain("AppIcon");
+  });
+
+  it("asks for the names at most once, and only when a screen shows an icon dump", async () => {
+    let calls = 0;
+    const builder = new ScreenBuilder(null, {
+      loadAppNames: async () => {
+        calls += 1;
+        return names();
+      },
+    });
+    await builder.prepare(exampleTree());
+    expect(calls, "an ordinary screen must not pay for a bm dump").toBe(0);
+    await builder.prepare(iconTree());
+    await builder.prepare(iconTree());
+    expect(calls).toBe(1);
+  });
+});

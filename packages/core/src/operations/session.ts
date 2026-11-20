@@ -285,7 +285,19 @@ export class Session {
     // command per invocation, so a ref printed by `observe` must still mean the
     // same element in the next `tap`.
     const refs = new FileRefStore(join(stateDir, `refs-${this.tag}.json`));
-    this.reader = new ScreenReader(device.agent, new ScreenBuilder(refs));
+    this.apps = device.hdc ? new AppManager(device.hdc) : null;
+    // The launcher renders many icons as a bundle dump; the screen shows the
+    // launcher's name for them instead, fetched only when such a screen is
+    // actually read (see `ScreenBuilder.prepare`).
+    const apps = this.apps;
+    this.reader = new ScreenReader(
+      device.agent,
+      new ScreenBuilder(refs, {
+        loadAppNames: apps
+          ? async () => new Map((await apps.labelsOf()).map((r) => [r.bundle, r.label]))
+          : undefined,
+      }),
+    );
     // Approvals outlive the process for the same reason: the command that asks
     // for one and the command that replays it are separate invocations.
     this.approvals = new Approvals({
@@ -295,7 +307,6 @@ export class Session {
     this.grants = new Grants({ path: join(stateDir, `grants-${this.tag}.json`) });
     this.components = new Components(device.agent);
     this.gestures = new Gestures(device.agent);
-    this.apps = device.hdc ? new AppManager(device.hdc) : null;
   }
 
   /**

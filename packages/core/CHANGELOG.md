@@ -10,6 +10,13 @@
 
 ### 新增
 
+- **桌面图标显示应用名，不再显示 bundle 转储。** 测试机的桌面上，38 个图标里有 19 个的
+  标签是 `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1`
+  这类串——里面没有一个字能让人（或 agent）读出这是「笔记」还是「备忘录」。1000 条跑批里
+  6 条 notepad 任务把笔记写进了 `hinote`：agent 点了一个它以为叫「备忘录」的图标。
+  现在屏幕模型遇到这种转储会查一次 `bm dump -a -l`（按 bundle id 在串里反查，最长匹配），
+  显示桌面上的名字。只在屏幕上真的出现转储时才取，一个进程最多一次；没有转储的屏幕
+  一分钱不花，转储里认不出的 bundle 保持原样。
 - **`type --clear`：先清空再输入。** `type` 是追加，不是替换：搜索框会保留上一次的查询词，
   再搜一次就变成两个词拼在一起，回读如实报 `uncertain`，agent 只剩逐字删一条路——而搜索框
   每删一个字就重跑一次查询。实测 meituan-05 在一个框上花了 21 次 tap 和 3 次 backspace，

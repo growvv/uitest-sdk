@@ -76,6 +76,17 @@ export interface ScreenBuilderOptions {
    * asked to see.
    */
   redact?: boolean;
+  /**
+   * Installed bundles with the name the launcher shows under each icon.
+   *
+   * The launcher renders many of its icons as a bundle dump — on the test
+   * phone `AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0
+   * undefined 1` — which names no app a person (or an agent) could recognise.
+   * Six notepad tasks in the 1000-task batch wrote their note into 笔记
+   * instead of 备忘录 because of it. Loaded only when a screen actually shows
+   * a dump, and once per process.
+   */
+  loadAppNames?: () => Promise<Map<string, string>>;
 }
 
 export interface Diff {
@@ -184,6 +195,24 @@ function idLabel(node: UiNode): string {
   return id.replace(/^id_/i, "").replace(/[_-]+/g, " ").trim();
 }
 
+/**
+ * Whether any node on this screen labels itself as a launcher icon dump.
+ *
+ * Checked before the expensive `bm dump -a -l`, on the attributes `labelOf`
+ * would read.
+ */
+function hasIconDump(tree: UiNode): boolean {
+  const stack: UiNode[] = [tree];
+  while (stack.length) {
+    const node = stack.pop()!;
+    for (const key of ["text", "description", "hint"]) {
+      if (attr(node, key).startsWith("AppIcon")) return true;
+    }
+    for (const child of node.children ?? []) stack.push(child);
+  }
+  return false;
+}
+
 function labelOf(node: UiNode, role: ElementRole): string {
   let label = (attr(node, "text") || attr(node, "description") || attr(node, "hint")).trim();
   if (
@@ -259,11 +288,18 @@ export class ScreenBuilder {
 
   private redact: boolean;
 
+  /** Launcher names by bundle, once `prepare` has loaded them. */
+  private appNames: Map<string, string> | null = null;
+  /** One load attempt per builder: a failed dump is not retried every screen. */
+  private appNamesLoaded = false;
+  private readonly loadAppNames?: () => Promise<Map<string, string>>;
+
   constructor(
     private readonly store: FileRefStore | null = null,
     options: ScreenBuilderOptions = {},
   ) {
     this.redact = options.redact !== false;
+    this.loadAppNames = options.loadAppNames;
     const table = store?.load();
     if (table) {
       for (const [signature, ref] of Object.entries(table.refs)) {
@@ -303,6 +339,26 @@ export class ScreenBuilder {
   }
 
   /**
+   * The launcher's name for an icon whose label is a bundle dump.
+   *
+   * A dump like `AppIcon Image com.huawei.hmos.hinoteHiNotePc…` has no
+   * separator between the bundle and the ability, so the bundle cannot be
+   * parsed out; it is found by looking for an installed bundle id inside the
+   * label. The longest match wins, so a bundle that is a prefix of another
+   * does not shadow it. Anything that is not a dump is left exactly as it is.
+   */
+  private launcherLabel(label: string): string {
+    if (!this.appNames || !label.startsWith("AppIcon")) return label;
+    let best: { bundle: string; name: string } | null = null;
+    for (const [bundle, name] of this.appNames) {
+      if (label.includes(bundle) && (!best || bundle.length > best.bundle.length)) {
+        best = { bundle, name };
+      }
+    }
+    return best ? best.name : label;
+  }
+
+  /**
    * Keeps the table bounded. Refs are never reused, so the table can only grow;
    * a long session that visits thousands of screens would otherwise carry every
    * screen it ever saw. Old entries go first, and anything on the current screen
@@ -324,6 +380,26 @@ export class ScreenBuilder {
     this.nextRef = 1;
   }
 
+  /**
+   * Loads the launcher's icon names when a screen actually shows an icon dump.
+   *
+   * The names come from the phone (`bm dump -a -l`), so this is asynchronous
+   * while `build` is not; `ScreenReader.read` awaits it before building. A
+   * screen with no dump on it — nearly every screen — costs nothing.
+   */
+  async prepare(tree: UiNode): Promise<void> {
+    if (this.appNamesLoaded || !this.loadAppNames) return;
+    if (!hasIconDump(tree)) return;
+    this.appNamesLoaded = true;
+    try {
+      this.appNames = await this.loadAppNames();
+    } catch {
+      // A phone that will not list its apps still has to render: the dump
+      // stays, which is what every screen showed before this existed.
+      this.appNames = null;
+    }
+  }
+
   build(tree: UiNode, ctx: ScreenContext): Screen {
     const candidates: ScreenElement[] = [];
     const seen = new Set<number>();
@@ -334,7 +410,7 @@ export class ScreenBuilder {
       const rect = parseBounds(attr(node, "bounds"));
       if (rect && rect.width > 0 && rect.height > 0) {
         const role = roleOf(node);
-        const label = labelOf(node, role);
+        const label = this.launcherLabel(labelOf(node, role));
         const state = stateOf(node);
         // Redaction happens here, once, so every surface built from the screen
         // (observe text, diffs, read-list, traces and reports) agrees. The raw

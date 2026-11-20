@@ -77,7 +77,11 @@ export class ScreenReader {
 
   async read(): Promise<Screen> {
     const ctx = await this.context();
-    const screen = this.builder.build(await this.source.captureLayout(), ctx);
+    const tree = await this.source.captureLayout();
+    // The builder needs the phone's launcher names only when the screen has an
+    // icon dump on it; `prepare` is a no-op otherwise.
+    await this.builder.prepare(tree);
+    const screen = this.builder.build(tree, ctx);
     // Refs are handed to another process on the next command, so the table is
     // written as soon as it changes, not at release time — a crashed command
     // must not leave the next one numbering elements from scratch.
