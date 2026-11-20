@@ -158,6 +158,12 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
   `com.ohos.contacts` 里的一个页面（contacts-03 最后就是点屏幕上的拨号键完成的，
   任务仍然通过）。**记录，不改：** 这是系统应用的导出配置，工具侧只能照实报错。
   skill 里可以补一句「电话走 `com.ohos.contacts`」。
+- **任务库把天猫写成「淘宝/天猫」，每条 tmall 任务多花 1–4 次调用。** 这台机器上
+  只有 `com.tmall.tmall4hmos`（label「天猫」），没有淘宝。prompt 说「打开淘宝/天猫」，
+  agent 先试「淘宝」失败，再试「天猫」或 bundle id 才成功——tmall-01 试了 5 个名字
+  （淘宝、com.taobao.taobao、天猫、com.taobao.taobao4hmos、taobao）才落到 `tmall`。
+  四条都通过，但每次浪费 1–4 次调用。**跑批中不改**（改 prompt 会让 1000 条分成两种写法），
+  下次重建任务库时把名字改成设备上真实存在的那个。
 - **skill 把无标签控件指到了错的命令。** SKILL.md 说「拿 `screenshot`，看图上的 ref 编号」，
   但画编号的是 `inspect`，`screenshot` 只存原图。agent 照做会去找根本不存在的数字。
   **已修：** 两处文档改成 `inspect`，`check-skill` 增加一条检查——文档里出现
