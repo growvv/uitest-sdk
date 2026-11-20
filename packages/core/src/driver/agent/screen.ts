@@ -206,7 +206,12 @@ function hasIconDump(tree: UiNode): boolean {
   while (stack.length) {
     const node = stack.pop()!;
     for (const key of ["text", "description", "hint"]) {
-      if (attr(node, key).startsWith("AppIcon")) return true;
+      // Not `startsWith`: the raw attribute may carry a leading space, and the
+      // home screen's outer icon node reads "Container AppIcon Image …". The
+      // printed label is trimmed, so a strict prefix check on the raw value
+      // called the whole launcher "nothing to do" and every icon kept its
+      // bundle dump (measured on notepad-08 after the fix was built).
+      if (attr(node, key).includes("AppIcon")) return true;
     }
     for (const child of node.children ?? []) stack.push(child);
   }
@@ -348,10 +353,13 @@ export class ScreenBuilder {
    * does not shadow it. Anything that is not a dump is left exactly as it is.
    */
   private launcherLabel(label: string): string {
-    if (!this.appNames || !label.startsWith("AppIcon")) return label;
+    // The launcher wraps an icon in a container node whose label is
+    // "Container AppIcon Image …"; both nodes are tappable, so both get the name.
+    const dump = label.startsWith("Container ") ? label.slice("Container ".length) : label;
+    if (!this.appNames || !dump.startsWith("AppIcon")) return label;
     let best: { bundle: string; name: string } | null = null;
     for (const [bundle, name] of this.appNames) {
-      if (label.includes(bundle) && (!best || bundle.length > best.bundle.length)) {
+      if (dump.includes(bundle) && (!best || bundle.length > best.bundle.length)) {
         best = { bundle, name };
       }
     }
@@ -390,12 +398,18 @@ export class ScreenBuilder {
   async prepare(tree: UiNode): Promise<void> {
     if (this.appNamesLoaded || !this.loadAppNames) return;
     if (!hasIconDump(tree)) return;
-    this.appNamesLoaded = true;
     try {
-      this.appNames = await this.loadAppNames();
+      const names = await this.loadAppNames();
+      // An empty table is not an answer: `bm dump -a -l` can fail to parse
+      // while the device is busy, and one such answer used to be final for the
+      // whole process. Keep asking on later icon screens; AppManager caches a
+      // *successful* answer, so a retry costs no device call.
+      if (names.size === 0) return;
+      this.appNames = names;
+      this.appNamesLoaded = true;
     } catch {
       // A phone that will not list its apps still has to render: the dump
-      // stays, which is what every screen showed before this existed.
+      // stays, and the next icon screen tries again.
       this.appNames = null;
     }
   }

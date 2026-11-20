@@ -129,12 +129,14 @@ export class AppManager {
     if (this.labels) return this.labels;
     const out = await this.hdc.shell("bm dump -a -l");
     const start = out.indexOf("[");
-    if (start < 0) return (this.labels = []);
+    // A `[Fail]…` answer is not "no labels", it is "ask again": caching it
+    // would keep every icon on its bundle dump for the rest of the process.
+    if (start < 0) return [];
     let parsed: { bundleName?: unknown; label?: unknown }[];
     try {
       parsed = JSON.parse(out.slice(start)) as typeof parsed;
     } catch {
-      return (this.labels = []);
+      return [];
     }
     const rows: { bundle: string; label: string }[] = [];
     for (const row of Array.isArray(parsed) ? parsed : []) {

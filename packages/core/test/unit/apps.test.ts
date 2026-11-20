@@ -214,6 +214,26 @@ describe("AppManager", () => {
     expect((err as Error).message).toContain("com.b.music");
   });
 
+  it("asks the device again after an unparseable label dump", async () => {
+    // `bm dump -a -l` can answer `[Fail]…` while the device is busy. Caching
+    // that answer as "no labels" would keep every launcher icon on its bundle
+    // dump for the rest of the process.
+    let calls = 0;
+    const hdc = {
+      async shell(command: string): Promise<string> {
+        if (command !== "bm dump -a -l") return "";
+        calls += 1;
+        return calls === 1
+          ? "[Fail]ExecuteCommand need connect-key"
+          : JSON.stringify([{ bundleName: "com.huawei.hmos.notepad", label: "备忘录" }]);
+      },
+    };
+    const apps = new AppManager(hdc);
+    expect(await apps.labelsOf()).toEqual([]);
+    expect(await apps.labelsOf()).toEqual([{ bundle: "com.huawei.hmos.notepad", label: "备忘录" }]);
+    expect(calls).toBe(2);
+  });
+
   it("still reports not_found for a name nothing carries", async () => {
     const apps = new AppManager(
       fakeHdc({ "bm dump -a -l": JSON.stringify([{ bundleName: "com.a.music", label: "音乐" }]) }),

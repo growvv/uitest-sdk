@@ -268,6 +268,44 @@ describe("launcher icons", () => {
     expect(screen.elements.find((e) => e.role === "button")!.label).toContain("AppIcon");
   });
 
+  it("recognises a dump the launcher indents or wraps in a container", async () => {
+    // The raw attribute is not always the printed label with a clean start:
+    // the home screen's outer icon node says "Container AppIcon Image …", and
+    // attribute values can carry a leading space. The old guard required a
+    // clean `startsWith("AppIcon")`, so the whole home screen counted as
+    // "nothing to do" and every icon kept its dump — which is what the batch
+    // showed after the fix was built.
+    const tree = node({ bundleName: "com.ohos.sceneboard", bounds: "[0,0][400,1200]" }, [
+      node({
+        type: "Button",
+        clickable: "true",
+        description:
+          " Container AppIcon Image com.huawei.hmos.hinoteHiNotePcMainAbilityHiNotePc0 undefined 1",
+        bounds: "[0,200][200,400]",
+      }),
+    ]);
+    const builder = new ScreenBuilder(null, { loadAppNames: async () => names() });
+    await builder.prepare(tree);
+    const screen = builder.build(tree, { display, rotation: 0 });
+    expect(screen.elements.find((e) => e.role === "button")!.label).toBe("笔记");
+  });
+
+  it("asks again when the phone answered with no names", async () => {
+    // An empty answer can be a transient: `bm dump -a -l` may fail to parse
+    // once while the device is busy. Marking the table "loaded" forever made
+    // that one failure permanent for the whole task.
+    let calls = 0;
+    const builder = new ScreenBuilder(null, {
+      loadAppNames: async () => (++calls === 1 ? new Map() : names()),
+    });
+    const tree = iconTree();
+    await builder.prepare(tree);
+    expect(builder.build(tree, { display, rotation: 0 }).elements.find((e) => e.role === "button")!.label).toContain("AppIcon");
+    await builder.prepare(tree);
+    expect(builder.build(tree, { display, rotation: 0 }).elements.find((e) => e.role === "button")!.label).toBe("笔记");
+    expect(calls).toBe(2);
+  });
+
   it("asks for the names at most once, and only when a screen shows an icon dump", async () => {
     let calls = 0;
     const builder = new ScreenBuilder(null, {
