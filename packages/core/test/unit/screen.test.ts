@@ -82,6 +82,45 @@ describe("ScreenBuilder", () => {
     expect(open[0]!.rect.width).toBe(180);
   });
 
+  // A store card on meituan / dianping is one clickable row whose text sits in
+  // a Column: name, rating, sales, minimum order, delivery fee, then a strip of
+  // dish prices. The label was built from the first three descendant texts
+  // only, so "起送 ¥20" and "配送费 ¥0.2" -- the two numbers the task asks for
+  // -- never reached the agent. It read a screen where 76 of 88 nodes were
+  // unlabelled buttons, and meituan-06 timed out hunting for a price that the
+  // model had thrown away.
+  it("keeps every text a clickable card carries, not just the first three", () => {
+    const row = (y: number, name: string) =>
+      node({ type: "ListItem", bounds: `[0,${y}][400,${y + 400}]`, clickable: "true" }, [
+        node({ type: "Row", bounds: `[0,${y}][400,${y + 400}]` }, [
+          node({ type: "Column", bounds: `[0,${y}][400,${y + 120}]` }, [
+            node({ type: "Text", text: name, bounds: `[10,${y + 20}][220,${y + 60}]` }),
+            node({ type: "Text", text: "月售 4000+", bounds: `[10,${y + 70}][80,${y + 110}]` }),
+            node({ type: "Text", text: "起送 ¥20", bounds: `[90,${y + 70}][140,${y + 110}]` }),
+            node({ type: "Text", text: "配送费 ¥0.2", bounds: `[150,${y + 70}][220,${y + 110}]` }),
+          ]),
+        ]),
+      ]);
+    const tree = node({ bundleName: "com.shop" }, [
+      node({ type: "List", scrollable: "true", bounds: "[0,100][400,1100]" }, [
+        row(100, "披萨妈妈（五道口店）"),
+        row(500, "必胜客（五道口店）"),
+      ]),
+    ]);
+
+    const screen = new ScreenBuilder().build(tree, { display, rotation: 0 });
+    // The rows, not the list that contains them: a list's own label is the
+    // joined text of every row under it, so it contains both names too.
+    const card = screen.elements.find((e) => e.role === "button" && e.label.includes("披萨妈妈"))!;
+    expect(card.label).toContain("起送 ¥20");
+    expect(card.label).toContain("配送费 ¥0.2");
+    // Both cards keep their own label: a card whose text was dropped would
+    // collapse onto its sibling's.
+    const second = screen.elements.find((e) => e.role === "button" && e.label.includes("必胜客"))!;
+    expect(second.label).toContain("起送 ¥20");
+    expect(card.ref).not.toBe(second.ref);
+  });
+
   it("keeps refs stable while label and place stay the same", () => {
     const builder = new ScreenBuilder();
     const first = builder.build(exampleTree(), { display, rotation: 0 });

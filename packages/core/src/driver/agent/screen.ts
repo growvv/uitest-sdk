@@ -156,7 +156,19 @@ function roleOf(node: UiNode): ElementRole {
   return "element";
 }
 
-function descendantTexts(node: UiNode, out: string[] = [], limit = 3): string[] {
+/**
+ * Text a container contributes to its own label, when it has none of its own.
+ *
+ * Three was too few. A store card on meituan is one clickable row holding the
+ * name, the rating, the sales, the minimum order, the delivery fee and then a
+ * strip of dish prices; a card cut at three lost "起送 ¥20" and "配送费 ¥0.2",
+ * which are exactly the numbers the task asks for. Across the batch that app's
+ * screens came out 53% labelled against dianping's 97% -- 76 of 88 nodes on a
+ * results page were unlabelled buttons -- and meituan-06 timed out hunting for
+ * a price the model had discarded. The cap still exists: a list can hold
+ * thousands of rows, and an unbounded walk would make one label enormous.
+ */
+function descendantTexts(node: UiNode, out: string[] = [], limit = 12): string[] {
   for (const child of node.children ?? []) {
     if (out.length >= limit) break;
     const t = attr(child, "text").trim();
