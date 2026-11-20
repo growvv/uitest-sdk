@@ -89,6 +89,17 @@ describe("toolDefinitions", () => {
     expect(type.inputSchema.properties.clear).toBeDefined();
     expect(type.inputSchema.properties.clear!.description).toMatch(/append/i);
   });
+
+  // The calculator's ×, ÷, = and C read as `keyCode 14/13/18/16`; tapping them
+  // is guessing positions, and one wrong press means clearing and starting
+  // over. Its display takes the whole expression instead. Across 14 tasks on
+  // the same set, the six that typed took a median 105 s and the eight that
+  // tapped 138 s, with the worst tapper at 57 calls and 468 s.
+  it("says a calculator's display takes the whole expression", () => {
+    const type = toolDefinitions().find((t) => t.name === "uitest_type")!;
+    expect(type.description).toMatch(/calculator/i);
+    expect(type.description).toMatch(/expression/i);
+  });
 });
 
 describe("McpServer", () => {

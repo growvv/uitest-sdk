@@ -124,6 +124,7 @@ Each line is `[ref] role "label" @centerX,centerY states`. Roles include
 | Type into a field | `type --ref 7 --text "hello"` |
 | Type where per-key input mangles it | `type --ref 7 --text "10086" --paste` |
 | Replace what a field already holds | `type --ref 7 --text "汉堡" --clear` |
+| Enter a whole expression where the app takes one | `type --ref 3 --text "1024÷8" --clear` (the calculator evaluates it) |
 | Scroll a list | `swipe --direction up --ref 20` |
 | Swipe by points | `swipe --from 600,1800 --to 600,600` |
 | System key | `key --key back` (also `home`, `power`, `enter`) |
@@ -167,6 +168,14 @@ that owns the UI.
   `--clear` to empty the field first, in one device call — do not delete it
   character by character, because a search box re-runs its query on every
   backspace.
+- **A calculator's display is an input: type the whole expression.** The
+  calculator's `×`, `÷`, `=`, `C` keys have no text — they read `keyCode 14`,
+  `keyCode 13`, `keyCode 18`, `keyCode 16` — so tapping them means guessing
+  positions, and one wrong press means clearing and starting over. Its display
+  field accepts the expression directly: `type --ref <display> --text "1024÷8"
+  --clear` evaluates and shows `128`. Measured on the same task set: the tasks
+  that typed the expression took a median 105 s, the ones that tapped keys 138 s,
+  and the worst tapper used 57 calls and 468 s to reach a right answer.
 - `launch` returns whatever page the app resumes on. Settings may reopen a
   previous subpage; press `back` until the expected page is on screen, or use
   `wait-for`.

@@ -57,7 +57,8 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "type",
-    description: "Type into the focused input, or the input at a ref.",
+    description:
+      "Type into the focused input, or the input at a ref. A calculator's display is an input too: type the whole expression (1024÷8) rather than tapping its unlabelled operator keys.",
     args: {
       text: { type: "string", description: "Text to type.", required: true },
       ref: { type: "number", description: "Input element ref; defaults to the focused field." },
