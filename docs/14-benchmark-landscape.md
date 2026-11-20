@@ -145,6 +145,9 @@ agent 收工后由脚本回设备判分，不看 agent 自述。20 条任务，�
   **已修：** `launch` 的工具描述改成「按屏幕上的名字或 bundle id 启动；优先用它，
   不要点桌面图标——图标标签可能是 bundle 转储」。这是 55% 不读 skill 的 agent
   唯一看得到的指引。skill 里的说明保留，两条路径都覆盖。
+  **修好的直接证据：** weather-04 全程没读 skill（`command_execution` 里没有
+  `SKILL.md`），却调了 `launch --app 天气`，成功打开天气并答对。改之前同样不读 skill
+  的 notepad-04 只会点图标。
   跑批的分界点：**09:07 之后的条目**用的是新描述，之前的是旧描述，报告里要分开看。
 - **`launch --app 图库` 打开的是投屏页，不是图库。** `entryAbility` 依次试
   `mainAbility`、它的最后一段、任意 PAGE ability。图库声明的是裸词 `MainAbility`，
