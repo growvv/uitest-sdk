@@ -23,10 +23,12 @@
   样子。books-05、settings-05 都是这样。现在清空和输入都走 `Component.clearText` /
   `Component.inputText`，同一个句柄，不依赖焦点和坐标。输入框没有资源 id 时清空做不了，
   但输入照做、回读照报——以前整条命令报 `not_found`，把一次能做成的输入直接废掉了。
-- **`type` 的 ref 查不到时先等屏幕稳定再看一次。** ref 是在一次布局抓取里读的，下一次调用
-  再去用；一次 tap 刚移动焦点、键盘还在滑入时，第二次抓取可能拿不到那个输入框，于是 agent
-  刚看到的 ref 被报成不存在。zhihu-07 对自己的 `observe` 刚打印的 ref 29407 连收三次
-  `not_found`，一秒后一模一样的调用却成功了。现在失配后先 `settle` 再查一遍，仍是失配才报。
+- **ref 查不到时先等屏幕稳定再看一次（`tap` 与 `type`）。** ref 是在一次布局抓取里读的，
+  下一次调用再去用；一次 tap 刚移动焦点、键盘还在滑入时，第二次抓取可能拿不到那个元素，
+  于是 agent 刚看到的 ref 被报成不存在。zhihu-07 对自己的 `observe` 刚打印的 ref 29407
+  连收三次 `not_found`，一秒后一模一样的调用却成功了；jd-07 在同一页上 `tap --ref`
+  与 `type --ref` 轮流失配，中间插一次 `observe` 又能打印出同一个 ref。现在失配后先
+  `settle` 再查一遍，仍是失配才报——ref 在稳定屏幕上存在，就不能读成「不存在」。
 - **`observe --out` 只给了路径，没给图。** 它会写一张 JPEG，但 MCP 层只把 `screenshot`
   和 `inspect` 的图像附在结果里，`observe --out` 的图从来没到过模型手上。拨号盘是代价：
   十二个按键既没有 text、也没有 description、也没有 id（`accessibilityId` 在真机 dump 里

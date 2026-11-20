@@ -1127,9 +1127,20 @@ ${renderFull(screen)}`, {
   }
 
   private async resolveRef(ref: number): Promise<ResolvedTarget> {
-    const screen = await this.reader.read();
+    let screen = await this.reader.read();
     this.lastScreen = screen;
-    const element = findElement(screen, ref);
+    let element = findElement(screen, ref);
+    if (!element) {
+      // One capture can land mid-animation and come back without an element
+      // that is on the settled screen: jd-07's own observe printed the search
+      // box, the next `tap --ref` said it was gone, and the observe after that
+      // printed it again. A miss is checked against a settled screen before it
+      // becomes the answer.
+      const retry = await settle(this.reader, { previousHash: screen.hash, maxSettleMs: this.settleMs });
+      this.lastScreen = retry.screen;
+      screen = retry.screen;
+      element = findElement(screen, ref);
+    }
     if (!element) return { kind: "miss", query: `ref ${ref}`, screen };
     return {
       kind: "hit",

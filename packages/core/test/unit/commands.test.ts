@@ -15,10 +15,13 @@ const page = (
   field: { text: string },
   fieldId: string | null = "search_input",
   withField = true,
+  withButton = true,
 ): UiNode => ({
   attributes: { type: "Root", bounds: "[0,0][1000,2000]", bundleName: "com.demo" },
   children: [
-    { attributes: { type: "Button", text, bounds: "[100,200][400,400]", clickable: "true" } },
+    ...(withButton
+      ? [{ attributes: { type: "Button", text, bounds: "[100,200][400,400]", clickable: "true" } }]
+      : []),
     ...(withField
       ? [
           {
@@ -44,6 +47,8 @@ function fakeDevice(fieldId: string | null = "search_input") {
   const field = { text: "q" };
   /** How many of the next reads leave the field out, to model an animation. */
   let hideField = 0;
+  /** The same for the button, when the ref that goes missing is not a field. */
+  let hideButton = 0;
   // Built per read, not once: the field's value changes as the test types.
   const pageAt = (i: number): UiNode =>
     i === 0 ? page("WLAN", field, fieldId) : page("WLAN detail", field, fieldId);
@@ -53,6 +58,9 @@ function fakeDevice(fieldId: string | null = "search_input") {
     /** Omits the input from the next `n` layout reads, as a mid-animation one does. */
     hideFieldFor(n: number) {
       hideField = n;
+    },
+    hideButtonFor(n: number) {
+      hideButton = n;
     },
     device: {
       deviceId: "SERIAL",
@@ -83,6 +91,10 @@ function fakeDevice(fieldId: string | null = "search_input") {
           if (hideField > 0) {
             hideField -= 1;
             return page("WLAN detail", field, fieldId, false);
+          }
+          if (hideButton > 0) {
+            hideButton -= 1;
+            return page("WLAN detail", field, fieldId, true, false);
           }
           return pageAt(Math.min(index, 1));
         },
@@ -477,6 +489,20 @@ describe("CommandRunner", () => {
       expect(ref, observed.text).toBeGreaterThan(0);
       fake.hideFieldFor(1);
       expect((await runner.run("type", { text: "hello", ref })).status).toBe("settled");
+    });
+  });
+
+  // Same contract for a tap, and jd-07 is why: on the same search page its
+  // `observe` printed the box, then `tap --ref` and `type --ref` both said
+  // `not_found`, then the next observe printed the same ref again. A ref that
+  // names something on a settled screen must not read as gone.
+  it("looks again once the screen settles before calling a tap ref gone", async () => {
+    await withRunner(async (runner, _dir, fake) => {
+      const observed = await runner.run("observe", {});
+      const ref = Number(String(observed.text).match(/\[(\d+)\] button/)?.[1]);
+      expect(ref, observed.text).toBeGreaterThan(0);
+      fake.hideButtonFor(1);
+      expect((await runner.run("tap", { ref })).status).toBe("settled");
     });
   });
 
