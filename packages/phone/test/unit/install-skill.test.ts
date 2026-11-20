@@ -206,13 +206,32 @@ describe("refreshSkill", () => {
   it("does nothing when the installed copy is already this version", async () => {
     await withDir(async (dir) => {
       const target = join(dir, "skills", "uitest-phone");
-      await plantSkill(target, OLD_FILES, marker(OLD_FILES, "9.9.9"));
+      // Same version *and* same content: nothing to do.
+      await plantSkill(target, NEW_FILES, marker(NEW_FILES, "9.9.9"));
 
       const result = await refreshSkill({ dirs: [target], files: NEW_FILES, version: "9.9.9" });
 
       expect(result.updated).toEqual([]);
       expect(result.current).toEqual([target]);
-      expect(await readFile(join(target, "SKILL.md"), "utf8")).toBe(OLD_FILES[0]!.content);
+      expect(await readFile(join(target, "SKILL.md"), "utf8")).toBe(NEW_FILES[0]!.content);
+    });
+  });
+
+  // The version is not enough to decide the copy is current: a doc fix can
+  // ship in a build whose version was not bumped, and then the agent keeps
+  // reading the old text. That happened — a corrected `launch` example sat in
+  // the package while 51 tasks ran against the previous wording, and three
+  // notepad tasks failed on the advice the fix had already replaced.
+  it("updates a same-version copy whose files no longer match the package", async () => {
+    await withDir(async (dir) => {
+      const target = join(dir, "skills", "uitest-phone");
+      await plantSkill(target, OLD_FILES, marker(OLD_FILES, "9.9.9"));
+
+      const result = await refreshSkill({ dirs: [target], files: NEW_FILES, version: "9.9.9" });
+
+      expect(result.updated).toEqual([target]);
+      expect(await readFile(join(target, "SKILL.md"), "utf8")).toBe(NEW_FILES[0]!.content);
+      expect(await readFile(join(target, "REFERENCE.md"), "utf8")).toBe(NEW_FILES[1]!.content);
     });
   });
 

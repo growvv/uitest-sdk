@@ -267,7 +267,10 @@ export async function refreshSkill(opts: RefreshSkillOptions = {}): Promise<Refr
         continue;
       }
       known = legacy;
-    } else if (!recorded!.legacy && marker?.version === version) {
+    } else if (!recorded!.legacy && marker?.version === version && (await filesMatch(dir, files, fresh))) {
+      // Same version *and* the same bytes. The version alone is not enough: a
+      // doc fix can ship in a build whose version was not bumped, and then the
+      // agent keeps reading the text the fix replaced.
       result.current.push(dir);
       continue;
     }
